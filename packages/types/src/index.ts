@@ -12,19 +12,12 @@
 // ══════════════════════════════════════════
 
 export type UserRole = 'FREE' | 'BASIC' | 'PRO' | 'PRO_PLUS' | 'ADMIN'
-
 export type UserStatus = 'ACTIVE' | 'SUSPENDED'
-
 export type Preset = 'conservative' | 'standard' | 'aggressive'
-
 export type TradeSide = 'BUY' | 'SELL'
-
 export type TradeStatus = 'OPEN' | 'CLOSED' | 'CANCELED'
-
 export type EntryState = 'ENTRY_OK' | 'SCORE_LOW' | 'RISK_NG' | 'LOCKED' | 'COOLDOWN'
-
 export type Timeframe = 'M1' | 'M5' | 'M15' | 'M30' | 'H1' | 'H4' | 'H8' | 'D1' | 'W1' | 'MN'
-
 export type JobStatus = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
 
 export type SignalType =
@@ -42,11 +35,8 @@ export type ImportanceLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 // ══════════════════════════════════════════
 
 export const ROLE_HIERARCHY: UserRole[] = ['FREE', 'BASIC', 'PRO', 'PRO_PLUS', 'ADMIN']
-
 export const ROLES_PRO_OR_ABOVE: UserRole[] = ['PRO', 'PRO_PLUS', 'ADMIN']
-
 export const ROLES_BASIC_OR_ABOVE: UserRole[] = ['BASIC', 'PRO', 'PRO_PLUS', 'ADMIN']
-
 export function hasRole(userRole: UserRole, requiredRole: UserRole): boolean {
   return ROLE_HIERARCHY.indexOf(userRole) >= ROLE_HIERARCHY.indexOf(requiredRole)
 }
@@ -360,13 +350,9 @@ export interface PaginatedResponse<T> {
 // ══════════════════════════════════════════
 
 export const API_PREFIX = '/api/v1' as const
-
 export const TIMEFRAMES: Timeframe[] = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'H8', 'D1', 'W1', 'MN']
-
 export const FX_SYMBOLS = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'USDCHF', 'USDCAD'] as const
-
 export const CRYPTO_SYMBOLS = ['BTCUSD', 'ETHUSD'] as const
-
 export const DEFAULT_SYMBOLS = [...FX_SYMBOLS, ...CRYPTO_SYMBOLS] as const
 
 // プラン別制限

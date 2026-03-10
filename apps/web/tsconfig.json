@@ -1,3 +1,4 @@
+// apps/web/tsconfig.json
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
@@ -13,7 +14,9 @@
       "@fxde/types": ["../../packages/types/dist"],
       "@fxde/config": ["../../packages/config/dist"],
       "@fxde/ui": ["../../packages/ui/dist"]
-    }
+    },
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -7,10 +7,22 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@fxde/types":   ["../../packages/types/dist"],
-      "@fxde/types/*": ["../../packages/types/dist/*"],
-      "@fxde/config":  ["../../packages/config/dist"]
+      "@fxde/types": [
+        "../../packages/types/dist"
+      ],
+      "@fxde/types/*": [
+        "../../packages/types/dist/*"
+      ],
+      "@fxde/config": [
+        "../../packages/config/dist"
+      ]
     }
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../../prisma/seed.ts",
+    "../../prisma/*.ts"
+  ]
 }

@@ -12,3 +12,16 @@ export const UpdateUserSchema = z.object({
 });
 
 export type UpdateUserDto = z.infer<typeof UpdateUserSchema>;
+
+// UserMeResponse を Zod Schema として追加
+// （レスポンス型の正本。Controller の返却型に使用）
+export const UserMeResponseSchema = z.object({
+  id:          z.string(),
+  email:       z.string().email(),
+  role:        z.enum(['FREE', 'BASIC', 'PRO', 'PRO_PLUS', 'ADMIN']),
+  status:      z.enum(['ACTIVE', 'SUSPENDED']),
+  createdAt:   z.string(),
+  lastLoginAt: z.string().nullable(),
+});
+
+export type UserMeResponse = z.infer<typeof UserMeResponseSchema>;
