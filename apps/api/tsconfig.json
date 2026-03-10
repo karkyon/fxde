@@ -7,8 +7,9 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@fxde/types": ["../../packages/types/dist"],
-      "@fxde/config": ["../../packages/config/dist"]
+      "@fxde/types":   ["../../packages/types/dist"],
+      "@fxde/types/*": ["../../packages/types/dist/*"],
+      "@fxde/config":  ["../../packages/config/dist"]
     }
   },
   "include": ["src"]

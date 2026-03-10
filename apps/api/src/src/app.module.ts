@@ -2,7 +2,8 @@
 import { Module }          from '@nestjs/common';
 import { ConfigModule }    from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { PrismaModule }    from './prisma/prisma.module';
+import { PrismaModule }    from '../prisma/prisma.module';
+import { AuthModule }      from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { PrismaModule }    from './prisma/prisma.module';
       { name: 'capture', ttl: 60_000, limit: 20  },
     ]),
     PrismaModule,
-    // 各モジュールは Step 3-2 以降で追加
+    AuthModule,
+    // 各モジュールは Step 3-3 以降で追加
   ],
 })
 export class AppModule {}

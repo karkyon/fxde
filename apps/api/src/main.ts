@@ -1,6 +1,6 @@
 // apps/api/src/main.ts
 import { NestFactory }   from '@nestjs/core';
-import { AppModule }     from './app.module';
+import { AppModule }     from './src/app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // eslint-disable-next-line @typescript-eslint/no-require-imports

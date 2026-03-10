@@ -1,4 +1,4 @@
-// packages/types/src/schemas/auth.schema.ts
+// packages/types/src/schemas/user.schema.ts
 import { z } from 'zod';
 
 export const UpdateUserSchema = z.object({
