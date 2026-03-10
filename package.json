@@ -9,13 +9,17 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "db:generate": "pnpm --filter @fxde/api prisma generate",
-    "db:migrate": "pnpm --filter @fxde/api prisma migrate dev",
-    "db:seed": "pnpm --filter @fxde/api prisma db seed",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
     "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
     "docker:logs": "docker compose -f infra/docker/docker-compose.yml logs -f",
-    "setup": "bash scripts/setup.sh"
+    "setup": "bash scripts/setup.sh",
+    "phase2": "bash scripts/phase2-run.sh"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -23,6 +27,11 @@
     "eslint": "^8.57.0",
     "prettier": "^3.2.5",
     "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.14.0",
+    "prisma": "^5.14.0",
+    "tsx": "^4.11.0"
   },
   "engines": {
     "node": ">=20.0.0",

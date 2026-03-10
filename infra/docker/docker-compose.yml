@@ -1,7 +1,15 @@
+# FXDE v5.1 — Docker Compose
+# Phase2 用インフラ骨格
+#
+# Port マッピング（前回失敗対策）:
+#   Postgres: host:5436 → container:5432
+#   Redis:    host:6386 → container:6379
+#
+# Phase2 では api / web コンテナは起動しない（Phase3/4 で実装後に有効化）
+
 version: '3.9'
 
 services:
-  # ─── PostgreSQL ─────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: fxde_postgres
@@ -11,66 +19,57 @@ services:
       POSTGRES_PASSWORD: fxde_password
       POSTGRES_DB: fxde_db
     ports:
-      - '5432:5432'
+      - "5436:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - fxde_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U fxde -d fxde_db']
+      test: ["CMD-SHELL", "pg_isready -U fxde -d fxde_db"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ─── Redis ──────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: fxde_redis
     restart: unless-stopped
+    command: redis-server --appendonly yes
     ports:
-      - '6379:6379'
+      - "6386:6379"
     volumes:
-      - redis_data:/data
+      - fxde_redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # ─── API (NestJS) ────────────────────────────────────────────
-  api:
-    build:
-      context: ../../
-      dockerfile: apps/api/Dockerfile
-    container_name: fxde_api
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      NODE_ENV: production
-      DATABASE_URL: postgresql://fxde:fxde_password@postgres:5432/fxde_db
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-change_in_production}
-      JWT_EXPIRES_IN: 7d
-      API_PORT: 3000
-    ports:
-      - '3000:3000'
+  # api:  # Phase3 完了後に有効化
+  #   build:
+  #     context: ../../
+  #     dockerfile: apps/api/Dockerfile
+  #   container_name: fxde_api
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgresql://fxde:fxde_password@postgres:5432/fxde_db
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
 
-  # ─── Web (React/Vite) ────────────────────────────────────────
-  web:
-    build:
-      context: ../../
-      dockerfile: apps/web/Dockerfile
-    container_name: fxde_web
-    restart: unless-stopped
-    depends_on:
-      - api
-    environment:
-      VITE_API_BASE_URL: http://localhost:3000/api/v1
-    ports:
-      - '5173:80'
+  # web:  # Phase4 完了後に有効化
+  #   build:
+  #     context: ../../
+  #     dockerfile: apps/web/Dockerfile
+  #   container_name: fxde_web
+  #   ports:
+  #     - "5173:5173"
+  #   depends_on:
+  #     - api
 
 volumes:
-  postgres_data:
-  redis_data:
+  fxde_postgres_data:
+  fxde_redis_data:

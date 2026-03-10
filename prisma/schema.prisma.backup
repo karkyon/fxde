@@ -1,9 +1,13 @@
 // ============================================================
-// FXDE v5.1 — Prisma Schema (Canonical DB Definition)
-// Source: SPEC_v51_part2.md (正本)
-// Naming: DB=snake_case / Prisma Model=PascalCase / Field=camelCase
-// @map / @@map で差異を解決する
-// DO NOT modify columns/types/relations without a change proposal.
+// FXDE v5.1 — Prisma Schema（DB 契約正本）
+// 正本: SPEC_v51_part2.md §2 + SPEC_v51_part11.md §6
+// Part 10 が Part 1〜9 より優先。Part 11 が Chart 専用テーブルの正本。
+//
+// 命名規約（厳守）:
+//   Prisma model 名 / field 名 : PascalCase / camelCase
+//   DB table 名 / column 名    : snake_case（@@map / @map で変換）
+//   enum 名                    : PascalCase
+//   enum 値                    : 仕様書どおり（勝手に変更しない）
 // ============================================================
 
 generator client {
@@ -15,9 +19,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ══════════════════════════════════════════
-// ENUMS
-// ══════════════════════════════════════════
+// ============================================================
+// ENUMS（SPEC Part 2 §2 準拠）
+// ============================================================
 
 enum UserRole {
   FREE
@@ -93,9 +97,9 @@ enum ImportanceLevel {
   CRITICAL
 }
 
-// ══════════════════════════════════════════
+// ============================================================
 // 認証 / ユーザー
-// ══════════════════════════════════════════
+// ============================================================
 
 model User {
   id           String     @id @default(uuid())
@@ -104,20 +108,18 @@ model User {
   role         UserRole   @default(FREE)
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  lastLoginAt  DateTime?  @map("last_login_at")
+  updatedAt    DateTime   @updatedAt      @map("updated_at")
+  lastLoginAt  DateTime?                  @map("last_login_at")
 
-  // relations — コアテーブル (Part 2)
-  sessions       Session[]
-  settings       UserSetting?
-  symbolSettings SymbolSetting[]
-  trades         Trade[]
-  snapshots      Snapshot[]
-  signals        Signal[]
-  predictionJobs PredictionJob[]
-  auditLogs      AuditLog[]
-
-  // relations — Chart 専用テーブル (Part 11 追記)
+  // relations
+  sessions          Session[]
+  settings          UserSetting?
+  symbolSettings    SymbolSetting[]
+  trades            Trade[]
+  snapshots         Snapshot[]
+  signals           Signal[]
+  predictionJobs    PredictionJob[]
+  auditLogs         AuditLog[]
   patternDetections PatternDetection[]
   chartSnapshots    ChartSnapshot[]
 
@@ -141,19 +143,28 @@ model Session {
   @@map("sessions")
 }
 
-// ══════════════════════════════════════════
+// ============================================================
 // 設定
-// ══════════════════════════════════════════
+// ============================================================
 
 model UserSetting {
-  id              String   @id @default(uuid())
-  userId          String   @unique @map("user_id")
-  preset          Preset   @default(standard)
-  scoreThreshold  Int      @default(75) @map("score_threshold")
-  riskProfile     Json     @default("{}") @map("risk_profile")
-  uiPrefs         Json     @default("{}") @map("ui_prefs")
-  featureSwitches Json     @default("{}") @map("feature_switches")
-  forceLock       Boolean  @default(false) @map("force_lock")
+  id             String  @id @default(uuid())
+  userId         String  @unique @map("user_id")
+  preset         Preset  @default(standard)
+  scoreThreshold Int     @default(75) @map("score_threshold")
+
+  // riskProfile JSONB 構造:
+  // { maxRiskPct, maxDailyLossPct, maxStreak, cooldownMin, maxTrades, atrMultiplier }
+  riskProfile Json @default("{}") @map("risk_profile")
+
+  // uiPrefs JSONB 構造:
+  // { theme: "dark"|"light", mode: "beginner"|"pro", defaultSymbol, defaultTimeframe }
+  uiPrefs Json @default("{}") @map("ui_prefs")
+
+  // featureSwitches JSONB 構造:
+  // { aiSignal, patternBonus, newsLock, cooldownTimer, mtfPrediction }
+  featureSwitches Json    @default("{}") @map("feature_switches")
+  forceLock       Boolean @default(false) @map("force_lock")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -169,7 +180,7 @@ model SymbolSetting {
   defaultTimeframe Timeframe @default(H4) @map("default_timeframe")
   customThreshold  Int?      @map("custom_threshold")
   createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  updatedAt        DateTime  @updatedAt      @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -177,9 +188,9 @@ model SymbolSetting {
   @@map("symbol_settings")
 }
 
-// ══════════════════════════════════════════
+// ============================================================
 // トレード記録
-// ══════════════════════════════════════════
+// ============================================================
 
 model Trade {
   id         String      @id @default(uuid())
@@ -189,7 +200,7 @@ model Trade {
   entryTime  DateTime    @map("entry_time")
   entryPrice Decimal     @map("entry_price") @db.Decimal(10, 5)
   exitTime   DateTime?   @map("exit_time")
-  exitPrice  Decimal?    @map("exit_price") @db.Decimal(10, 5)
+  exitPrice  Decimal?    @map("exit_price")  @db.Decimal(10, 5)
   size       Decimal     @db.Decimal(10, 4)
   sl         Decimal?    @db.Decimal(10, 5)
   tp         Decimal?    @db.Decimal(10, 5)
@@ -199,7 +210,7 @@ model Trade {
   tags       String[]    @default([])
   note       String?
   createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  updatedAt  DateTime    @updatedAt      @map("updated_at")
 
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   review TradeReview?
@@ -214,35 +225,55 @@ model TradeReview {
   id           String   @id @default(uuid())
   tradeId      String   @unique @map("trade_id")
   scoreAtEntry Int      @map("score_at_entry")
-  ruleChecks   Json     @map("rule_checks")
-  psychology   Json     @default("{}") @map("psychology")
-  disciplined  Boolean
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // ruleChecks JSONB 構造:
+  // { scoreOk, riskOk, eventLock, cooldown, patterns: string[], entryState }
+  ruleChecks Json @map("rule_checks")
+
+  // psychology JSONB 構造:
+  // { emotion, selfNote, biasDetected: string[] }
+  psychology  Json     @default("{}") @map("psychology")
+  disciplined Boolean
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt      @map("updated_at")
 
   trade Trade @relation(fields: [tradeId], references: [id], onDelete: Cascade)
 
   @@map("trade_reviews")
 }
 
-// ══════════════════════════════════════════
+// ============================================================
 // スナップショット / スコア
-// ══════════════════════════════════════════
+// ============================================================
 
 model Snapshot {
-  id             String     @id @default(uuid())
-  userId         String     @map("user_id")
-  symbol         String
-  timeframe      Timeframe
-  capturedAt     DateTime   @map("captured_at")
-  indicators     Json
-  patterns       Json       @default("[]")
-  mtfAlignment   Json       @default("{}") @map("mtf_alignment")
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  symbol    String
+  timeframe Timeframe
+  capturedAt DateTime @map("captured_at")
+
+  // indicators JSONB 構造:
+  // { ma, rsi, macd, bb, atr }
+  indicators Json
+
+  // patterns 配列要素: { name, direction, confidence, bonus }
+  patterns Json @default("[]")
+
+  // mtfAlignment 構造: { W1: { score, direction }, D1: {...}, ... }
+  mtfAlignment Json @default("{}") @map("mtf_alignment")
+
   scoreTotal     Int        @map("score_total")
-  scoreBreakdown Json       @map("score_breakdown")
-  entryState     EntryState @map("entry_state")
-  entryContext   Json       @map("entry_context")
-  createdAt      DateTime   @default(now()) @map("created_at")
+
+  // scoreBreakdown 構造: { technical, fundamental, market, rr, patternBonus }
+  scoreBreakdown Json @map("score_breakdown")
+
+  entryState EntryState @map("entry_state")
+
+  // entryContext 構造: { rr, lotSize, isEventWindow, isCooldown, forceLock }
+  entryContext Json @map("entry_context")
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   signals Signal[]
@@ -252,17 +283,26 @@ model Snapshot {
   @@map("snapshots")
 }
 
+// ============================================================
+// シグナル
+// ============================================================
+
 model Signal {
-  id             String     @id @default(uuid())
-  userId         String     @map("user_id")
-  symbol         String
-  timeframe      Timeframe
-  snapshotId     String     @map("snapshot_id")
-  triggeredAt    DateTime   @map("triggered_at")
-  type           SignalType
-  metadata       Json       @default("{}")
-  acknowledgedAt DateTime?  @map("acknowledged_at")
-  createdAt      DateTime   @default(now()) @map("created_at")
+  id          String     @id @default(uuid())
+  userId      String     @map("user_id")
+  symbol      String
+  timeframe   Timeframe
+  snapshotId  String     @map("snapshot_id")
+  triggeredAt DateTime   @map("triggered_at")
+  type        SignalType
+
+  // metadata JSONB 構造（SignalType 別）:
+  // ENTRY_OK:         { score, patterns }
+  // LOCKED_EVENT:     { eventName, minutesUntil }
+  // PATTERN_DETECTED: { patternName, confidence, bonus }
+  metadata       Json      @default("{}")
+  acknowledgedAt DateTime? @map("acknowledged_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   snapshot Snapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
@@ -272,16 +312,20 @@ model Signal {
   @@map("signals")
 }
 
-// ══════════════════════════════════════════
-// MTF 予測（v5.1 = スタブ実装）
-// ══════════════════════════════════════════
+// ============================================================
+// MTF 予測（v5.1 = stub のみ）
+// ============================================================
 
 model PredictionJob {
   id           String    @id @default(uuid())
   userId       String    @map("user_id")
   symbol       String
   timeframe    Timeframe
+
+  // requestData JSONB 構造（v5.1 はジョブ受付・状態管理のみ）:
+  // { symbol: string, timeframe: Timeframe }
   requestData  Json      @map("request_data")
+
   status       JobStatus @default(QUEUED)
   startedAt    DateTime? @map("started_at")
   finishedAt   DateTime? @map("finished_at")
@@ -297,8 +341,20 @@ model PredictionJob {
 }
 
 model PredictionResult {
-  id         String   @id @default(uuid())
-  jobId      String   @unique @map("job_id")
+  id        String   @id @default(uuid())
+  jobId     String   @unique @map("job_id")
+
+  // resultData JSONB 構造（v5.1 = STUB_PREDICTION_RESULT 固定値）:
+  // {
+  //   scenarios: {
+  //     bull:    { probability: 0.42, target: '+0.8%', horizonBars: 12 },
+  //     neutral: { probability: 0.33, target: '+0.1%', horizonBars: 12 },
+  //     bear:    { probability: 0.25, target: '-0.5%', horizonBars: 12 },
+  //   },
+  //   stats: { matchedCases: 0, confidence: 0.55, note: 'v5.1 STUB result' },
+  //   tfWeights: null,
+  //   hmmState:  null,
+  // }
   resultData Json     @map("result_data")
   createdAt  DateTime @default(now()) @map("created_at")
 
@@ -307,9 +363,9 @@ model PredictionResult {
   @@map("prediction_results")
 }
 
-// ══════════════════════════════════════════
+// ============================================================
 // 共有マスタ（ユーザー非依存）
-// ══════════════════════════════════════════
+// ============================================================
 
 model InterestRate {
   id          String   @id @default(uuid())
@@ -337,16 +393,16 @@ model EconomicEvent {
   deviation   Decimal?        @db.Decimal(10, 4)
   source      String?
   createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
+  updatedAt   DateTime        @updatedAt      @map("updated_at")
 
   @@index([scheduledAt, importance])
   @@index([currency, scheduledAt])
   @@map("economic_events")
 }
 
-// ══════════════════════════════════════════
-// 監査ログ
-// ══════════════════════════════════════════
+// ============================================================
+// 監査ログ（ADMIN 専用）
+// ============================================================
 
 model AuditLog {
   id         String   @id @default(uuid())
@@ -365,18 +421,10 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// ══════════════════════════════════════════
-// Chart 専用テーブル（PG-07 用）— Part 11 正本
-// ══════════════════════════════════════════
-// v5.1 実装許可（Part 11 §9.1 参照）:
-//   market_candles    : ローソク足 OHLCV キャッシュ（ユーザー非依存）
-//   indicator_cache   : インジケーター計算結果キャッシュ（ユーザー非依存）
-//   pattern_detections: チャートパターン検出ログ（ユーザー別）
-//   chart_snapshots   : チャート状態スナップショット（ユーザー別）
-//
-// v5.1 禁止（Part 11 §9.2 参照）:
-//   chart-notes の DB 永続化（notes = null 固定）
-//   chart_snapshots.trade_id へのトレード接続（trade_id = null 固定）
+// ============================================================
+// Chart 専用テーブル（SPEC Part 11 §6 正本）
+// PG-07 Chart ページ専用。コアテーブルと役割を明確に分離。
+// ============================================================
 
 /// ローソク足 OHLCV キャッシュ（ユーザー非依存・共有テーブル）
 model MarketCandle {
@@ -391,7 +439,7 @@ model MarketCandle {
   volume    BigInt
   source    String    @db.VarChar(50)
   createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  updatedAt DateTime  @updatedAt      @map("updated_at")
 
   @@unique([symbol, timeframe, time])
   @@index([symbol, timeframe, time(sort: Desc)])
@@ -405,12 +453,13 @@ model IndicatorCache {
   timeframe    Timeframe
   calculatedAt DateTime  @map("calculated_at") @db.Timestamptz(6)
 
-  // indicators JSONB: IndicatorSet 型（Part 11 §3.3 ChartIndicatorsResponse.indicators 準拠）
-  indicators Json
+  // indicators JSONB: IndicatorSet 型（Part 11 §3.3 準拠）
+  // { ma, rsi, macd, atr, bb, bias }
+  indicators   Json
 
-  source    String   @db.VarChar(50)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  source       String    @db.VarChar(50)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt      @map("updated_at")
 
   @@index([symbol, timeframe, calculatedAt(sort: Desc)])
   @@index([calculatedAt])
@@ -418,14 +467,13 @@ model IndicatorCache {
 }
 
 /// チャートパターン検出ログ（ユーザー別）
-/// patternName: Part 6 §1.0 正式名称のみ使用する
-/// patternCategory: "CANDLESTICK"（6種）または "FORMATION"（6種）
+/// FREE: CANDLESTICK 6 種のみ / BASIC以上: 全 12 種（バックエンドでフィルタ）
 model PatternDetection {
   id              String    @id @default(uuid())
   userId          String    @map("user_id")
   symbol          String    @db.VarChar(10)
   timeframe       Timeframe
-  patternName     String    @map("pattern_name") @db.VarChar(100)
+  patternName     String    @map("pattern_name")     @db.VarChar(100)
   patternCategory String    @map("pattern_category") @db.VarChar(20)
   direction       String    @db.VarChar(10)
   confidence      Decimal   @db.Decimal(5, 4)
@@ -434,7 +482,7 @@ model PatternDetection {
   price           Decimal   @db.Decimal(18, 6)
   label           String    @db.VarChar(50)
   createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  updatedAt       DateTime  @updatedAt      @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -444,8 +492,7 @@ model PatternDetection {
 }
 
 /// チャート状態スナップショット（ユーザー別）
-/// v5.1: テーブル定義のみ。chart-notes 永続化は v6 で実装（notes = null 固定）
-/// v5.1: trade_id = null 固定。v6 でトレード記録 CRUD と接続する。
+/// v5.1: テーブル定義のみ。chart-notes 永続化は v6。
 model ChartSnapshot {
   id           String    @id @default(uuid())
   userId       String    @map("user_id")
@@ -453,20 +500,20 @@ model ChartSnapshot {
   timeframe    Timeframe
   capturedAt   DateTime  @map("captured_at") @db.Timestamptz(6)
 
-  // chartConfig JSONB: indicator トグル等の表示設定
-  chartConfig Json @map("chart_config")
+  // chartConfig JSONB: { indicators, overlays, chartType }
+  chartConfig  Json      @map("chart_config")
 
-  // overlayState JSONB: Entry/SL/TP/Prediction on/off 状態
-  overlayState Json @map("overlay_state")
+  // overlayState JSONB: { entryPrice, stopLoss, takeProfit }
+  overlayState Json      @map("overlay_state")
 
-  // chart-notes（v5.1 = null 固定 / v6 で永続化）
-  notes String?
+  // v5.1 = null 固定 / v6 で永続化
+  notes        String?
 
-  // 関連トレード ID（v5.1 = null 固定 / v6 でトレード記録 CRUD と接続）
-  tradeId String? @map("trade_id")
+  // v5.1 = null 固定 / v6 でトレード記録 CRUD と接続
+  tradeId      String?   @map("trade_id")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt      @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
