@@ -1,6 +1,6 @@
 // apps/api/src/main.ts
 import { NestFactory }   from '@nestjs/core';
-import { AppModule }     from './src/app.module';
+import { AppModule }     from './app.module';   // ← './src/app.module' を修正
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -11,11 +11,8 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalExceptionFilter());
-
-  // Cookie パーサー（RefreshToken HttpOnly Cookie 用）
   app.use(cookieParser());
 
-  // CORS
   app.enableCors({
     origin:         process.env.FRONTEND_URL ?? 'http://localhost:5173',
     credentials:    true,
@@ -23,7 +20,6 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // Swagger（開発環境のみ）
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('FXDE API')

@@ -377,3 +377,4 @@ export const PLAN_LIMITS: Record<UserRole, { maxSymbols: number; maxSnapshotsPer
   PRO_PLUS: { maxSymbols: 8,  maxSnapshotsPerDay: Infinity,   aiSummaryPerDay: Infinity },
   ADMIN:    { maxSymbols: 999, maxSnapshotsPerDay: Infinity,  aiSummaryPerDay: Infinity },
 }
+export * from './schemas';

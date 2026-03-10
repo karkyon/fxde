@@ -2,7 +2,7 @@
 import { Module }          from '@nestjs/common';
 import { ConfigModule }    from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { PrismaModule }    from '../prisma/prisma.module';
+import { PrismaModule }    from './prisma/prisma.module';       // ← ../prisma → ./prisma
 import { AuthModule }      from './modules/auth/auth.module';
 
 @Module({
@@ -15,7 +15,6 @@ import { AuthModule }      from './modules/auth/auth.module';
     ]),
     PrismaModule,
     AuthModule,
-    // 各モジュールは Step 3-3 以降で追加
   ],
 })
 export class AppModule {}

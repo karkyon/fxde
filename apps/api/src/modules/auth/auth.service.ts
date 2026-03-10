@@ -10,7 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import * as bcrypt       from 'bcryptjs';
 import type { Response, Request } from 'express';
 // ★ クラスではなく Zod 推論型を使用
-import type { RegisterDto, LoginDto } from '@fxde/types/schemas';
+import type { RegisterDto, LoginDto } from '@fxde/types';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
 
 const BCRYPT_ROUNDS  = 12;
