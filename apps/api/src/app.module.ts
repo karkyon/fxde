@@ -1,17 +1,19 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-
-// Domain modules are registered here as they are implemented (Phase3)
-// Stub imports ensure app compiles from Phase1 onwards.
+// apps/api/src/app.module.ts
+import { Module }          from '@nestjs/common';
+import { ConfigModule }    from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { PrismaModule }    from './prisma/prisma.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '../../.env',
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      { name: 'global',  ttl: 60_000, limit: 120 },
+      { name: 'auth',    ttl: 60_000, limit: 10  },
+      { name: 'capture', ttl: 60_000, limit: 20  },
+    ]),
+    PrismaModule,
+    // 各モジュールは Step 3-2 以降で追加
   ],
-  controllers: [],
-  providers: [],
 })
 export class AppModule {}
