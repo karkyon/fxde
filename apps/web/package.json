@@ -1,0 +1,35 @@
+{
+  "name": "@fxde/web",
+  "version": "5.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fxde/types": "workspace:*",
+    "@fxde/config": "workspace:*",
+    "@fxde/ui": "workspace:*",
+    "@tanstack/react-query": "^5.35.1",
+    "@tanstack/react-query-devtools": "^5.35.1",
+    "axios": "^1.6.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.23.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  }
+}
