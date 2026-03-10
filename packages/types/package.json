@@ -4,6 +4,16 @@
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": "./dist/index.js",
+      "types":   "./dist/index.d.ts"
+    },
+    "./schemas": {
+      "require": "./dist/schemas/index.js",
+      "types":   "./dist/schemas/index.d.ts"
+    }
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
