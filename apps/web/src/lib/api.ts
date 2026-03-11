@@ -1,114 +1,155 @@
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import type {
-  CloseTradeRequest, CreateReviewRequest, CreateTradeRequest,
-  LoginRequest, LoginResponse, PaginatedResponse, PaginationParams,
-  Settings, Signal, Snapshot, Symbol, Trade, TradeReview,
-  UpdateSettingsRequest, UpdateTradeRequest, User,
+  CloseTradeRequest,
+  CreateReviewRequest,
+  CreateTradeRequest,
+  LoginRequest,
+  LoginResponse,
+  PaginatedResponse,
+  PaginationParams,
+  Settings,
+  Signal,
+  Snapshot,
+  Symbol,
+  Trade,
+  TradeReview,
+  UpdateSettingsRequest,
+  UpdateTradeRequest,
+  User,
 } from '../types';
 
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL?.trim() || `${window.location.protocol}//${window.location.hostname}:3011`;
+
 const api: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:3011/api/v1',
+  baseURL: `${API_BASE_URL}/api/v1`,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
 });
 
-let _memoryToken: string | null = null;
+let memoryToken: string | null = null;
+
 export function getAccessToken(): string | null {
-  return _memoryToken ?? sessionStorage.getItem('fxde_token');
+  return memoryToken;
 }
+
 export function setAccessToken(token: string): void {
-  _memoryToken = token;
-  sessionStorage.setItem('fxde_token', token);
+  memoryToken = token;
 }
+
 export function clearAccessToken(): void {
-  _memoryToken = null;
-  sessionStorage.removeItem('fxde_token');
+  memoryToken = null;
 }
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getAccessToken();
-  if (token && config.headers) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+  if (token) {
+    config.headers = config.headers ?? {};
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
 const AUTH_URLS = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'];
-let isRefreshing = false;
-let pendingQueue: Array<{ resolve: (t: string) => void; reject: (e: unknown) => void }> = [];
 
-function processQueue(error: unknown, token: string | null = null) {
-  pendingQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token!)));
+let isRefreshing = false;
+let pendingQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
+
+function processQueue(error: unknown, token?: string) {
+  for (const item of pendingQueue) {
+    if (error) {
+      item.reject(error);
+    } else if (token) {
+      item.resolve(token);
+    }
+  }
   pendingQueue = [];
 }
 
 api.interceptors.response.use(
-  (res) => res,
+  (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
     const url = originalRequest?.url ?? '';
-    const isAuthUrl = AUTH_URLS.some((u) => url.includes(u));
-    if (isAuthUrl || error.response?.status !== 401 || originalRequest._retry) {
+    const isAuthUrl = AUTH_URLS.some((authUrl) => url.includes(authUrl));
+
+    if (!originalRequest || isAuthUrl || error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
+
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         pendingQueue.push({
-          resolve: (token) => {
-            if (originalRequest.headers) originalRequest.headers['Authorization'] = `Bearer ${token}`;
+          resolve: (token: string) => {
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = `Bearer ${token}`;
             resolve(api(originalRequest));
           },
           reject,
         });
       });
     }
+
     originalRequest._retry = true;
     isRefreshing = true;
+
     try {
-      const { data } = await axios.post(
-        'http://localhost:3011/api/v1/auth/refresh',
+      const refreshResponse = await axios.post<{ accessToken: string }>(
+        `${API_BASE_URL}/api/v1/auth/refresh`,
         {},
-        { withCredentials: true }
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 15000,
+        },
       );
-      const newToken: string = data.accessToken;
+
+      const newToken = refreshResponse.data.accessToken;
       setAccessToken(newToken);
       processQueue(null, newToken);
-      if (originalRequest.headers) originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+
+      originalRequest.headers = originalRequest.headers ?? {};
+      originalRequest.headers.Authorization = `Bearer ${newToken}`;
+
       return api(originalRequest);
     } catch (refreshError) {
-      processQueue(refreshError, null);
+      processQueue(refreshError);
       clearAccessToken();
-      window.location.href = '/login';
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
     }
-  }
+  },
 );
 
 export default api;
 
 export const authApi = {
-  login: (body: LoginRequest) =>
-    api.post<LoginResponse>('/auth/login', body).then((r) => r.data),
+  login: (body: LoginRequest) => api.post<LoginResponse>('/auth/login', body).then((r) => r.data),
   logout: () => api.post('/auth/logout').then((r) => r.data),
-  refresh: () =>
-    api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
+  refresh: () => api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
 };
+
 export const userApi = {
   me: () => api.get<User>('/users/me').then((r) => r.data),
   update: (body: Partial<User>) => api.patch<User>('/users/me', body).then((r) => r.data),
 };
+
 export const settingsApi = {
   get: () => api.get<Settings>('/settings').then((r) => r.data),
-  update: (body: UpdateSettingsRequest) =>
-    api.patch<Settings>('/settings', body).then((r) => r.data),
+  update: (body: UpdateSettingsRequest) => api.patch<Settings>('/settings', body).then((r) => r.data),
   preset: (presetName: string) =>
     api.patch<Settings>('/settings/preset', { preset: presetName }).then((r) => r.data),
 };
+
 export const symbolsApi = {
   list: () => api.get<Symbol[]>('/symbols').then((r) => r.data),
 };
+
 export const tradesApi = {
   list: (params?: PaginationParams & { status?: string; symbol?: string }) =>
     api.get<PaginatedResponse<Trade>>('/trades', { params }).then((r) => r.data),
@@ -123,11 +164,13 @@ export const tradesApi = {
   createReview: (id: string, body: CreateReviewRequest) =>
     api.post<TradeReview>(`/trades/${id}/review`, body).then((r) => r.data),
 };
+
 export const snapshotsApi = {
   list: (params?: PaginationParams) =>
     api.get<PaginatedResponse<Snapshot>>('/snapshots', { params }).then((r) => r.data),
   latest: () => api.get<Snapshot>('/snapshots/latest').then((r) => r.data),
 };
+
 export const signalsApi = {
   list: (params?: PaginationParams & { symbol?: string }) =>
     api.get<PaginatedResponse<Signal>>('/signals', { params }).then((r) => r.data),

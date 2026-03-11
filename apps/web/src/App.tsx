@@ -1,26 +1,23 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useInitAuth } from './hooks/useInitAuth';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import { useInitAuth } from './hooks/useInitAuth';
 
-import LoginPage from './pages/Login';
 import DashboardPage from './pages/Dashboard';
-import TradesPage from './pages/Trades';
-import TradeDetailPage from './pages/TradeDetail';
+import LoginPage from './pages/Login';
 import SettingsPage from './pages/Settings';
 import SignalsPage from './pages/Signals';
+import TradeDetailPage from './pages/TradeDetail';
+import TradesPage from './pages/Trades';
 
 export default function App() {
-  // ページリロード時にsessionStorage のトークン & user を復元
   useInitAuth();
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Protected – ProtectedRoute → Layout(Outlet) → 各ページ */}
         <Route
           element={
             <ProtectedRoute>
@@ -35,7 +32,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
-        {/* Fallback */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

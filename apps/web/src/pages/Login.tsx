@@ -1,12 +1,11 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useAuthStore } from '../stores/authStore';
-import { userApi } from '../lib/api';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
-  const setUser = useAuthStore((s) => s.setUser);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,15 +16,22 @@ export default function LoginPage() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    console.log("LOGIN START");
+
     try {
       await login({ email, password });
-      // ユーザー情報を取得してストアに保存
-      const user = await userApi.me();
-      setUser(user);
+
+      console.log("LOGIN SUCCESS");
+
       navigate('/dashboard');
-    } catch {
+
+    } catch (e) {
+      console.log("LOGIN ERROR", e);
       setError('メールアドレスまたはパスワードが正しくありません。');
+
     } finally {
+      console.log("LOGIN FINALLY");
       setLoading(false);
     }
   };
@@ -68,7 +74,7 @@ export default function LoginPage() {
           {error && <p style={styles.error}>{error}</p>}
 
           <button type="submit" style={styles.button} disabled={loading}>
-            {loading ? 'ログイン中...' : 'ログイン'}
+            {loading ? 'ログインしています...' : 'ログイン'}
           </button>
         </form>
       </div>

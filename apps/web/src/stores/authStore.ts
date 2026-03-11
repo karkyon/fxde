@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { clearAccessToken, setAccessToken } from '../lib/api';
-import axios from 'axios';
+import { authApi, clearAccessToken, setAccessToken } from '../lib/api';
 import type { LoginRequest, User } from '../types';
 
 interface AuthState {
@@ -8,11 +7,13 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
-  setUser: (user: User) => void;
-  setToken: (token: string) => void;
-  initialize: () => void;
+  setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
+  initializeDone: () => void;
+  clearAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -20,55 +21,88 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
+  isInitialized: false,
 
   login: async (credentials) => {
     set({ isLoading: true });
+
     try {
-      // axiosのインターセプターを通さず直接呼ぶ
-      const res = await axios.post(
-        'http://localhost:3011/api/v1/auth/login',
-        credentials,
-        {
-          withCredentials: true,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-      const { accessToken, user } = res.data;
+      const data = await authApi.login(credentials);
+      const { accessToken, user } = data;
+
       setAccessToken(accessToken);
-      set({ accessToken, user, isAuthenticated: true, isLoading: false });
-    } catch (err) {
-      set({ isLoading: false });
-      throw err;
+
+      set({
+        accessToken,
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+        isInitialized: true,
+      });
+    } catch (error) {
+      clearAccessToken();
+      set({
+        accessToken: null,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isInitialized: true,
+      });
+      throw error;
     }
   },
 
   logout: async () => {
     try {
-      await axios.post(
-        'http://localhost:3011/api/v1/auth/logout',
-        {},
-        { withCredentials: true }
-      );
+      await authApi.logout();
     } catch {
       // ignore
     } finally {
       clearAccessToken();
-      set({ accessToken: null, user: null, isAuthenticated: false });
+      set({
+        accessToken: null,
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        isInitialized: true,
+      });
     }
   },
 
-  setUser: (user) => set({ user }),
+  setUser: (user) =>
+    set({
+      user,
+      isAuthenticated: !!user || !!useAuthStore.getState().accessToken,
+    }),
 
   setToken: (token) => {
-    setAccessToken(token);
-    set({ accessToken: token, isAuthenticated: true });
-  },
-
-  initialize: () => {
-    const token = sessionStorage.getItem('fxde_token');
     if (token) {
       setAccessToken(token);
-      set({ accessToken: token, isAuthenticated: true });
+      set({
+        accessToken: token,
+        isAuthenticated: true,
+      });
+    } else {
+      clearAccessToken();
+      set({
+        accessToken: null,
+        isAuthenticated: false,
+      });
     }
+  },
+
+  initializeDone: () => {
+    set({ isInitialized: true });
+  },
+
+  clearAuth: () => {
+    clearAccessToken();
+    set({
+      accessToken: null,
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      isInitialized: true,
+    });
   },
 }));
