@@ -1,0 +1,55 @@
+① ログインAPI確認
+curl -i http://localhost:3011/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":"admin@fxde.local",
+    "password":"Password1!"
+  }'
+② 成功時レスポンス例
+
+成功ならこう返ります。
+
+HTTP/1.1 200 OK
+Set-Cookie: refreshToken=xxxx
+
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "...",
+    "email": "admin@fxde.local"
+  }
+}
+③ 401の場合
+HTTP/1.1 401 Unauthorized
+
+→
+ユーザーかパスワードが違う
+
+④ 接続エラーの場合
+curl: (7) Failed to connect
+
+→
+API起動してない or ポート違う
+
+⑤ ユーザー一覧をDBで確認（確実）
+
+PostgreSQLならこれ。
+
+docker exec -it fxde-postgres psql -U fxde -d fxde_db
+
+中で
+
+SELECT email FROM "User";
+⑥ ユーザーが無い場合
+
+seedが入っていません。
+
+pnpm prisma db seed
+
+または
+
+pnpm prisma studio
+⑦ login APIが生きているかだけ確認
+curl -i http://localhost:3011/api/v1/auth/login
+
+405なら正常です。
