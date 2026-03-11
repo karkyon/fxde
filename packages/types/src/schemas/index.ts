@@ -5,3 +5,4 @@ export * from './settings.schema';
 export * from './symbol.schema';
 export * from './trade.schema';
 export * from './prediction.schema';
+export * from './snapshot.schema';

@@ -8,6 +8,7 @@ import { UsersModule }     from './modules/users/users.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SymbolsModule } from './modules/symbols/symbols.module';
 import { TradesModule }    from './modules/trades/trades.module';
+import { SnapshotsModule }  from './modules/snapshots/snapshots.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TradesModule }    from './modules/trades/trades.module';
     SettingsModule,
     SymbolsModule,
     TradesModule,
+    SnapshotsModule,
   ],
 })
 export class AppModule {}
