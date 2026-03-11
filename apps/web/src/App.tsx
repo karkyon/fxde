@@ -1,27 +1,42 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useInitAuth } from './hooks/useInitAuth';
+import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
 
-// Pages are implemented in Phase4 (Frontend Core).
-// Placeholder components allow the app to compile now.
-const Placeholder = ({ name }: { name: string }) => (
-  <div style={{ padding: 32, fontFamily: 'monospace' }}>
-    <h2>FXDE — {name}</h2>
-    <p>Phase4 implementation pending.</p>
-  </div>
-);
+import LoginPage from './pages/Login';
+import DashboardPage from './pages/Dashboard';
+import TradesPage from './pages/Trades';
+import TradeDetailPage from './pages/TradeDetail';
+import SettingsPage from './pages/Settings';
+import SignalsPage from './pages/Signals';
 
 export default function App() {
+  // ページリロード時にsessionStorage のトークン & user を復元
+  useInitAuth();
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<Placeholder name="Dashboard" />} />
-        <Route path="/trades" element={<Placeholder name="Trades" />} />
-        <Route path="/trades/:id" element={<Placeholder name="Trade Detail" />} />
-        <Route path="/analytics" element={<Placeholder name="Analytics" />} />
-        <Route path="/journal" element={<Placeholder name="Journal" />} />
-        <Route path="/chart" element={<Placeholder name="Chart" />} />
-        <Route path="/settings" element={<Placeholder name="Settings" />} />
-        <Route path="*" element={<Placeholder name="404" />} />
+        {/* Public */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Protected – ProtectedRoute → Layout(Outlet) → 各ページ */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/trades" element={<TradesPage />} />
+          <Route path="/trades/:id" element={<TradeDetailPage />} />
+          <Route path="/signals" element={<SignalsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>
   );
