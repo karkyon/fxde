@@ -3,6 +3,7 @@ import { NestFactory }   from '@nestjs/core';
 import { AppModule }     from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ZodValidationPipe } from 'nestjs-zod';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const cookieParser = require('cookie-parser') as () => unknown;
 
@@ -11,6 +12,7 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(new ZodValidationPipe());
   app.use(cookieParser());
 
   app.enableCors({
