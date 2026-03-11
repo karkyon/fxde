@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { authApi, clearAccessToken, setAccessToken } from '../lib/api';
+import { clearAccessToken, setAccessToken } from '../lib/api';
+import axios from 'axios';
 import type { LoginRequest, User } from '../types';
 
 interface AuthState {
@@ -7,7 +8,6 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => Promise<void>;
   setUser: (user: User) => void;
@@ -24,7 +24,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (credentials) => {
     set({ isLoading: true });
     try {
-      const { accessToken, user } = await authApi.login(credentials);
+      // axiosのインターセプターを通さず直接呼ぶ
+      const res = await axios.post(
+        'http://localhost:3011/api/v1/auth/login',
+        credentials,
+        {
+          withCredentials: true,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+      const { accessToken, user } = res.data;
       setAccessToken(accessToken);
       set({ accessToken, user, isAuthenticated: true, isLoading: false });
     } catch (err) {
@@ -35,9 +44,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
-      await authApi.logout();
+      await axios.post(
+        'http://localhost:3011/api/v1/auth/logout',
+        {},
+        { withCredentials: true }
+      );
     } catch {
-      // サーバーエラーでもクライアント側はクリア
+      // ignore
     } finally {
       clearAccessToken();
       set({ accessToken: null, user: null, isAuthenticated: false });
@@ -52,7 +65,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initialize: () => {
-    // sessionStorage に残っていれば復元
     const token = sessionStorage.getItem('fxde_token');
     if (token) {
       setAccessToken(token);
