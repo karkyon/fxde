@@ -1,6 +1,6 @@
 // apps/api/src/main.ts
 import { NestFactory }   from '@nestjs/core';
-import { AppModule }     from './app.module';   // ← './src/app.module' を修正
+import { AppModule }     from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -30,7 +30,7 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup('api/docs', app, doc);
   }
 
-  const port = process.env.PORT ?? 3001;
+  const port = process.env.PORT ?? 3011;
   await app.listen(port);
   console.log(`FXDE API listening on port ${port}`);
 }
