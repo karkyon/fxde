@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const CreateTradeSchema = z.object({
   symbol:     z.string().min(1),
-  side:       z.enum(['BUY', 'SELL']),           // index.ts TradeSide に合わせる
+  side:       z.enum(['BUY', 'SELL']),
   entryTime:  z.string().datetime(),
   entryPrice: z.number().positive(),
   size:       z.number().positive().max(100),
@@ -32,11 +32,12 @@ export const GetTradesQuerySchema = z.object({
   limit:     z.coerce.number().int().min(1).max(100).default(20),
   symbol:    z.string().optional(),
   status:    z.enum(['OPEN', 'CLOSED', 'CANCELED']).optional(),
-  side:      z.enum(['BUY', 'SELL']).optional(),           // 同上
+  side:      z.enum(['BUY', 'SELL']).optional(),
   from:      z.string().datetime().optional(),
   to:        z.string().datetime().optional(),
   sortBy:    z.enum(['entryTime', 'pnl', 'createdAt']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
+  include:   z.enum(['review']).optional(),   // ← Part 7 §1.5 TradeLogEntry 対応
 });
 
 export const RuleChecksSchema = z.object({
