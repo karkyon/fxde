@@ -7,6 +7,13 @@
  *   UserSettingDto の正本フィールドに合わせて再設計:
  *     preset / scoreThreshold / riskProfile / uiPrefs / featureSwitches / forceLock
  *
+ * 【今回修正】TS2352 型キャストエラー修正:
+ *   (s.riskProfile as Record<string, number>) → 直接プロパティアクセスに変更
+ *   (s.uiPrefs    as Record<string, string>)  → 直接プロパティアクセスに変更
+ *   (s.featureSwitches as Record<string, boolean>) → 直接プロパティアクセスに変更
+ *   RiskProfile / UiPrefs / FeatureSwitches は型付き interface のため
+ *   Record<string, xxx> へのキャストは型エラーになる。
+ *
  * 参照: SPEC_v51_part2 §2 UserSetting model, SPEC_v51_part3 §5
  */
 
@@ -40,29 +47,39 @@ interface FormState {
   mtfPrediction: boolean;
 }
 
+// ── 修正箇所 ──────────────────────────────────────────────────────────────────
+// 修正前（エラー）:
+//   const rp = (s.riskProfile    as Record<string, number>)  ?? {};
+//   const ui = (s.uiPrefs        as Record<string, string>)  ?? {};
+//   const fs = (s.featureSwitches as Record<string, boolean>) ?? {};
+//
+// 修正後（直接プロパティアクセス）:
+//   RiskProfile / UiPrefs / FeatureSwitches は型付き interface のため
+//   キャスト不要。各フィールドに直接アクセスする。
+// ─────────────────────────────────────────────────────────────────────────────
 function toFormState(s: UserSettingDto): FormState {
-  const rp = (s.riskProfile as Record<string, number>) ?? {};
-  const ui = (s.uiPrefs    as Record<string, string>)  ?? {};
-  const fs = (s.featureSwitches as Record<string, boolean>) ?? {};
+  const rp = s.riskProfile;
+  const ui = s.uiPrefs;
+  const fs = s.featureSwitches;
   return {
-    preset:          s.preset as Preset,
-    scoreThreshold:  String(s.scoreThreshold),
-    forceLock:       s.forceLock,
-    maxRiskPct:      String(rp.maxRiskPct    ?? 1.0),
-    maxDailyLossPct: String(rp.maxDailyLossPct ?? 3.0),
-    maxStreak:       String(rp.maxStreak     ?? 3),
-    cooldownMin:     String(rp.cooldownMin   ?? 60),
-    maxTrades:       String(rp.maxTrades     ?? 5),
-    atrMultiplier:   String(rp.atrMultiplier ?? 1.5),
-    theme:           (ui.theme            as 'dark' | 'light') ?? 'dark',
-    mode:            (ui.mode             as 'beginner' | 'pro') ?? 'pro',
-    defaultSymbol:   ui.defaultSymbol    ?? 'EURUSD',
+    preset:           s.preset as Preset,
+    scoreThreshold:   String(s.scoreThreshold),
+    forceLock:        s.forceLock,
+    maxRiskPct:       String(rp.maxRiskPct      ?? 1.0),
+    maxDailyLossPct:  String(rp.maxDailyLossPct ?? 3.0),
+    maxStreak:        String(rp.maxStreak        ?? 3),
+    cooldownMin:      String(rp.cooldownMin      ?? 60),
+    maxTrades:        String(rp.maxTrades        ?? 5),
+    atrMultiplier:    String(rp.atrMultiplier    ?? 1.5),
+    theme:            ui.theme            ?? 'dark',
+    mode:             ui.mode             ?? 'pro',
+    defaultSymbol:    ui.defaultSymbol    ?? 'EURUSD',
     defaultTimeframe: ui.defaultTimeframe ?? 'H4',
-    aiSignal:        fs.aiSignal      ?? true,
-    patternBonus:    fs.patternBonus  ?? true,
-    newsLock:        fs.newsLock      ?? true,
-    cooldownTimer:   fs.cooldownTimer ?? true,
-    mtfPrediction:   fs.mtfPrediction ?? true,
+    aiSignal:         fs.aiSignal      ?? true,
+    patternBonus:     fs.patternBonus  ?? true,
+    newsLock:         fs.newsLock      ?? true,
+    cooldownTimer:    fs.cooldownTimer ?? true,
+    mtfPrediction:    fs.mtfPrediction ?? true,
   };
 }
 
@@ -190,25 +207,25 @@ export default function SettingsPage() {
                 onChange={(e) => setForm({ ...form, maxDailyLossPct: e.target.value })}
                 style={styles.input} />
             </Field>
-            <Field label="Max Streak (連敗上限)">
+            <Field label="Max Consecutive Loss">
               <input type="number" min={1} max={10}
                 value={form.maxStreak}
                 onChange={(e) => setForm({ ...form, maxStreak: e.target.value })}
                 style={styles.input} />
             </Field>
-            <Field label="Cooldown (分)">
+            <Field label="Cooldown (min)">
               <input type="number" min={5} max={480}
                 value={form.cooldownMin}
                 onChange={(e) => setForm({ ...form, cooldownMin: e.target.value })}
                 style={styles.input} />
             </Field>
-            <Field label="Max Trades / Day">
+            <Field label="Max Trades Per Day">
               <input type="number" min={1} max={20}
                 value={form.maxTrades}
                 onChange={(e) => setForm({ ...form, maxTrades: e.target.value })}
                 style={styles.input} />
             </Field>
-            <Field label="ATR Multiplier (SL係数)">
+            <Field label="ATR Multiplier">
               <input type="number" step="0.1" min={0.5} max={5}
                 value={form.atrMultiplier}
                 onChange={(e) => setForm({ ...form, atrMultiplier: e.target.value })}
@@ -279,7 +296,7 @@ export default function SettingsPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button type="submit" style={styles.primaryBtn} disabled={updateSettings.isPending}>
-            {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
+            {updateSettings.isPending ? '保存中...' : '保存'}
           </button>
           {saved && <span style={{ color: '#34d399', fontSize: 13 }}>✓ 保存しました</span>}
         </div>
@@ -288,26 +305,26 @@ export default function SettingsPage() {
   );
 }
 
-// ─── Sub ─────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label style={styles.fieldLabel}>{label}</label>
+      <label style={styles.label}>{label}</label>
       {children}
     </div>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  title:       { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
-  card:        { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 10, padding: '24px 28px' },
-  sectionTitle:{ fontSize: 14, fontWeight: 700, marginBottom: 16, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 },
-  formGrid:    { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 },
-  fieldLabel:  { display: 'block', fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input:       { width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13 },
-  toggle:      { display: 'flex', alignItems: 'center', cursor: 'pointer' },
-  primaryBtn:  { padding: '10px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' },
-  muted:       { color: '#475569', fontSize: 13 },
-  errText:     { color: '#f87171', fontSize: 13 },
+  title:        { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
+  card:         { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 8, padding: '20px 24px' },
+  sectionTitle: { fontSize: 14, fontWeight: 600, color: '#94a3b8', marginBottom: 16, textTransform: 'uppercase', letterSpacing: 1 },
+  formGrid:     { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16 },
+  label:        { display: 'block', fontSize: 12, color: '#64748b', marginBottom: 6 },
+  input:        { width: '100%', padding: '8px 10px', backgroundColor: '#0f1117', border: '1px solid #2d3148', borderRadius: 6, color: '#e2e8f0', fontSize: 13 },
+  toggle:       { display: 'flex', alignItems: 'center', cursor: 'pointer', color: '#94a3b8', fontSize: 13 },
+  primaryBtn:   { padding: '10px 28px', backgroundColor: '#6366f1', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 },
+  muted:        { color: '#475569', fontSize: 13 },
+  errText:      { color: '#f87171', fontSize: 13 },
 };

@@ -6,6 +6,12 @@
  *   signalsApi.latest() を Signal 単体返却に修正（backend findLatest と一致）。
  *   Settings/Trade フィールドを仕様準拠フィールド名に統一。
  *
+ * 【今回修正】
+ *   - ApiPaginatedResponse<T> ローカル定義を削除
+ *   - @fxde/types の PaginatedResponse<T> { data, total, page, limit } に統一
+ *   - PaginatedResponse を @fxde/types から import
+ *   参照: SPEC_v51_part3 §2「共通型定義」packages/types/src/api.ts
+ *
  * 参照仕様:
  *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）
  *   監査レポート A-1, A-2, B-1
@@ -27,10 +33,12 @@ import type {
   UpdateSettingsDto,
   ApplyPresetDto,
   UpdateSymbolSettingDto,
+  PaginatedResponse,
 } from '@fxde/types';
 
 // ── ローカル補完型 ──────────────────────────────────────────────────────────
-// TODO: 下記型を packages/types/src/index.ts に追加し、import に切り替えること
+// 下記型は backend の返却形式に合わせた補完定義。
+// packages/types/src/index.ts への移動は今後のリファクタで対応する。
 
 /** バックエンド snapshots.service.ts formatSnapshot() 返却形式 */
 export interface SnapshotResponse {
@@ -73,16 +81,10 @@ export interface TradeReviewResponse {
   updatedAt: string;
 }
 
-// ── ページネーション型 ────────────────────────────────────────────────────
-// backend は { data, total, page, limit } を返す。
-// TODO: backend を packages/types の PaginatedResponse 形式 { items, meta } に統一すること
-export interface ApiPaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
+// ── ページネーション補助型 ────────────────────────────────────────────────
+// PaginatedResponse<T> は @fxde/types から import 済み。
+// PaginationParams は api.ts 内のクエリパラメータ構築用ローカル型として残す。
+// （@fxde/types の PaginationQuery と同一形状）
 export interface PaginationParams {
   page?: number;
   limit?: number;
@@ -220,7 +222,7 @@ export const symbolsApi = {
 // 参照: SPEC_v51_part3 §8
 export const tradesApi = {
   list: (params?: PaginationParams & { status?: string; symbol?: string; side?: string; include?: 'review' }) =>
-    api.get<ApiPaginatedResponse<TradeDto>>('/trades', { params }).then((r) => r.data),
+    api.get<PaginatedResponse<TradeDto>>('/trades', { params }).then((r) => r.data),
   get:          (id: string) =>
     api.get<TradeDto>(`/trades/${id}`).then((r) => r.data),
   create:       (body: CreateTradeInput) =>
@@ -246,7 +248,7 @@ export const tradesApi = {
 // 参照: SPEC_v51_part3 §7
 export const snapshotsApi = {
   list:    (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
-    api.get<ApiPaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
+    api.get<PaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
   latest:  (params?: { symbol?: string; timeframe?: string }) =>
     api.get<SnapshotResponse>('/snapshots/latest', { params }).then((r) => r.data),
   capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
@@ -260,7 +262,7 @@ export const snapshotsApi = {
 // 参照: SPEC_v51_part3 §9
 export const signalsApi = {
   list:   (params?: PaginationParams & { symbol?: string }) =>
-    api.get<ApiPaginatedResponse<SignalResponse>>('/signals', { params }).then((r) => r.data),
+    api.get<PaginatedResponse<SignalResponse>>('/signals', { params }).then((r) => r.data),
   latest: (params?: { symbol?: string }) =>
     api.get<SignalResponse>('/signals/latest', { params }).then((r) => r.data),
   ack:    (id: string) =>

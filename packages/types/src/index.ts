@@ -5,6 +5,12 @@
  * このファイルは prisma/schema.prisma と完全同期している。
  * DB命名: snake_case / Prisma / TypeScript命名: camelCase / PascalCase
  * Phase2確定版 - 推測カラム追加禁止
+ *
+ * 【修正履歴】
+ *   - PaginationMeta / PaginatedResponse { items, meta } を削除（仕様誤り）
+ *     正本は packages/types/src/api.ts の PaginatedResponse { data, total, page, limit }
+ *   - export * from './api' を追加（PaginationQuery / PaginatedResponse を外部公開）
+ *   参照: SPEC_v51_part3 §2「共通型定義」
  */
 
 // ══════════════════════════════════════════
@@ -331,20 +337,6 @@ export interface CreatePredictionJobDto {
   timeframe: Timeframe
 }
 
-// ── Pagination ────────────────────────────
-
-export interface PaginationMeta {
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedResponse<T> {
-  items: T[]
-  meta: PaginationMeta
-}
-
 // ══════════════════════════════════════════
 // 定数
 // ══════════════════════════════════════════
@@ -363,4 +355,14 @@ export const PLAN_LIMITS: Record<UserRole, { maxSymbols: number; maxSnapshotsPer
   PRO_PLUS: { maxSymbols: 8,  maxSnapshotsPerDay: Infinity,   aiSummaryPerDay: Infinity },
   ADMIN:    { maxSymbols: 999, maxSnapshotsPerDay: Infinity,  aiSummaryPerDay: Infinity },
 }
+
+// ══════════════════════════════════════════
+// Re-exports
+// ══════════════════════════════════════════
+
 export * from './schemas';
+
+// api.ts: PaginationQuery / PaginatedResponse<T> { data, total, page, limit }
+// ErrorResponse / SuccessResponse を公開する
+export * from './api';
+// 参照: SPEC_v51_part3 §2「共通型定義」
