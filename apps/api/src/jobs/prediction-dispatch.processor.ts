@@ -3,12 +3,12 @@
  *
  * 参照仕様:
  *   SPEC_v51_part4 §5.5「prediction-dispatch ワーカー（v5.1: スタブのみ）」
- *   SPEC_v51_part8 §9.2「v5.1 ジョブ処理フロー（固定 JSON）」
+ *   SPEC_v51_part8 §9.2「v5.1 ジョブ処理フロー」
  *   SPEC_v51_part8 §9.3「STUB_PREDICTION_RESULT（固定返却データ）」
  *
- * v5.1 実装スコープ:
+ * v5.1 実装スコープ（Processor の責務）:
  *   1. PredictionJob.status = 'RUNNING' に更新
- *   2. STUB_PREDICTION_RESULT（固定 JSON）を PredictionResult に upsert
+ *   2. PredictionWorker.runJob(jobId) に処理を委譲
  *   3. PredictionJob.status = 'SUCCEEDED' に更新
  *   ※ 失敗時は 'FAILED' に更新して再スロー
  *
@@ -20,7 +20,10 @@
  *   - [Task D] STUB_PREDICTION_RESULT の import 元を
  *     '../modules/predictions/predictions.service' → '@fxde/types' に変更
  *     理由: service → processor の逆流依存を解消
- *     参照: @fxde/types (packages/types/src/index.ts) が唯一の正本
+ *   - [round5 Task1] PredictionWorker への委譲に変更
+ *     Processor はステータス管理のみ担当。
+ *     フロー処理（MTF ローソク足ロード / 特徴量生成 / 推論 / 結果保存）は
+ *     PredictionWorker.runJob() に委譲する。
  */
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
@@ -28,7 +31,7 @@ import { Logger }                from '@nestjs/common';
 import { Job }                   from 'bullmq';
 import { PrismaService }         from '../prisma/prisma.service';
 import { QUEUE_NAMES }           from './queues';
-import { STUB_PREDICTION_RESULT } from '@fxde/types';
+import { PredictionWorker }      from '../workers/prediction.worker';
 
 // ── ジョブデータ型（SPEC_v51_part4 §5.2 正本）────────────────────────────────
 export type PredictionDispatchJobData = {
@@ -39,16 +42,18 @@ export type PredictionDispatchJobData = {
 export class PredictionDispatchProcessor extends WorkerHost {
   private readonly logger = new Logger(PredictionDispatchProcessor.name);
 
-  constructor(private readonly db: PrismaService) {
+  constructor(
+    private readonly db:     PrismaService,
+    private readonly worker: PredictionWorker,
+  ) {
     super();
   }
 
   /**
-   * v5.1 stub 処理フロー（SPEC_v51_part8 §9.2）
+   * v5.1 処理フロー（SPEC_v51_part8 §9.2）
    *
-   * 1. RUNNING に更新
-   * 2. 固定 JSON を PredictionResult に upsert
-   * 3. SUCCEEDED に更新
+   * Processor の責務: ステータス管理（RUNNING / SUCCEEDED / FAILED）のみ。
+   * フロー処理: PredictionWorker.runJob(jobId) に委譲。
    *
    * 性能要件: 全体 < 3 秒（SPEC_v51_part8 §9.4）
    */
@@ -63,14 +68,9 @@ export class PredictionDispatchProcessor extends WorkerHost {
     });
 
     try {
-      // ステップ 2: 固定 JSON を PredictionResult に upsert
-      // STUB_PREDICTION_RESULT は @fxde/types から import（唯一の正本）
-      // Part8 §9.3 の shape に準拠（bull/neutral/bear キーのオブジェクト型）
-      await this.db.predictionResult.upsert({
-        where:  { jobId },
-        update: { resultData: STUB_PREDICTION_RESULT as object },
-        create: { jobId,    resultData: STUB_PREDICTION_RESULT as object },
-      });
+      // ステップ 2: PredictionWorker に処理を委譲
+      // フロー: loadMtfCandles → generateFeatures → runInference → saveResult
+      await this.worker.runJob(jobId);
 
       // ステップ 3: SUCCEEDED に更新
       await this.db.predictionJob.update({

@@ -13,6 +13,7 @@
  *   - GET  /predictions/jobs/:id → DB read（status のみ）→ 200
  *   - GET  /predictions/latest  → DB read + サービス層で配列変換 → 200
  *   - PATCH /predictions/jobs/:id/tf-weights → requestData.tfWeights に保存 → 200
+ *   - generatePrediction() → PredictionWorker から呼び出される推論メソッド（v5.1: スタブ）
  *
  * 実装禁止（v6 設計資料）:
  *   DTW / HMM / 類似検索 / WFV / 重み自動学習
@@ -22,6 +23,9 @@
  *     @fxde/types からの import に統一（packages/types/src/index.ts が唯一の正本）
  *   - [Task A] updateTfWeights() を追加
  *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
+ *   - [round5 Task2] generatePrediction() を追加
+ *     PredictionWorker の runInference ステップから呼び出される。
+ *     v5.1: STUB_PREDICTION_RESULT 準拠の固定値を返す。
  */
 
 import {
@@ -173,8 +177,8 @@ export class PredictionsService {
       label:       SCENARIO_LABELS[key],
       probability: resultData.scenarios[key].probability,
       // v5.1 スタブ: pricePoints / maxPips / avgTimeHours は固定値
-      pricePoints: [],
-      maxPips:     0,
+      pricePoints:  [],
+      maxPips:      0,
       avgTimeHours: 0,
     }));
 
@@ -231,16 +235,61 @@ export class PredictionsService {
       tfWeights: normalizedWeights,
     };
 
-    const updated = await this.prisma.predictionJob.update({
+    await this.prisma.predictionJob.update({
       where: { id: jobId },
       data:  { requestData: updatedRequestData },
     });
 
-    // 参照: SPEC_v51_part10 §6.6 TfWeightsUpdateResponse
     return {
-      jobId:     updated.id,
-      tfWeights: normalizedWeights,
-      updatedAt: new Date().toISOString(),
+      jobId,
+      tfWeights:  normalizedWeights,
+      updatedAt:  new Date().toISOString(),
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [round5 Task2] generatePrediction
+  // PredictionWorker の runInference ステップから呼び出される推論メソッド。
+  //
+  // 入力: symbol / timeframe / horizonH（予測ホライズン時間）
+  // 出力: probabilities / expectedMovePips / confidence / forecastHorizonH
+  //
+  // v5.1: STUB_PREDICTION_RESULT 準拠の固定値を返す。
+  // v6:   MTF 特徴量 + HMM による実推論に差し替え予定。
+  //
+  // 参照: SPEC_v51_part8 §9「Prediction Service プロセス設計（v5.1: スタブのみ実装）」
+  //       SPEC_v51_part11 §3.6「STUB_PREDICTION_OVERLAY（确率値の正本）」
+  // ──────────────────────────────────────────────────────────────────────────
+  async generatePrediction(
+    symbol:    string,
+    timeframe: string,
+    horizonH:  number,
+  ): Promise<{
+    probabilities:    { bullish: number; neutral: number; bearish: number };
+    expectedMovePips: number;
+    confidence:       'high' | 'medium' | 'low';
+    forecastHorizonH: number;
+  }> {
+    this.logger.debug(
+      `generatePrediction symbol=${symbol} tf=${timeframe} horizonH=${horizonH}`,
+    );
+
+    // v5.1 スタブ: STUB_PREDICTION_RESULT の確率値をそのまま使用
+    // 参照: packages/types/src/index.ts STUB_PREDICTION_RESULT（唯一の正本）
+    const { bull, neutral, bear } = STUB_PREDICTION_RESULT.scenarios;
+
+    return {
+      probabilities: {
+        bullish: bull.probability,
+        neutral: neutral.probability,
+        bearish: bear.probability,
+      },
+      // 期待移動幅: SPEC_v51_part11 §3.6 STUB_PREDICTION_OVERLAY.expectedMovePips 準拠
+      expectedMovePips: 45,
+      // 信頼度: bullish 確率が 0.5 超なら medium、未満なら low
+      confidence: bull.probability > 0.5 ? 'medium' : 'low',
+      // 予測ホライズン: 呼び出し元から受け取る（デフォルト 24h）
+      forecastHorizonH: horizonH,
     };
   }
 }

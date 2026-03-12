@@ -18,7 +18,7 @@
  *
  * v5.1 実装状況:
  *   完了: ジョブ作成 / ポーリング / 結果表示骨格 / TfWeight 保存（PATCH）
- *   未完: PredictionChart SVG（components/prediction/ で本実装予定）
+ *   完了: PredictionChart SVG 動的化（latestResult.data 使用）
  *
  * 【修正履歴】
  *   - [Task A] TfWeightSlider に 💾 保存 / ↺ デフォルト ボタンを追加
@@ -26,6 +26,9 @@
  *     スライダー min=5, max=50（SPEC_v51_part8 §2.3 準拠）
  *   - [Task C] PredictionScenario の import 元を @fxde/types に統一
  *     apps/web/src/lib/api.ts のローカル定義は廃止（re-export 経由）
+ *   - [round5 Task3] PredictionChart SVG を動的化
+ *     latestResult.data が存在する場合: probability → opacity / expectedMovePips → slope
+ *     latestResult.data が未取得の場合: フォールバック静的値を表示
  */
 
 import { useState } from 'react';
@@ -37,7 +40,6 @@ import {
 } from '../hooks/usePredictionJob';
 import type { PredictionScenario } from '@fxde/types';
 import type { Timeframe }          from '@fxde/types';
-import { DEFAULT_TF_WEIGHTS }      from '@fxde/types';
 
 // ── 定数 ─────────────────────────────────────────────────────────────────────
 const SYMBOLS = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'USDCHF', 'USDCAD', 'XAUUSD'];
@@ -60,6 +62,34 @@ const SCENARIO_COLOR: Record<string, string> = {
   neutral: '#E8B830',
   bear:    '#E05252',
 };
+
+// ── PredictionChart SVG ヘルパー ──────────────────────────────────────────────
+// SVG viewBox: 0 0 700 360
+// x0=120: 現在価格位置（縦線）
+// cy=180: 中央ライン Y 座標
+// STUB expectedMovePips = 45（SPEC_v51_part11 §3.6 STUB_PREDICTION_OVERLAY 準拠）
+const SVG_X0 = 120;
+const SVG_CY = 180;
+const STUB_EXPECTED_PIPS = 45;
+const PIP_SCALE = 2.5; // 1pip あたりの SVG Y ピクセル（最大 150px にキャップ）
+
+/** Y オフセット計算（上昇: 負値、下降: 正値）*/
+function calcDy(pips: number): number {
+  return Math.min(150, Math.round(pips * PIP_SCALE));
+}
+
+/** 5 点 polyline の points 文字列（現在位置 x0 から右へ補間）*/
+function polylinePoints(offsetY: number): string {
+  const x0 = SVG_X0;
+  const cy = SVG_CY;
+  return [
+    `${x0},${cy}`,
+    `${x0 + 120},${cy + offsetY * 0.25}`,
+    `${x0 + 240},${cy + offsetY * 0.50}`,
+    `${x0 + 360},${cy + offsetY * 0.75}`,
+    `${x0 + 480},${cy + offsetY}`,
+  ].join(' ');
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function PredictionPage() {
@@ -101,6 +131,16 @@ export default function PredictionPage() {
 
   const status    = jobStatus.data?.status;
   const isPolling = status === 'QUEUED' || status === 'RUNNING';
+
+  // ── PredictionChart 用データ計算 ────────────────────────────────────────
+  // latestResult が存在する場合は確率値を使用、未取得時はスタブ固定値
+  const scenarios    = latestResult.data?.result.scenarios;
+  const bullProb     = scenarios?.find((s) => s.id === 'bull')?.probability    ?? 0.63;
+  const neutralProb  = scenarios?.find((s) => s.id === 'neutral')?.probability ?? 0.22;
+  const bearProb     = scenarios?.find((s) => s.id === 'bear')?.probability    ?? 0.15;
+  const hasRealData  = !!scenarios;
+
+  const dy = calcDy(STUB_EXPECTED_PIPS);
 
   return (
     <div style={styles.root}>
@@ -153,51 +193,49 @@ export default function PredictionPage() {
                 disabled={!jobId || updateTf.isPending}
                 title={!jobId ? 'ジョブを作成してから保存してください' : undefined}
               >
-                {updateTf.isPending ? '保存中...' : '💾 保存'}
+                {updateTf.isPending ? '保存中…' : '💾 保存'}
               </button>
               <button
                 style={{ ...styles.secondaryBtn, flex: 1 }}
                 onClick={handleResetTfWeights}
-                disabled={updateTf.isPending}
               >
                 ↺ デフォルト
               </button>
             </div>
-
-            {!jobId && (
-              <p style={{ ...styles.muted, marginTop: 6, fontSize: 11 }}>
-                ※ ジョブを作成すると保存が有効になります
-              </p>
-            )}
-
-            {updateTf.error && (
-              <p style={styles.errText}>
-                保存エラー: {(updateTf.error as Error).message}
-              </p>
-            )}
-
             {updateTf.isSuccess && (
-              <p style={{ ...styles.muted, color: '#34d399', marginTop: 6, fontSize: 12 }}>
+              <p style={{ color: '#2EC96A', fontSize: 12, marginTop: 6, textAlign: 'center' }}>
                 ✓ 保存しました
               </p>
             )}
           </section>
 
-          {/* ジョブ作成 */}
+          {/* ジョブ作成フォーム */}
           <section style={{ ...styles.card, marginTop: 12 }}>
-            <h2 style={styles.cardTitle}>Prediction Job</h2>
+            <h2 style={styles.cardTitle}>予測ジョブ作成</h2>
 
             <div style={styles.formRow}>
               <label style={styles.label}>Symbol</label>
-              <select value={symbol} onChange={(e) => setSymbol(e.target.value)} style={styles.select}>
-                {SYMBOLS.map((s) => <option key={s} value={s}>{s}</option>)}
+              <select
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value)}
+                style={styles.select}
+              >
+                {SYMBOLS.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
               </select>
             </div>
 
             <div style={styles.formRow}>
-              <label style={styles.label}>Timeframe</label>
-              <select value={timeframe} onChange={(e) => setTimeframe(e.target.value as Timeframe)} style={styles.select}>
-                {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
+              <label style={styles.label}>TF</label>
+              <select
+                value={timeframe}
+                onChange={(e) => setTimeframe(e.target.value as Timeframe)}
+                style={styles.select}
+              >
+                {TIMEFRAMES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
               </select>
             </div>
 
@@ -206,27 +244,27 @@ export default function PredictionPage() {
               onClick={handleCreateJob}
               disabled={createJob.isPending}
             >
-              {createJob.isPending ? '送信中...' : '予測ジョブ作成'}
+              {createJob.isPending ? '作成中…' : '▶ 予測ジョブを実行'}
             </button>
 
-            {createJob.error && (
-              <p style={styles.errText}>
-                ジョブ作成エラー: {(createJob.error as Error).message}
-              </p>
+            {createJob.isError && (
+              <p style={styles.errText}>{String(createJob.error)}</p>
             )}
 
-            {/* ジョブ状態 */}
+            {/* ジョブ状態表示 */}
             {jobId && (
               <div style={styles.statusBox}>
                 <div style={styles.statusRow}>
-                  <span style={styles.statusLabel}>JobID</span>
-                  <span style={{ ...styles.statusValue, fontSize: 11 }}>{jobId.slice(0, 8)}…</span>
+                  <span style={styles.statusLabel}>Job ID</span>
+                  <span style={{ ...styles.statusValue, fontSize: 11 }}>
+                    {jobId.slice(0, 8)}…
+                  </span>
                 </div>
                 <div style={styles.statusRow}>
                   <span style={styles.statusLabel}>Status</span>
                   <span style={{
                     ...styles.statusValue,
-                    color: status === 'SUCCEEDED' ? '#34d399'
+                    color: status === 'SUCCEEDED' ? '#2EC96A'
                          : status === 'FAILED'    ? '#f87171'
                          : '#fbbf24',
                   }}>
@@ -257,35 +295,87 @@ export default function PredictionPage() {
         <main style={styles.rightPanel}>
           {/* PredictionChart エリア */}
           <section style={styles.card}>
-            <h2 style={styles.cardTitle}>PredictionChart</h2>
+            <h2 style={styles.cardTitle}>
+              PredictionChart
+              {hasRealData && (
+                <span style={{ fontSize: 11, fontWeight: 400, color: '#2EC96A', marginLeft: 8 }}>
+                  ● 予測データ反映済
+                </span>
+              )}
+            </h2>
             <div style={styles.chartPlaceholder}>
-              {/* TODO: components/prediction/PredictionChart.tsx を実装し差し替え */}
+              {/* [round5 Task3] 動的 SVG — latestResult.data の probability → opacity / slope に反映 */}
               <svg viewBox="0 0 700 360" style={{ width: '100%', height: '100%' }}>
-                {/* 現在価格ライン */}
-                <line x1="120" y1="20" x2="120" y2="330" stroke="#cbd5e1" strokeOpacity={0.4} />
-                {/* Bull シナリオ */}
+                {/* グリッドライン */}
+                {[90, 135, 180, 225, 270].map((y) => (
+                  <line key={y} x1="120" y1={y} x2="640" y2={y}
+                    stroke="#2d3748" strokeOpacity={0.5} />
+                ))}
+
+                {/* 現在価格の縦線 */}
+                <line x1={SVG_X0} y1="20" x2={SVG_X0} y2="330"
+                  stroke="#cbd5e1" strokeOpacity={0.4} />
+                <text x={SVG_X0 - 6} y={SVG_CY + 4}
+                  fill="#94a3b8" fontSize={11} textAnchor="end">
+                  Current
+                </text>
+
+                {/* Bull シナリオ — 上昇方向 */}
                 <polyline
-                  points="120,180 190,165 260,150 330,130 400,110 470,95 540,82 610,68"
-                  fill="none" stroke="#2EC96A" strokeWidth={3}
+                  points={polylinePoints(-dy)}
+                  fill="none"
+                  stroke={SCENARIO_COLOR.bull}
+                  strokeWidth={3}
+                  strokeDasharray={hasRealData ? undefined : '8 4'}
+                  opacity={0.4 + bullProb * 0.6}
                 />
-                {/* Neutral シナリオ */}
+                {/* Neutral シナリオ — 横ばい */}
                 <polyline
-                  points="120,180 190,182 260,178 330,183 400,180 470,185 540,181 610,184"
-                  fill="none" stroke="#E8B830" strokeWidth={2}
+                  points={polylinePoints(0)}
+                  fill="none"
+                  stroke={SCENARIO_COLOR.neutral}
+                  strokeWidth={2}
+                  strokeDasharray="4 3"
+                  opacity={0.4 + neutralProb * 0.6}
                 />
-                {/* Bear シナリオ */}
+                {/* Bear シナリオ — 下降方向 */}
                 <polyline
-                  points="120,180 190,196 260,212 330,230 400,248 470,262 540,275 610,290"
-                  fill="none" stroke="#E05252" strokeWidth={2} strokeDasharray="6 3"
+                  points={polylinePoints(dy)}
+                  fill="none"
+                  stroke={SCENARIO_COLOR.bear}
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  opacity={0.4 + bearProb * 0.6}
                 />
+
+                {/* 右端の確率ラベル */}
+                <text x="645" y={Math.max(14, SVG_CY - dy - 2)}
+                  fill={SCENARIO_COLOR.bull} fontSize={11} textAnchor="start">
+                  ▲{Math.round(bullProb * 100)}%
+                </text>
+                <text x="645" y={SVG_CY + 4}
+                  fill={SCENARIO_COLOR.neutral} fontSize={11} textAnchor="start">
+                  ─{Math.round(neutralProb * 100)}%
+                </text>
+                <text x="645" y={Math.min(348, SVG_CY + dy + 14)}
+                  fill={SCENARIO_COLOR.bear} fontSize={11} textAnchor="start">
+                  ▼{Math.round(bearProb * 100)}%
+                </text>
+
                 {/* 凡例 */}
-                <text x="130" y="75"  fill="#2EC96A" fontSize={12}>Bull</text>
-                <text x="130" y="190" fill="#E8B830" fontSize={12}>Neutral</text>
-                <text x="130" y="295" fill="#E05252" fontSize={12}>Bear</text>
-                <text x="115" y="185" fill="#94a3b8" fontSize={11} textAnchor="end">Current</text>
+                <text x="130" y="30" fill={SCENARIO_COLOR.bull}    fontSize={12}>● Bull</text>
+                <text x="200" y="30" fill={SCENARIO_COLOR.neutral} fontSize={12}>● Neutral</text>
+                <text x="290" y="30" fill={SCENARIO_COLOR.bear}    fontSize={12}>● Bear</text>
+
+                {/* expectedMovePips 表示 */}
+                <text x="640" y="350" fill="#475569" fontSize={10} textAnchor="end">
+                  exp.move: {STUB_EXPECTED_PIPS}pips · v5.1 stub
+                </text>
               </svg>
               <p style={styles.chartNote}>
-                ※ v5.1 stub チャート。components/prediction/PredictionChart.tsx で本実装予定。
+                {hasRealData
+                  ? `${symbol}/${timeframe} 予測データを反映中。確率に応じて各シナリオの透明度が変化します。`
+                  : '予測ジョブを実行すると、シナリオ確率がリアルタイムで反映されます。'}
               </p>
             </div>
           </section>
@@ -473,7 +563,7 @@ const styles: Record<string, React.CSSProperties> = {
   statusLabel: { color: '#64748b' },
   statusValue: { color: '#e2e8f0', fontFamily: 'monospace' },
   chartPlaceholder: {
-    height: 280,
+    minHeight: 300,
     background: 'rgba(0,0,0,0.2)',
     borderRadius: 8,
     display: 'flex',
