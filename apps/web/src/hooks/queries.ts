@@ -43,7 +43,7 @@ export const QK = {
   tradeReview:   (id: string)      => ['trade-review', id] as const,
   signals:       (params?: object) => ['signals', params] as const,
   signalsLatest: ()                => ['signals-latest'] as const,
-  snapshot:      ()                => ['snapshot-latest'] as const,
+  snapshot:      (params?: object) => ['snapshot-latest', params] as const,
   snapshots:     (params?: object) => ['snapshots', params] as const,
   settings:      ()                => ['settings'] as const,
   me:            ()                => ['me'] as const,
@@ -176,11 +176,11 @@ export function useLatestSignals() {
   });
 }
 
-// ─── Snapshots ───────────────────────────────────────────────────────────────
-export function useLatestSnapshot() {
+// ─── Snapshot（params対応に強化）────────────────────────────────────────────
+export function useLatestSnapshot(params?: { symbol?: string; timeframe?: string }) {
   return useQuery({
-    queryKey: QK.snapshot(),
-    queryFn: () => snapshotsApi.latest(),
+    queryKey: QK.snapshot(params),          // params を含めてキャッシュ分離
+    queryFn: () => snapshotsApi.latest(params),
     refetchInterval: 300_000,
     retry: false,
   });
@@ -191,5 +191,25 @@ export function useSnapshots(params?: PaginationParams & { symbol?: string; time
     queryKey: QK.snapshots(params),
     queryFn: () => snapshotsApi.list(params),
     placeholderData: keepPreviousData,
+  });
+}
+
+// QK の snapshot キーを params 対応に変更（破壊的変更なし。旧 QK.snapshot() は params=undefined で等価）
+// QK オブジェクトの snapshot 定義を更新:
+// snapshot: (params?: object) => ['snapshot-latest', params] as const,
+
+// ─── 追加: Equity Curve ───────────────────────────────────────────────────
+export function useEquityCurve(period: '1M' | '3M' | '1Y' = '1M') {
+  return useQuery({
+    queryKey: ['equity-curve', period] as const,
+    queryFn:  () => tradesApi.equityCurve(period),
+  });
+}
+
+// ─── 追加: Trade Summary ──────────────────────────────────────────────────
+export function useTradeSummary() {
+  return useQuery({
+    queryKey: ['trade-summary'] as const,
+    queryFn:  () => tradesApi.summary(),
   });
 }

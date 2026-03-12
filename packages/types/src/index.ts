@@ -292,6 +292,52 @@ export interface CreateTradeDto {
 
 export interface UpdateTradeDto extends Partial<CreateTradeDto> {}
 
+// ── Snapshot ─────────────────────────────
+
+export interface SnapshotResponse {
+  id: string
+  symbol: string
+  timeframe: Timeframe
+  capturedAt: string
+  scoreTotal: number
+  scoreBreakdown: {
+    technical: number
+    fundamental: number
+    market: number
+    rr: number
+    patternBonus: number
+  }
+  entryState: EntryState
+  entryDecision: {
+    status: EntryState
+    reasons: string[]
+    recommendation: string
+  } | null
+  indicators: unknown
+  patterns: unknown
+  mtfAlignment: unknown
+  entryContext: unknown
+  createdAt: string
+}
+
+// ── Signal ────────────────────────────────
+// 参照: SPEC_v51_part3 §9
+
+export interface SignalResponse {
+  id: string
+  symbol: string
+  timeframe: Timeframe
+  type: SignalType
+  triggeredAt: string
+  acknowledgedAt: string | null
+  metadata: Record<string, unknown>
+  snapshot: {
+    id: string
+    scoreTotal: number
+    entryState: EntryState
+  }
+}
+
 // ── UserSetting ───────────────────────────
 
 export interface UserSettingDto {

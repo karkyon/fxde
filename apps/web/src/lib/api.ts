@@ -34,40 +34,13 @@ import type {
   ApplyPresetDto,
   UpdateSymbolSettingDto,
   PaginatedResponse,
+  SignalResponse,
+  SnapshotResponse,
 } from '@fxde/types';
 
 // ── ローカル補完型 ──────────────────────────────────────────────────────────
 // 下記型は backend の返却形式に合わせた補完定義。
 // packages/types/src/index.ts への移動は今後のリファクタで対応する。
-
-/** バックエンド snapshots.service.ts formatSnapshot() 返却形式 */
-export interface SnapshotResponse {
-  id: string;
-  userId: string;
-  symbol: string;
-  timeframe: string;
-  capturedAt: string;
-  indicators: unknown;
-  patterns: unknown;
-  mtfAlignment: unknown;
-  scoreTotal: number;
-  scoreBreakdown: unknown;
-  entryState: string;
-  entryContext: unknown;
-  createdAt: string;
-}
-
-/** バックエンド signals.service.ts 返却形式（Prisma Signal model）*/
-export interface SignalResponse {
-  id: string;
-  userId: string;
-  snapshotId: string;
-  type: string;
-  triggeredAt: string;
-  acknowledgedAt: string | null;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
 
 /** バックエンド trades.service.ts getReview 返却形式 */
 export interface TradeReviewResponse {

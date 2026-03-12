@@ -9,7 +9,7 @@
 
 import { useState } from 'react';
 import { useSignals } from '../hooks/queries';
-import type { SignalResponse } from '../lib/api';
+import type { SignalResponse } from '@fxde/types';
 
 // Signal type ごとの配色
 const TYPE_COLOR: Record<string, { bg: string; text: string }> = {

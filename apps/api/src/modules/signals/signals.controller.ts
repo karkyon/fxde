@@ -2,6 +2,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Query,
@@ -51,11 +52,11 @@ export class SignalsController {
   }
 
   /**
-   * PATCH /api/v1/signals/:id/ack
-   * Signal を既読化（acknowledgedAt を現在時刻にセット）
-   * 参照: SPEC_v51_part3 §9
+   * POST /api/v1/signals/:id/ack
+   * シグナル確認済み登録（acknowledgedAt を現在時刻にセット）
+   * 参照: SPEC_v51_part3 §9 — POST メソッド確定
    */
-  @Patch(':id/ack')
+  @Post(':id/ack')            // ← @Patch → @Post
   @HttpCode(HttpStatus.OK)
   acknowledge(
     @CurrentUser() user: JwtPayload,

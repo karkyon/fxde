@@ -9,7 +9,7 @@
 
 import { useLatestSnapshot, useTrades, useLatestSignals } from '../hooks/queries';
 import type { TradeDto } from '@fxde/types';
-import type { SignalResponse } from '../lib/api';
+import type { SignalResponse } from '@fxde/types';
 
 export default function DashboardPage() {
   const snapshot = useLatestSnapshot();
