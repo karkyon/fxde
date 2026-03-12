@@ -22,7 +22,7 @@ import {
   useTradeReview,
   useUpdateTrade,
   useCreateReview,
-} from '../hooks/queries';
+} from '../hooks/useTrades';
 import type { TradeReviewResponse } from '../lib/api';
 
 // EntryState の選択肢（CreateTradeReviewInput.ruleChecks.entryState）

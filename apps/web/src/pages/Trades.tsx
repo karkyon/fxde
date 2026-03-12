@@ -22,7 +22,7 @@ import {
   useCloseTrade,
   useDeleteTrade,
   useUpdateTrade,
-} from '../hooks/queries';
+} from '../hooks/useTrades';
 import type { TradeDto } from '@fxde/types';
 
 const PAGE_LIMIT = 10;

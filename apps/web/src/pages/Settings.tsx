@@ -18,7 +18,7 @@
  */
 
 import { useState, useEffect, FormEvent } from 'react';
-import { useSettings, useUpdateSettings } from '../hooks/queries';
+import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import type { UserSettingDto } from '@fxde/types';
 
 type Preset = 'conservative' | 'standard' | 'aggressive';

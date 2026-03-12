@@ -8,7 +8,7 @@
 //           - signal.snapshot.entryState  ← 未表示だったため追加
 //
 import { useState } from 'react';
-import { useSignals } from '../hooks/queries';
+import { useSignals } from '../hooks/useSignals';
 import type { SignalResponse } from '@fxde/types';
 
 // Signal type ごとの配色

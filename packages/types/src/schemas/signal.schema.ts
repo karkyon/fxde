@@ -5,6 +5,10 @@
  *   signals DTO が class-validator を使っていたため nestjs-zod 移行に必要。
  *   Signals の入力バリデーションを Zod Schema に集約する。
  *
+ * [Task A] GetSignalsLatestQuerySchema / GetSignalsLatestQuery を削除
+ *          → GET /api/v1/signals/latest は SPEC_v51_part3 §9 に存在しない。
+ *          → API / DTO / service / frontend から削除済みのため shared types も完全除去。
+ *
  * 参照仕様: SPEC_v51_part3 §9「Signals API」
  *           SPEC_v51_part1「Zod / DTO 主従ルール」
  */
@@ -22,10 +26,4 @@ export const GetSignalsQuerySchema = z.object({
   to:                 z.string().datetime().optional(),
 });
 
-export const GetSignalsLatestQuerySchema = z.object({
-  symbol:    z.string().optional(),
-  timeframe: z.string().optional(),
-});
-
-export type GetSignalsQuery       = z.infer<typeof GetSignalsQuerySchema>;
-export type GetSignalsLatestQuery = z.infer<typeof GetSignalsLatestQuerySchema>;
+export type GetSignalsQuery = z.infer<typeof GetSignalsQuerySchema>;

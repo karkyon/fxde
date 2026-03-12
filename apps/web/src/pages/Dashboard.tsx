@@ -7,7 +7,9 @@
  *   - snapshot.data は SnapshotResponse 型（queryFn 修正後に正しく推論される）
  */
 
-import { useLatestSnapshot, useTrades, useLatestSignals } from '../hooks/queries';
+import { useLatestSnapshot } from '../hooks/useSnapshot';
+import { useTrades }         from '../hooks/useTrades';
+import { useLatestSignals }  from '../hooks/useSignals';
 import type { TradeDto } from '@fxde/types';
 import type { SignalResponse } from '@fxde/types';
 

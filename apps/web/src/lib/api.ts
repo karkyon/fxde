@@ -228,3 +228,77 @@ export const signalsApi = {
   ack:  (id: string) =>
     api.post<SignalResponse>(`/signals/${id}/ack`).then((r) => r.data),
 };
+
+// ── Predictions API ───────────────────────────────────────────────────────
+//
+// ⚠️ STUB: backend 未実装
+//
+// TODO: apps/api/src/modules/predictions/ モジュールが存在しない。
+//       app.module.ts に PredictionsModule が import されていない。
+//       backend 実装完了後に stub フラグを解除すること。
+//
+// 実装対象 API（SPEC_v51_part3 §10）:
+//   POST /api/v1/predictions/jobs       → 予測ジョブ登録（PRO | PRO_PLUS | ADMIN）
+//   GET  /api/v1/predictions/jobs/:id   → ジョブ状態確認（5秒ポーリング）
+//   GET  /api/v1/predictions/latest     → 最新予測結果（v5.1: スタブ固定 JSON）
+//
+// backend 実装手順:
+//   1. apps/api/src/modules/predictions/predictions.module.ts を作成
+//   2. apps/api/src/modules/predictions/predictions.controller.ts を作成
+//   3. apps/api/src/modules/predictions/predictions.service.ts を作成
+//   4. apps/api/src/app.module.ts に PredictionsModule を import 追加
+//   5. このファイルの STUB フラグを解除する
+//
+import type {
+  CreatePredictionJobDto,
+  PredictionJobWithResultDto,
+} from '@fxde/types';
+
+// ── Predictions レスポンス型（SPEC_v51_part3 §10 正本）────────────────────
+export interface CreateJobResponse {
+  jobId: string;
+  status: 'QUEUED';
+  estimatedSeconds: number; // v5.1 スタブでは固定値を返す
+}
+
+export interface JobStatusResponse {
+  jobId: string;
+  status: 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED';
+  createdAt: string;
+  completedAt: string | null;
+  errorMessage?: string;
+}
+
+// TODO: backend 実装完了後に stub 実装を本実装へ差し替えること
+export const predictionsApi = {
+  /**
+   * POST /api/v1/predictions/jobs
+   * TODO: backend の predictions module が未実装のため、現在は呼び出し不可。
+   * backend 実装完了まで Prediction.tsx からこの関数を呼ばないこと。
+   */
+  createJob: (_body: CreatePredictionJobDto): Promise<CreateJobResponse> => {
+    // TODO: stub → 本実装へ差し替え
+    // return api.post<CreateJobResponse>('/predictions/jobs', body).then((r) => r.data);
+    return Promise.reject(new Error('[STUB] predictions backend not implemented yet'));
+  },
+
+  /**
+   * GET /api/v1/predictions/jobs/:id
+   * TODO: backend の predictions module が未実装のため、現在は呼び出し不可。
+   */
+  getJob: (_id: string): Promise<JobStatusResponse> => {
+    // TODO: stub → 本実装へ差し替え
+    // return api.get<JobStatusResponse>(`/predictions/jobs/${id}`).then((r) => r.data);
+    return Promise.reject(new Error('[STUB] predictions backend not implemented yet'));
+  },
+
+  /**
+   * GET /api/v1/predictions/latest
+   * TODO: backend の predictions module が未実装のため、現在は呼び出し不可。
+   */
+  latest: (): Promise<PredictionJobWithResultDto> => {
+    // TODO: stub → 本実装へ差し替え
+    // return api.get<PredictionJobWithResultDto>('/predictions/latest').then((r) => r.data);
+    return Promise.reject(new Error('[STUB] predictions backend not implemented yet'));
+  },
+};
