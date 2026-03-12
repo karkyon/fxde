@@ -303,3 +303,136 @@ export const predictionsApi = {
   latest: (params: { symbol: string; timeframe?: string }): Promise<PredictionLatestResponse> =>
     api.get<PredictionLatestResponse>('/predictions/latest', { params }).then((r) => r.data),
 };
+
+// ── Chart API ─────────────────────────────────────────────────────────────
+// 参照: SPEC_v51_part11 §2.2「エンドポイント一覧」
+//       SPEC_v51_part11 §3「API エンドポイント詳細」
+//       SPEC_v51_part10 §10.15「PG-07 用 API」
+// ⚠️ /api/chart/* は禁止。必ず /api/v1/chart/* (prefix は axios baseURL で付与済み)
+import type { Timeframe } from '@fxde/types';
+
+export interface ChartMetaResponse {
+  symbol:       string;
+  timeframe:    Timeframe;
+  currentPrice: number;
+  spread:       number;
+  marketStatus: 'open' | 'closed';
+  sessionLabel: string;
+  trendBias:    'bullish' | 'bearish' | 'neutral';
+  cachedAt:     string | null;
+  updatedAt:    string;
+}
+
+export interface Candle {
+  time:   string;
+  open:   number;
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number;
+}
+
+export interface ChartCandlesResponse {
+  symbol:    string;
+  timeframe: Timeframe;
+  candles:   Candle[];
+  cachedAt:  string | null;
+}
+
+export interface IndicatorStatus {
+  status: 'bullish' | 'bearish' | 'neutral';
+}
+
+export interface ChartIndicatorsResponse {
+  symbol:    string;
+  timeframe: Timeframe;
+  indicators: {
+    ma:   { value: number; crossStatus: string; slope: number; status: string };
+    rsi:  { value: number; divergence: boolean; status: string };
+    macd: { macd: number; signal: number; histogram: number; crossStatus: string; status: string };
+    atr:  { value: number; ratio: number; status: 'normal' | 'high' | 'low' };
+    bb:   { upper: number; middle: number; lower: number; position: string; status: string };
+    bias: { direction: string; strength: string; label: string; status: string };
+  };
+  cachedAt:  string | null;
+  updatedAt: string;
+}
+
+export interface ActiveTradeInfo {
+  tradeId:      string;
+  side:         'BUY' | 'SELL';
+  entryPrice:   number;
+  stopLoss:     number | null;
+  takeProfit:   number | null;
+  rrRatio:      number | null;
+  lotSize:      number;
+  expectedLoss: number | null;
+  expectedGain: number | null;
+  entryTime:    string;
+}
+
+export interface ChartTradesResponse {
+  symbol:      string;
+  activeTrade: ActiveTradeInfo | null;
+}
+
+export interface PatternMarker {
+  id:              string;
+  patternName:     string;
+  patternCategory: 'CANDLESTICK' | 'FORMATION';
+  direction:       string;
+  confidence:      number;
+  detectedAt:      string;
+  barIndex:        number;
+  price:           number;
+  label:           string;
+}
+
+export interface ChartPatternMarkersResponse {
+  symbol:    string;
+  timeframe: Timeframe;
+  markers:   PatternMarker[];
+}
+
+export interface ChartPredictionOverlayResponse {
+  symbol:            string;
+  timeframe:         Timeframe;
+  mainScenario:      string;
+  altScenario:       string;
+  probabilities: {
+    bullish: number;
+    neutral: number;
+    bearish: number;
+  };
+  expectedMovePips:  number;
+  forecastHorizonH:  number;
+  confidence:        'high' | 'medium' | 'low';
+  stub:              true;
+  generatedAt:       string;
+}
+
+export const chartApi = {
+  /** GET /api/v1/chart/meta */
+  meta: (params: { symbol: string; timeframe: Timeframe }): Promise<ChartMetaResponse> =>
+    api.get<ChartMetaResponse>('/chart/meta', { params }).then((r) => r.data),
+
+  /** GET /api/v1/chart/candles */
+  candles: (params: { symbol: string; timeframe: Timeframe; limit?: number; before?: string }): Promise<ChartCandlesResponse> =>
+    api.get<ChartCandlesResponse>('/chart/candles', { params }).then((r) => r.data),
+
+  /** GET /api/v1/chart/indicators */
+  indicators: (params: { symbol: string; timeframe: Timeframe }): Promise<ChartIndicatorsResponse> =>
+    api.get<ChartIndicatorsResponse>('/chart/indicators', { params }).then((r) => r.data),
+
+  /** GET /api/v1/chart/trades */
+  trades: (params: { symbol: string }): Promise<ChartTradesResponse> =>
+    api.get<ChartTradesResponse>('/chart/trades', { params }).then((r) => r.data),
+
+  /** GET /api/v1/chart/pattern-markers */
+  patternMarkers: (params: { symbol: string; timeframe: Timeframe; limit?: number }): Promise<ChartPatternMarkersResponse> =>
+    api.get<ChartPatternMarkersResponse>('/chart/pattern-markers', { params }).then((r) => r.data),
+
+  /** GET /api/v1/chart/prediction-overlay — PRO | PRO_PLUS | ADMIN のみ */
+  predictionOverlay: (params: { symbol: string; timeframe: Timeframe }): Promise<ChartPredictionOverlayResponse> =>
+    api.get<ChartPredictionOverlayResponse>('/chart/prediction-overlay', { params }).then((r) => r.data),
+};

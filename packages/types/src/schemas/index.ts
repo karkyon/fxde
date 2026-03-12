@@ -7,3 +7,4 @@ export * from './trade.schema';
 export * from './prediction.schema';
 export * from './snapshot.schema';
 export * from './signal.schema';
+export * from './chart.schema'; 

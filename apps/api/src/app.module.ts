@@ -26,6 +26,7 @@ import { TradesModule }    from './modules/trades/trades.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SignalsModule }    from './modules/signals/signals.module';
 import { PredictionsModule } from './modules/predictions/predictions.module';
+import { ChartModule }     from './modules/chart/chart.module';
 
 @Module({
   imports: [
@@ -52,7 +53,8 @@ import { PredictionsModule } from './modules/predictions/predictions.module';
     TradesModule,
     SnapshotsModule,
     SignalsModule,
-    PredictionsModule, // [追加] SPEC_v51_part3 §10 / part8 §9.1
+    PredictionsModule,
+    ChartModule,
   ],
 })
 export class AppModule {}
