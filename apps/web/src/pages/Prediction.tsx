@@ -3,7 +3,7 @@
  *
  * 変更内容:
  *   placeholder から仕様準拠の骨格 UI に前進。
- *   - TfWeightSlider（スライダー表示のみ / v5.1 は保存 API 非対応）
+ *   - TfWeightSlider（スライダー + 💾 保存 / ↺ デフォルト ボタン）
  *   - ジョブ作成フォーム（symbol / timeframe）
  *   - ジョブ状態ポーリング（usePredictionJob）
  *   - 最新予測結果表示（useLatestPrediction）
@@ -12,12 +12,20 @@
  * アクセス権限: PRO | PRO_PLUS | ADMIN のみ（App.tsx ProGuard + backend RolesGuard）
  * 参照仕様: SPEC_v51_part5 §4「PG-04 MTF 予測（スタブ）」
  *           SPEC_v51_part3 §10「Predictions API」
+ *           SPEC_v51_part8 §2.3「TfWeight スライダー仕様」
  *           SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」
  *           ワイヤーフレーム PG-04 section
  *
  * v5.1 実装状況:
- *   完了: ジョブ作成 / ポーリング / 結果表示骨格
- *   未完: TfWeight 保存 API（v5.1 仕様外）/ PredictionChart SVG（components/prediction/）
+ *   完了: ジョブ作成 / ポーリング / 結果表示骨格 / TfWeight 保存（PATCH）
+ *   未完: PredictionChart SVG（components/prediction/ で本実装予定）
+ *
+ * 【修正履歴】
+ *   - [Task A] TfWeightSlider に 💾 保存 / ↺ デフォルト ボタンを追加
+ *     useUpdateTfWeights を接続（jobId がない場合は disabled）
+ *     スライダー min=5, max=50（SPEC_v51_part8 §2.3 準拠）
+ *   - [Task C] PredictionScenario の import 元を @fxde/types に統一
+ *     apps/web/src/lib/api.ts のローカル定義は廃止（re-export 経由）
  */
 
 import { useState } from 'react';
@@ -25,16 +33,20 @@ import {
   useCreatePredictionJob,
   usePredictionJob,
   useLatestPrediction,
+  useUpdateTfWeights,
 } from '../hooks/usePredictionJob';
-import type { PredictionScenario } from '../lib/api';
-import type { Timeframe } from '@fxde/types';
+import type { PredictionScenario } from '@fxde/types';
+import type { Timeframe }          from '@fxde/types';
+import { DEFAULT_TF_WEIGHTS }      from '@fxde/types';
 
 // ── 定数 ─────────────────────────────────────────────────────────────────────
 const SYMBOLS = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'USDCHF', 'USDCAD', 'XAUUSD'];
 const TIMEFRAMES: Timeframe[] = ['M15', 'M30', 'H1', 'H4', 'H8', 'D1'];
 
-// TfWeight スライダー（v5.1 は UI 表示のみ / 保存 API は仕様外）
-const TF_WEIGHTS_DEFAULT = [
+// TfWeight スライダー初期値
+// エントリー足 H4 のデフォルト重みを採用（SPEC_v51_part8 §2.2 DEFAULT_TF_WEIGHTS.H4 準拠）
+// 値は 0〜1 を % 表示（5〜50 の整数）に変換して使用
+const TF_WEIGHTS_DEFAULT_LIST = [
   { tf: 'W1',  value: 30 },
   { tf: 'D1',  value: 25 },
   { tf: 'H4',  value: 20 },
@@ -54,11 +66,12 @@ export default function PredictionPage() {
   const [symbol,    setSymbol]    = useState('EURUSD');
   const [timeframe, setTimeframe] = useState<Timeframe>('H4');
   const [jobId,     setJobId]     = useState<string | null>(null);
-  const [tfWeights, setTfWeights] = useState(TF_WEIGHTS_DEFAULT);
+  const [tfWeights, setTfWeights] = useState(TF_WEIGHTS_DEFAULT_LIST);
 
-  const createJob   = useCreatePredictionJob();
-  const jobStatus   = usePredictionJob(jobId);
+  const createJob    = useCreatePredictionJob();
+  const jobStatus    = usePredictionJob(jobId);
   const latestResult = useLatestPrediction(symbol, timeframe);
+  const updateTf     = useUpdateTfWeights(jobId);
 
   const handleCreateJob = async () => {
     try {
@@ -69,7 +82,24 @@ export default function PredictionPage() {
     }
   };
 
-  const status = jobStatus.data?.status;
+  // TfWeight 保存: % 整数 → 0〜1 の小数に変換して送信
+  const handleSaveTfWeights = async () => {
+    const weights: Record<string, number> = {};
+    for (const w of tfWeights) {
+      weights[w.tf] = w.value / 100;
+    }
+    try {
+      await updateTf.mutateAsync({ weights });
+    } catch {
+      // エラーは updateTf.error で参照
+    }
+  };
+
+  const handleResetTfWeights = () => {
+    setTfWeights(TF_WEIGHTS_DEFAULT_LIST);
+  };
+
+  const status    = jobStatus.data?.status;
   const isPolling = status === 'QUEUED' || status === 'RUNNING';
 
   return (
@@ -88,7 +118,6 @@ export default function PredictionPage() {
           {/* TfWeightSlider */}
           <section style={styles.card}>
             <h2 style={styles.cardTitle}>TfWeightSlider</h2>
-            <p style={styles.muted}>（v5.1: 表示のみ / 保存 API は v6 対象）</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
               {tfWeights.map((w, i) => (
                 <div key={w.tf} style={{ fontSize: 13 }}>
@@ -97,7 +126,10 @@ export default function PredictionPage() {
                     <span style={{ color: '#e2e8f0', fontFamily: 'monospace' }}>{w.value}%</span>
                   </div>
                   <input
-                    type="range" min={0} max={100} value={w.value}
+                    type="range"
+                    min={5}
+                    max={50}
+                    value={w.value}
                     onChange={(e) => {
                       const next = [...tfWeights];
                       next[i] = { ...w, value: Number(e.target.value) };
@@ -108,6 +140,47 @@ export default function PredictionPage() {
                 </div>
               ))}
             </div>
+
+            {/* 保存 / デフォルト ボタン */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button
+                style={{
+                  ...styles.primaryBtn,
+                  flex: 1,
+                  opacity: !jobId || updateTf.isPending ? 0.5 : 1,
+                }}
+                onClick={handleSaveTfWeights}
+                disabled={!jobId || updateTf.isPending}
+                title={!jobId ? 'ジョブを作成してから保存してください' : undefined}
+              >
+                {updateTf.isPending ? '保存中...' : '💾 保存'}
+              </button>
+              <button
+                style={{ ...styles.secondaryBtn, flex: 1 }}
+                onClick={handleResetTfWeights}
+                disabled={updateTf.isPending}
+              >
+                ↺ デフォルト
+              </button>
+            </div>
+
+            {!jobId && (
+              <p style={{ ...styles.muted, marginTop: 6, fontSize: 11 }}>
+                ※ ジョブを作成すると保存が有効になります
+              </p>
+            )}
+
+            {updateTf.error && (
+              <p style={styles.errText}>
+                保存エラー: {(updateTf.error as Error).message}
+              </p>
+            )}
+
+            {updateTf.isSuccess && (
+              <p style={{ ...styles.muted, color: '#34d399', marginTop: 6, fontSize: 12 }}>
+                ✓ 保存しました
+              </p>
+            )}
           </section>
 
           {/* ジョブ作成 */}
@@ -302,24 +375,34 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: '280px 1fr',
+    gridTemplateColumns: '300px 1fr',
     gap: 16,
+    alignItems: 'start',
   },
-  leftPanel: {},
-  rightPanel: {},
+  leftPanel:  { display: 'flex', flexDirection: 'column' },
+  rightPanel: { display: 'flex', flexDirection: 'column' },
   card: {
-    background: '#1a1f2e',
-    border: '1px solid #2d3748',
-    borderRadius: 12,
-    padding: 16,
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    padding: '16px 18px',
   },
   cardTitle: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 700,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase' as const,
     color: '#94a3b8',
     marginBottom: 12,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  symbolBadge: {
+    fontSize: 12,
+    fontWeight: 400,
+    color: '#6366f1',
+    background: 'rgba(99,102,241,0.15)',
+    borderRadius: 4,
+    padding: '2px 8px',
   },
   muted: {
     color: '#64748b',
@@ -327,115 +410,109 @@ const styles: Record<string, React.CSSProperties> = {
   },
   formRow: {
     display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 4,
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 10,
   },
   label: {
     fontSize: 12,
     color: '#94a3b8',
+    width: 72,
+    flexShrink: 0,
   },
   select: {
-    background: '#0f1117',
-    border: '1px solid #334155',
+    flex: 1,
+    background: '#1e2130',
+    border: '1px solid rgba(255,255,255,0.12)',
     borderRadius: 6,
     color: '#e2e8f0',
-    padding: '6px 8px',
+    padding: '4px 8px',
     fontSize: 13,
   },
   primaryBtn: {
+    width: '100%',
+    padding: '8px 0',
     background: '#6366f1',
     color: '#fff',
     border: 'none',
     borderRadius: 6,
-    padding: '8px 16px',
     fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+    marginTop: 4,
+  },
+  secondaryBtn: {
     width: '100%',
+    padding: '8px 0',
+    background: 'rgba(255,255,255,0.06)',
+    color: '#94a3b8',
+    border: '1px solid rgba(255,255,255,0.10)',
+    borderRadius: 6,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
     marginTop: 4,
   },
   errText: {
     color: '#f87171',
     fontSize: 12,
-    marginTop: 8,
+    marginTop: 6,
   },
   statusBox: {
-    background: '#0f1117',
-    border: '1px solid #334155',
-    borderRadius: 8,
-    padding: 12,
     marginTop: 12,
+    background: 'rgba(0,0,0,0.2)',
+    borderRadius: 6,
+    padding: '10px 12px',
   },
   statusRow: {
     display: 'flex',
     justifyContent: 'space-between',
-    marginBottom: 6,
-    fontSize: 13,
+    marginBottom: 4,
+    fontSize: 12,
   },
-  statusLabel: {
-    color: '#64748b',
-  },
-  statusValue: {
-    color: '#e2e8f0',
-    fontFamily: 'monospace',
-  },
+  statusLabel: { color: '#64748b' },
+  statusValue: { color: '#e2e8f0', fontFamily: 'monospace' },
   chartPlaceholder: {
-    background: '#0f1117',
-    border: '1px dashed #334155',
-    borderRadius: 10,
-    height: 360,
-    position: 'relative' as const,
-    overflow: 'hidden',
+    height: 280,
+    background: 'rgba(0,0,0,0.2)',
+    borderRadius: 8,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   chartNote: {
-    position: 'absolute' as const,
-    bottom: 8,
-    left: 0,
-    right: 0,
-    textAlign: 'center' as const,
-    fontSize: 11,
     color: '#475569',
-  },
-  symbolBadge: {
-    marginLeft: 8,
     fontSize: 11,
-    color: '#6366f1',
-    fontFamily: 'monospace',
-    background: 'rgba(99,102,241,0.1)',
-    padding: '2px 6px',
-    borderRadius: 4,
-    fontWeight: 400,
-    textTransform: 'none' as const,
-    letterSpacing: 0,
+    textAlign: 'center',
+    padding: '4px 0 8px',
   },
   scenarioGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(3, 1fr)',
-    gap: 12,
-    marginTop: 12,
+    gap: 10,
+    marginBottom: 10,
   },
   scenarioCard: {
-    background: '#0f1117',
+    background: 'rgba(0,0,0,0.2)',
     border: '1px solid',
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 8,
+    padding: '12px 14px',
   },
   barTrack: {
-    background: '#1e293b',
-    borderRadius: 4,
-    height: 8,
+    height: 6,
+    background: 'rgba(255,255,255,0.08)',
+    borderRadius: 3,
     overflow: 'hidden',
   },
   barFill: {
     height: '100%',
-    borderRadius: 4,
-    transition: 'width 0.5s ease',
+    borderRadius: 3,
+    transition: 'width 0.4s ease',
   },
   stubBadge: {
-    marginTop: 12,
     fontSize: 11,
     color: '#475569',
-    textAlign: 'right' as const,
+    textAlign: 'right',
+    marginTop: 4,
   },
 };

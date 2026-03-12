@@ -39,7 +39,7 @@ export const UpdateTfWeightsSchema = z.object({
     )
     .refine(
       (w) => Object.keys(w).length > 0,
-      { message: 'weights は 1 つ以上の Timeframe を含む必要があります' },
+      { message: 'weights must contain at least one timeframe entry' },
     ),
 });
 

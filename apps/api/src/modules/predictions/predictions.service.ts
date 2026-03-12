@@ -5,15 +5,23 @@
  *   SPEC_v51_part3 §10「Predictions API」
  *   SPEC_v51_part4 §5.5「prediction-dispatch ワーカー（v5.1: スタブのみ）」
  *   SPEC_v51_part8 §9「Prediction Service プロセス設計（v5.1: スタブのみ実装）」
+ *   SPEC_v51_part8 §2.3「PATCH /predictions/jobs/:id/tf-weights」
  *   SPEC_v51_part2「PredictionJob / PredictionResult Prisma schema」
  *
  * v5.1 実装スコープ:
  *   - POST /predictions/jobs → DB insert + BullMQ enqueue → 202
  *   - GET  /predictions/jobs/:id → DB read（status のみ）→ 200
  *   - GET  /predictions/latest  → DB read + サービス層で配列変換 → 200
+ *   - PATCH /predictions/jobs/:id/tf-weights → requestData.tfWeights に保存 → 200
  *
  * 実装禁止（v6 設計資料）:
  *   DTW / HMM / 類似検索 / WFV / 重み自動学習
+ *
+ * 【修正履歴】
+ *   - [Task B/C] STUB_PREDICTION_RESULT / PredictionScenario のローカル定義を廃止
+ *     @fxde/types からの import に統一（packages/types/src/index.ts が唯一の正本）
+ *   - [Task A] updateTfWeights() を追加
+ *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
  */
 
 import {
@@ -23,39 +31,17 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue }       from 'bullmq';
-import { PrismaService }              from '../../prisma/prisma.service';
-import { QUEUE_NAMES }                from '../../jobs/queues';
-import type { CreatePredictionJobInput } from '@fxde/types';
-
-// ── STUB_PREDICTION_RESULT（Part8 §9.3 正本準拠）─────────────────────────────
-// DB / API 返却 / フロント表示はすべてこの shape に統一する。
-// DB に保存する形式（bull/neutral/bear キーのオブジェクト型）
-export const STUB_PREDICTION_RESULT = {
-  scenarios: {
-    bull:    { probability: 0.63, target: '+0.8%', horizonBars: 12 },
-    neutral: { probability: 0.22, target: '+0.1%', horizonBars: 12 },
-    bear:    { probability: 0.15, target: '-0.5%', horizonBars: 12 },
-  },
-  stats: {
-    matchedCases: 0,
-    confidence:   0.55,
-    note:         'v5.1 STUB result',
-  },
-  tfWeights: null,
-  hmmState:  null,
-} as const;
-
-// ── PredictionScenario レスポンス型（Part3 §10 正本）─────────────────────────
-// サービス層で DB オブジェクト型 → 配列型に変換して返す
-// フロントは配列型のみ受け取る（DB shape と API shape を意図的に分離）
-export interface PredictionScenario {
-  id:          'bull' | 'neutral' | 'bear';
-  label:       string;
-  probability: number;
-  pricePoints: { bar: number; price: number }[];
-  maxPips:     number;
-  avgTimeHours: number;
-}
+import { PrismaService }  from '../../prisma/prisma.service';
+import { QUEUE_NAMES }    from '../../jobs/queues';
+import type {
+  CreatePredictionJobInput,
+  PredictionScenario,
+  TfWeightsUpdateResponse,
+} from '@fxde/types';
+import {
+  STUB_PREDICTION_RESULT,
+} from '@fxde/types';
+import type { UpdateTfWeightsInput } from '@fxde/types';
 
 // ── ラベルマップ ──────────────────────────────────────────────────────────────
 const SCENARIO_LABELS: Record<'bull' | 'neutral' | 'bear', string> = {
@@ -202,6 +188,59 @@ export class PredictionsService {
         scenarios,
         stub: true as const, // v5.1 スタブ結果であることを明示するフラグ
       },
+    };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // [Task A] PATCH /predictions/jobs/:id/tf-weights
+  // TF 重みを PredictionJob.requestData.tfWeights に保存
+  //
+  // 参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
+  // 保存先: PredictionJob.requestData（Json 型）→ マイグレーション不要
+  // 正規化: weights の合計が 1.0 になるよう自動正規化して保存する
+  // ──────────────────────────────────────────────────────────────────────────
+  async updateTfWeights(
+    userId: string,
+    jobId: string,
+    input: UpdateTfWeightsInput,
+  ): Promise<TfWeightsUpdateResponse> {
+    this.logger.log(`updateTfWeights userId=${userId} jobId=${jobId}`);
+
+    // ジョブ存在確認（他ユーザーのジョブは参照不可）
+    const job = await this.prisma.predictionJob.findFirst({
+      where: { id: jobId, userId },
+    });
+
+    if (!job) {
+      throw new NotFoundException(`PredictionJob id=${jobId} not found`);
+    }
+
+    // 重みの合計が 1.0 になるよう正規化
+    const rawWeights = input.weights;
+    const total = Object.values(rawWeights).reduce((sum, v) => sum + (v ?? 0), 0);
+    const normalizedWeights = total > 0
+      ? Object.fromEntries(
+          Object.entries(rawWeights).map(([k, v]) => [k, Math.round(((v ?? 0) / total) * 10000) / 10000]),
+        )
+      : rawWeights;
+
+    // requestData に tfWeights を書き込み（既存フィールドを保持しつつマージ）
+    const currentRequestData = (job.requestData as Record<string, unknown>) ?? {};
+    const updatedRequestData = {
+      ...currentRequestData,
+      tfWeights: normalizedWeights,
+    };
+
+    const updated = await this.prisma.predictionJob.update({
+      where: { id: jobId },
+      data:  { requestData: updatedRequestData },
+    });
+
+    // 参照: SPEC_v51_part10 §6.6 TfWeightsUpdateResponse
+    return {
+      jobId:     updated.id,
+      tfWeights: normalizedWeights,
+      updatedAt: updated.updatedAt.toISOString(),
     };
   }
 }

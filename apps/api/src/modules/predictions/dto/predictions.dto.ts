@@ -4,17 +4,26 @@
  * 参照仕様:
  *   SPEC_v51_part3 §10「Predictions API」
  *   SPEC_v51_part1「Zod / DTO 主従ルール」
+ *   SPEC_v51_part8 §2.3「PATCH /predictions/jobs/:id/tf-weights」
+ *   SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」
  *   packages/types/src/schemas/prediction.schema.ts（正本 Zod Schema）
  *
  * 規約:
  *   hand-written DTO 禁止。全て createZodDto() 派生。
  *   SPEC_v51_part3 §10 より v5.1 受付フィールドは symbol / timeframe のみ。
  *   lookbackYears / minSimilarity / topK は v6 アルゴリズムパラメータのため定義しない。
+ *
+ * 【修正履歴】
+ *   - [Task A] UpdateTfWeightsDto を追加
+ *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
  */
 
 import { createZodDto } from 'nestjs-zod';
 import { z }            from 'zod';
-import { CreatePredictionJobSchema } from '@fxde/types';
+import {
+  CreatePredictionJobSchema,
+  UpdateTfWeightsSchema,
+} from '@fxde/types';
 
 // ── POST /predictions/jobs ─────────────────────────────────────────────────
 // v5.1: symbol / timeframe のみ受付
@@ -32,3 +41,9 @@ export const GetPredictionLatestQuerySchema = z.object({
 });
 
 export class GetPredictionLatestQueryDto extends createZodDto(GetPredictionLatestQuerySchema) {}
+
+// ── PATCH /predictions/jobs/:id/tf-weights ─────────────────────────────────
+// [Task A] TF 重みの上書き保存
+// 参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
+// Zod 正本: packages/types/src/schemas/prediction.schema.ts (UpdateTfWeightsSchema)
+export class UpdateTfWeightsDto extends createZodDto(UpdateTfWeightsSchema) {}

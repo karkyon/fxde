@@ -15,6 +15,12 @@
  * 実装禁止（v6 設計資料）:
  *   DTW / HMM / 類似検索 / WFV / 重み自動学習
  *   これらは SPEC_v51_part8 §B（v6 設計資料）に保持されている。
+ *
+ * 【修正履歴】
+ *   - [Task D] STUB_PREDICTION_RESULT の import 元を
+ *     '../modules/predictions/predictions.service' → '@fxde/types' に変更
+ *     理由: service → processor の逆流依存を解消
+ *     参照: @fxde/types (packages/types/src/index.ts) が唯一の正本
  */
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
@@ -22,7 +28,7 @@ import { Logger }                from '@nestjs/common';
 import { Job }                   from 'bullmq';
 import { PrismaService }         from '../prisma/prisma.service';
 import { QUEUE_NAMES }           from './queues';
-import { STUB_PREDICTION_RESULT } from '../modules/predictions/predictions.service';
+import { STUB_PREDICTION_RESULT } from '@fxde/types';
 
 // ── ジョブデータ型（SPEC_v51_part4 §5.2 正本）────────────────────────────────
 export type PredictionDispatchJobData = {
@@ -58,7 +64,7 @@ export class PredictionDispatchProcessor extends WorkerHost {
 
     try {
       // ステップ 2: 固定 JSON を PredictionResult に upsert
-      // STUB_PREDICTION_RESULT は predictions.service.ts から import
+      // STUB_PREDICTION_RESULT は @fxde/types から import（唯一の正本）
       // Part8 §9.3 の shape に準拠（bull/neutral/bear キーのオブジェクト型）
       await this.db.predictionResult.upsert({
         where:  { jobId },

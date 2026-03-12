@@ -235,7 +235,14 @@ export const signalsApi = {
 //   reject stub を実 API 呼び出しに置換。
 //   参照: SPEC_v51_part3 §10「Predictions API」
 //         SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」
-import type { CreatePredictionJobDto } from '@fxde/types';
+import type {
+  CreatePredictionJobDto,
+  PredictionScenario,
+  PredictionLatestResponse,
+  TfWeightsUpdateResponse,
+  UpdateTfWeightsInput,
+} from '@fxde/types';
+export type { PredictionScenario, PredictionLatestResponse };
 
 // ── Predictions レスポンス型（SPEC_v51_part3 §10 正本）────────────────────
 export interface CreateJobResponse {
@@ -250,28 +257,6 @@ export interface JobStatusResponse {
   createdAt: string;
   completedAt: string | null;
   errorMessage?: string;
-}
-
-// PredictionLatestResponse（SPEC_v51_part3 §10 / backend getLatest() 返却型と完全一致）
-// @fxde/types には未定義のためローカル定義
-export interface PredictionScenario {
-  id: 'bull' | 'neutral' | 'bear';
-  label: string;
-  probability: number;
-  pricePoints: { bar: number; price: number }[];
-  maxPips: number;
-  avgTimeHours: number;
-}
-
-export interface PredictionLatestResponse {
-  jobId: string;
-  symbol: string;
-  timeframe: string;
-  createdAt: string;
-  result: {
-    scenarios: PredictionScenario[];
-    stub: true;
-  };
 }
 
 export const predictionsApi = {
@@ -302,6 +287,17 @@ export const predictionsApi = {
    */
   latest: (params: { symbol: string; timeframe?: string }): Promise<PredictionLatestResponse> =>
     api.get<PredictionLatestResponse>('/predictions/latest', { params }).then((r) => r.data),
+
+  
+  /**
+   * PATCH /api/v1/predictions/jobs/:id/tf-weights
+   * TF 重み更新（予測ジョブ登録後、QUEUED / RUNNING 状態のジョブに対して任意のタイミングで呼び出し可能）
+   * body: { tfWeights: { [timeframe: string]: number } }
+   * 権限: PRO | PRO_PLUS | ADMIN
+   * 参照: SPEC_v51_part3 §10
+   */ 
+  updateTfWeights: (id: string, body: UpdateTfWeightsInput): Promise<TfWeightsUpdateResponse> =>
+  api.patch<TfWeightsUpdateResponse>(`/predictions/jobs/${id}/tf-weights`, body).then((r) => r.data),
 };
 
 // ── Chart API ─────────────────────────────────────────────────────────────
