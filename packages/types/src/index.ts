@@ -172,9 +172,9 @@ export type SignalMetadata =
 // PredictionResult.resultData (v5.1 stub)
 export interface PredictionResultData {
   scenarios: {
-    bull: { probability: number; target: string; horizonBars: number }
-    neutral: { probability: number; target: string; horizonBars: number }
-    bear: { probability: number; target: string; horizonBars: number }
+    bull:    { probability: 0.63, target: '+0.8%', horizonBars: 12 },
+    neutral: { probability: 0.22, target: '+0.1%', horizonBars: 12 },
+    bear:    { probability: 0.15, target: '-0.5%', horizonBars: 12 },
   }
   stats: {
     matchedCases: number
@@ -188,9 +188,9 @@ export interface PredictionResultData {
 // v5.1 stub 固定値
 export const STUB_PREDICTION_RESULT: PredictionResultData = {
   scenarios: {
-    bull:    { probability: 0.42, target: '+0.8%', horizonBars: 12 },
-    neutral: { probability: 0.33, target: '+0.1%', horizonBars: 12 },
-    bear:    { probability: 0.25, target: '-0.5%', horizonBars: 12 },
+    bull:    { probability: 0.63, target: '+0.8%', horizonBars: 12 },
+    neutral: { probability: 0.22, target: '+0.1%', horizonBars: 12 },
+    bear:    { probability: 0.15, target: '-0.5%', horizonBars: 12 },
   },
   stats: {
     matchedCases: 0,
@@ -199,6 +199,75 @@ export const STUB_PREDICTION_RESULT: PredictionResultData = {
   },
   tfWeights: null,
   hmmState: null,
+}
+
+// ── [Task C] TfWeight 型（SPEC_v51_part8 §2.2 正本）────────────────────────────
+/**
+ * TfWeight: あるエントリー足を基準とした参照先時間足ごとの重み
+ * 参照: SPEC_v51_part8 §2.2
+ */
+export type TfWeight = Partial<Record<Timeframe, number>>
+
+/**
+ * DEFAULT_TF_WEIGHTS: エントリー足ごとに定義された重みテーブル
+ * スライダーの「デフォルトに戻す」ボタンでこの値に戻す。
+ * 参照: SPEC_v51_part8 §2.2
+ */
+export const DEFAULT_TF_WEIGHTS: Partial<Record<Timeframe, TfWeight>> = {
+  H4:  { W1: 0.30, D1: 0.25, H4: 0.20, H1: 0.15, M30: 0.10 },
+  H1:  { D1: 0.30, H4: 0.25, H1: 0.20, M30: 0.15, M15: 0.10 },
+  D1:  { MN: 0.15, W1: 0.30, D1: 0.25, H8: 0.15, H4: 0.15  },
+  M15: { H4: 0.30, H1: 0.25, M30: 0.20, M15: 0.15, M5: 0.10 },
+}
+
+// ── [Task C] Prediction API 型（SPEC_v51_part3 §10 正本）────────────────────────
+/**
+ * PredictionScenario — GET /api/v1/predictions/latest レスポンス配列要素型
+ * ⚠️ frontend / backend のローカル定義はすべて廃止。必ずここから import。
+ * 参照: SPEC_v51_part3 §10
+ */
+export interface PredictionScenario {
+  id:           'bull' | 'neutral' | 'bear'
+  label:        string
+  probability:  number
+  pricePoints:  { bar: number; price: number }[]
+  maxPips:      number
+  avgTimeHours: number
+}
+
+/**
+ * PredictionLatestResponse — GET /api/v1/predictions/latest レスポンス型
+ * ⚠️ apps/web/src/lib/api.ts でのローカル定義は廃止。必ずここから import。
+ * 参照: SPEC_v51_part3 §10
+ */
+export interface PredictionLatestResponse {
+  jobId:     string
+  symbol:    string
+  timeframe: string
+  createdAt: string
+  result: {
+    scenarios: PredictionScenario[]
+    stub: true
+  }
+}
+
+/**
+ * UpdateTfWeightsInput — PATCH /predictions/jobs/:id/tf-weights リクエスト型
+ * Zod バリデーション正本: packages/types/src/schemas/prediction.schema.ts
+ * 参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
+ */
+export interface UpdateTfWeightsInput {
+  weights: TfWeight
+}
+
+/**
+ * TfWeightsUpdateResponse — PATCH /api/v1/predictions/jobs/:id/tf-weights レスポンス型
+ * 参照: SPEC_v51_part10 §6.6 / SPEC_v51_part8 §2.3
+ */
+export interface TfWeightsUpdateResponse {
+  jobId:     string
+  tfWeights: TfWeight
+  updatedAt: string
 }
 
 // ══════════════════════════════════════════
