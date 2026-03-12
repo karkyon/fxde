@@ -163,7 +163,7 @@ export class PredictionsService {
     }
 
     // DB 保存済み resultData を取得
-    const resultData = job.result.resultData as typeof STUB_PREDICTION_RESULT;
+    const resultData = job.result.resultData as unknown as typeof STUB_PREDICTION_RESULT;
 
     // DB オブジェクト型 → PredictionScenario[] 配列へ変換（サービス層責務）
     // 参照: SPEC_v51_part3 §10 PredictionLatestResponse.result.scenarios
@@ -240,7 +240,7 @@ export class PredictionsService {
     return {
       jobId:     updated.id,
       tfWeights: normalizedWeights,
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 }
