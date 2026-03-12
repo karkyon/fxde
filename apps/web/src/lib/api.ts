@@ -1,9 +1,13 @@
 // apps/web/src/lib/api.ts
 //
-// 変更内容:
-//   [Task3] signalsApi.latest 削除
-//           → GET /signals/latest は SPEC_v51_part10 §6.5 に存在しない
-//           → フロント側の使用箇所なし（queries.ts の useLatestSignals は list({limit:5}) を使用済み）
+// 変更内容（round6）:
+//   [Task2-1] snapshotsApi.capture → backend POST /snapshots/capture が不在のためコメントアウト
+//             snapshots.controller.ts には GET /latest / GET / のみ実装済み
+//   [Task2-2] symbolsApi.update   → backend PATCH /symbols/:symbol が不在のためコメントアウト
+//             symbols.controller.ts には GET /symbols のみ実装済み
+//   [Task2-3] tradesApi.equityCurve / summary → backend route 不在のためコメントアウト
+//             trades.controller.ts に equity-curve / stats/summary route なし
+//   ※ 上記は仕様上必要な API。backend 実装完了後に復元する。
 //
 /**
  * 参照仕様:
@@ -52,6 +56,8 @@ export interface PaginationParams {
 }
 
 // ── Axios インスタンス ──────────────────────────────────────────────────────
+// ⚠️ VITE_API_BASE_URL は /api/v1 を含まないこと（例: http://localhost:3011）
+// api.ts 側で /api/v1 を付与するため、env に含めると二重になる
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.trim() ||
   `${window.location.protocol}//${window.location.hostname}:3011`;
@@ -145,10 +151,12 @@ export default api;
 
 // ── Auth API ────────────────────────────────────────────────────────────────
 export const authApi = {
-  login:   (body: LoginRequestDto) =>
+  login:    (body: LoginRequestDto) =>
     api.post<LoginResponseDto>('/auth/login', body).then((r) => r.data),
-  logout:  () => api.post('/auth/logout').then((r) => r.data),
-  refresh: () => api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
+  register: (body: { email: string; password: string }) =>
+    api.post<LoginResponseDto>('/auth/register', body).then((r) => r.data),
+  logout:   () => api.post('/auth/logout').then((r) => r.data),
+  refresh:  () => api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
 };
 
 // ── Users API ─────────────────────────────────────────────────────────────
@@ -170,11 +178,18 @@ export const settingsApi = {
 };
 
 // ── Symbols API ───────────────────────────────────────────────────────────
+// ⚠️ update (PATCH /symbols/:symbol) は backend 未実装
+//    symbols.controller.ts には GET /symbols のみ
+//    仕様上必要。backend 実装後に復元すること。
 export const symbolsApi = {
-  list:   () => api.get<unknown[]>('/symbols').then((r) => r.data),
-  update: (symbol: string, body: UpdateSymbolSettingDto) =>
-    api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
+  list: () => api.get<unknown[]>('/symbols').then((r) => r.data),
+  // TODO(backend): PATCH /symbols/:symbol 実装後に復元
+  // update: (symbol: string, body: UpdateSymbolSettingDto) =>
+  //   api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
 };
+
+// UpdateSymbolSettingDto を外部に再エクスポート（useUpdateSymbol が参照するため型だけ保持）
+export type { UpdateSymbolSettingDto };
 
 // ── Trades API ────────────────────────────────────────────────────────────
 // 正本フィールド: side / size / sl / tp / entryTime / exitTime / note / tags
@@ -197,22 +212,27 @@ export const tradesApi = {
     api.get<TradeReviewResponse>(`/trades/${id}/review`).then((r) => r.data),
   createReview: (id: string, body: CreateTradeReviewInput) =>
     api.post<TradeReviewResponse>(`/trades/${id}/review`, body).then((r) => r.data),
-  equityCurve:  (period: '1M' | '3M' | '1Y') =>
-    api.get('/trades/equity-curve', { params: { period } }).then((r) => r.data),
-  summary:      () =>
-    api.get('/trades/stats/summary').then((r) => r.data),
+  // ⚠️ 以下 2 つは backend 未実装（trades.controller.ts に route なし）
+  //    仕様上必要。backend 実装後に復元すること。
+  // equityCurve: (period: '1M' | '3M' | '1Y') =>
+  //   api.get('/trades/equity-curve', { params: { period } }).then((r) => r.data),
+  // summary: () =>
+  //   api.get('/trades/stats/summary').then((r) => r.data),
 };
 
 // ── Snapshots API ─────────────────────────────────────────────────────────
 // /snapshots/latest → 単一 SnapshotResponse
 // 参照: SPEC_v51_part3 §7
 export const snapshotsApi = {
-  list:    (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
+  list:   (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
     api.get<PaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
-  latest:  (params?: { symbol?: string; timeframe?: string }) =>
+  latest: (params?: { symbol?: string; timeframe?: string }) =>
     api.get<SnapshotResponse>('/snapshots/latest', { params }).then((r) => r.data),
-  capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
-    api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
+  // ⚠️ capture (POST /snapshots/capture) は backend 未実装
+  //    snapshots.controller.ts には GET /latest / GET / のみ
+  //    仕様上必要。backend 実装後に復元すること。
+  // capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
+  //   api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
 };
 
 // ── Signals API ───────────────────────────────────────────────────────────
@@ -220,8 +240,7 @@ export const snapshotsApi = {
 // エンドポイント:
 //   GET  /signals        → 一覧（ページネーション・フィルター）
 //   POST /signals/:id/ack → 確認済み登録
-// ⚠️ /signals/latest は SPEC_v51_part10 §6.5 に存在しないため削除
-//    Dashboard の最新シグナル表示は list({ limit: 5 }) で代替
+// ⚠️ /signals/latest は SPEC_v51_part10 §6.5 に存在しないため定義しない
 export const signalsApi = {
   list: (params?: PaginationParams & { symbol?: string }) =>
     api.get<PaginatedResponse<SignalResponse>>('/signals', { params }).then((r) => r.data),
@@ -230,11 +249,8 @@ export const signalsApi = {
 };
 
 // ── Predictions API ──────────────────────────────────────────────────────
-// 変更理由:
-//   backend（predictions.module.ts / controller / service / app.module.ts）実装済みのため
-//   reject stub を実 API 呼び出しに置換。
-//   参照: SPEC_v51_part3 §10「Predictions API」
-//         SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」
+// 参照: SPEC_v51_part3 §10「Predictions API」
+//       SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」
 import type {
   CreatePredictionJobDto,
   PredictionScenario,
@@ -288,23 +304,20 @@ export const predictionsApi = {
   latest: (params: { symbol: string; timeframe?: string }): Promise<PredictionLatestResponse> =>
     api.get<PredictionLatestResponse>('/predictions/latest', { params }).then((r) => r.data),
 
-  
   /**
    * PATCH /api/v1/predictions/jobs/:id/tf-weights
-   * TF 重み更新（予測ジョブ登録後、QUEUED / RUNNING 状態のジョブに対して任意のタイミングで呼び出し可能）
-   * body: { tfWeights: { [timeframe: string]: number } }
+   * TF 重み更新
    * 権限: PRO | PRO_PLUS | ADMIN
    * 参照: SPEC_v51_part3 §10
-   */ 
+   */
   updateTfWeights: (id: string, body: UpdateTfWeightsInput): Promise<TfWeightsUpdateResponse> =>
-  api.patch<TfWeightsUpdateResponse>(`/predictions/jobs/${id}/tf-weights`, body).then((r) => r.data),
+    api.patch<TfWeightsUpdateResponse>(`/predictions/jobs/${id}/tf-weights`, body).then((r) => r.data),
 };
 
 // ── Chart API ─────────────────────────────────────────────────────────────
 // 参照: SPEC_v51_part11 §2.2「エンドポイント一覧」
 //       SPEC_v51_part11 §3「API エンドポイント詳細」
 //       SPEC_v51_part10 §10.15「PG-07 用 API」
-// ⚠️ /api/chart/* は禁止。必ず /api/v1/chart/* (prefix は axios baseURL で付与済み)
 import type { Timeframe } from '@fxde/types';
 
 export interface ChartMetaResponse {
@@ -451,13 +464,13 @@ export const aiSummaryApi = {
    * POST /api/v1/ai-summary
    * AI マーケットサマリー生成
    */
-  generate: (body: { symbol: string; timeframe: string; snapshotId?: string }) =>
+  generate: (body: { symbol: string; timeframe: string; snapshotId?: string }): Promise<AiSummaryResponse> =>
     api.post<AiSummaryResponse>('/ai-summary', body).then((r) => r.data),
 
   /**
    * GET /api/v1/ai-summary/latest
    * 最新 AI サマリー取得
    */
-  latest: (params: { symbol: string; timeframe: string }) =>
+  getLatest: (params: { symbol: string; timeframe: string }): Promise<AiSummaryResponse> =>
     api.get<AiSummaryResponse>('/ai-summary/latest', { params }).then((r) => r.data),
 };

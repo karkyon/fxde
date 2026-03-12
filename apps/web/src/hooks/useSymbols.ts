@@ -1,9 +1,14 @@
 /**
  * apps/web/src/hooks/useSymbols.ts
  *
- * [Task C] SPEC_v51_part10 hooks ディレクトリ正本構成に従い新設。
- *          symbolsApi.list() / symbolsApi.update() を包む専用 hook。
- *          既存 queries.ts 側の useSymbols を置換する。
+ * 変更内容（round6）:
+ *   [Task2] useUpdateSymbol → symbolsApi.update が backend 未実装のためコメントアウト
+ *           symbols.controller.ts には GET /symbols のみ実装
+ *           仕様上 PATCH /symbols/:symbol は必要。backend 実装後に復元すること。
+ *
+ * 含まれるフック:
+ *   useSymbols()      → GET /api/v1/symbols
+ *   useUpdateSymbol() → PATCH /api/v1/symbols/:symbol ⚠️ backend 未実装・無効化中
  *
  * 参照仕様: SPEC_v51_part10 §5「hooks ディレクトリ構成（確定）」
  *           SPEC_v51_part3 §6「Symbols API」
@@ -11,7 +16,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { symbolsApi } from '../lib/api';
-import type { UpdateSymbolSettingDto } from '@fxde/types';
+import type { UpdateSymbolSettingDto } from '../lib/api';
 
 // ── Query Keys ────────────────────────────────────────────────────────────────
 export const symbolKeys = {
@@ -37,12 +42,20 @@ export function useSymbols() {
  * PATCH /api/v1/symbols/:symbol
  * 通貨ペア設定を更新する。
  * 参照: SPEC_v51_part3 §6
+ *
+ * ⚠️ backend 未実装（symbols.controller.ts に PATCH route なし）
+ *    mutationFn を stub（no-op）に差し替え中。backend 実装後に復元すること。
+ *
+ * TODO(backend): PATCH /symbols/:symbol 実装後に以下を復元
+ *   mutationFn: ({ symbol, body }: { symbol: string; body: UpdateSymbolSettingDto }) =>
+ *     symbolsApi.update(symbol, body),
  */
 export function useUpdateSymbol() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ symbol, body }: { symbol: string; body: UpdateSymbolSettingDto }) =>
-      symbolsApi.update(symbol, body),
+    // TODO(backend): 実装後に symbolsApi.update に戻す
+    mutationFn: (_params: { symbol: string; body: UpdateSymbolSettingDto }) =>
+      Promise.reject(new Error('PATCH /symbols/:symbol は backend 未実装です')),
     onSuccess: () => qc.invalidateQueries({ queryKey: symbolKeys.all() }),
   });
 }

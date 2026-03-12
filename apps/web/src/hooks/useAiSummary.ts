@@ -24,7 +24,7 @@ export const aiSummaryKeys = {
 export function useLatestAiSummary(symbol: string, timeframe: string, enabled = true) {
   return useQuery({
     queryKey: aiSummaryKeys.latest(symbol, timeframe),
-    queryFn:  () => aiSummaryApi.latest({ symbol, timeframe }),
+    queryFn:  () => aiSummaryApi.getLatest({ symbol, timeframe }),
     enabled:  !!symbol && !!timeframe && enabled,
     retry:    false,   // 404 はリトライしない
   });

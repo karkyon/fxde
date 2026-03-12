@@ -1,8 +1,9 @@
 // apps/web/src/hooks/useTrades.ts
 //
-// 変更内容:
-//   [Task5] queries.ts から Trades 関連フック・ミューテーションを分離
-//           SPEC_v51_part10 §5（フロントディレクトリ正本）に準拠
+// 変更内容（round6）:
+//   [Task2] useEquityCurve / useTradeSummary を enabled: false で一時無効化
+//           backend trades.controller.ts に該当 route（equity-curve / stats/summary）が不在のため
+//           backend 実装後に enabled: false を削除すること
 //
 // 含まれるフック:
 //   useTrades()        → GET /api/v1/trades（一覧）
@@ -13,8 +14,8 @@
 //   useCloseTrade(id)  → POST /api/v1/trades/:id/close
 //   useDeleteTrade()   → DELETE /api/v1/trades/:id（論理削除）
 //   useCreateReview(id)→ POST /api/v1/trades/:id/review
-//   useEquityCurve()   → GET /api/v1/trades/equity-curve
-//   useTradeSummary()  → GET /api/v1/trades/stats/summary
+//   useEquityCurve()   → GET /api/v1/trades/equity-curve ⚠️ backend 未実装・無効化中
+//   useTradeSummary()  → GET /api/v1/trades/stats/summary ⚠️ backend 未実装・無効化中
 //
 import {
   useMutation,
@@ -151,11 +152,16 @@ export function useCreateReview(tradeId: string) {
  * useEquityCurve
  * GET /api/v1/trades/equity-curve
  * 参照: SPEC_v51_part10 §6.8
+ *
+ * ⚠️ backend 未実装（trades.controller.ts に route なし）
+ *    enabled: false で無効化中。backend 実装後に enabled 条件を復元すること。
  */
 export function useEquityCurve(period: '1M' | '3M' | '1Y' = '1M') {
   return useQuery({
     queryKey: ['trades', 'equity-curve', period] as const,
-    queryFn:  () => tradesApi.equityCurve(period),
+    // TODO(backend): GET /trades/equity-curve 実装後に enabled を削除
+    queryFn:  () => Promise.resolve(null) as Promise<null>,
+    enabled:  false,
   });
 }
 
@@ -163,10 +169,15 @@ export function useEquityCurve(period: '1M' | '3M' | '1Y' = '1M') {
  * useTradeSummary
  * GET /api/v1/trades/stats/summary
  * 参照: SPEC_v51_part10 §6.8
+ *
+ * ⚠️ backend 未実装（trades.controller.ts に route なし）
+ *    enabled: false で無効化中。backend 実装後に enabled 条件を復元すること。
  */
 export function useTradeSummary() {
   return useQuery({
     queryKey: ['trades', 'stats', 'summary'] as const,
-    queryFn:  () => tradesApi.summary(),
+    // TODO(backend): GET /trades/stats/summary 実装後に enabled を削除
+    queryFn:  () => Promise.resolve(null) as Promise<null>,
+    enabled:  false,
   });
 }
