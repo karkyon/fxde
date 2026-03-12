@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore } from '../stores/auth.store';
 
 export default function LoginPage() {
   const navigate = useNavigate();

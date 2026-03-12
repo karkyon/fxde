@@ -3,7 +3,7 @@
  *
  * 変更理由:
  *   - createBrowserRouter + RouterProvider に変更（SPEC_v51_part5 §1.4 準拠）
- *   - stores/authStore → stores/auth.store に変更
+ *   - stores/auth.store → stores/auth.store に変更
  *   - 廃止ルート（/patterns, /validation, /pairs, /signals）削除
  *   - 正規ルート追加: /strategy, /prediction, /chart, /plan
  *   - /prediction は PRO | PRO_PLUS | ADMIN のみアクセス可能（RolesGuard）

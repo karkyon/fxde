@@ -11,8 +11,8 @@
  *           SPEC_v51_part10 ディレクトリ構成（stores/auth.store.ts）
  *           監査レポート A-1（name フィールド不整合）
  *
- * 注意: このファイルを追加したら apps/web/src/stores/authStore.ts を削除し、
- *       import 元を全ファイルで '../stores/authStore' → '../stores/auth.store' に変更すること。
+ * 注意: このファイルを追加したら apps/web/src/stores/auth.store.ts を削除し、
+ *       import 元を全ファイルで '../stores/auth.store' → '../stores/auth.store' に変更すること。
  */
 
 import { create } from 'zustand';

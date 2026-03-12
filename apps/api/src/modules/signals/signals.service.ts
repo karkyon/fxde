@@ -13,14 +13,14 @@ export class SignalsService {
     const limitNum = Number(query.limit ?? 20);
     const skip     = (pageNum - 1) * limitNum;
 
+    // ⚠️ signalType は GetSignalsQueryDto に存在しないため除去
     this.logger.debug(
       `findAll: page=${pageNum} limit=${limitNum} symbol=${query.symbol ?? '-'} ` +
-      `timeframe=${query.timeframe ?? '-'} signalType=${query.signalType ?? '-'}`,
+      `timeframe=${query.timeframe ?? '-'}`,
     );
 
     const where: Record<string, unknown> = {};
 
-    // Signal model has symbolId — filter by symbol name via relation
     if (query.symbol) {
       where.symbol = { name: query.symbol };
     }

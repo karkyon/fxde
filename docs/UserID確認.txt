@@ -73,3 +73,6 @@ tar -czf fxde_project_src_only.tar.gz \
   --exclude='fxde/**/.cache' \
   --exclude='fxde/.git' \
   fxde
+
+  mv fxde_project_src_only.tar.gz fxde/fxde_project_src_only.tar.gz
+  cd fxde

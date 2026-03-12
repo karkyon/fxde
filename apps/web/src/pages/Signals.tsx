@@ -1,72 +1,71 @@
+/**
+ * apps/web/src/pages/Signals.tsx
+ *
+ * 修正内容:
+ *   - Signal 独自型を削除 → SignalResponse (../lib/api) に変更
+ *   - EntryState は SignalResponse に存在しないため TYPE_COLOR に変更
+ *   - signal.entryState → signal.type
+ */
+
 import { useState } from 'react';
 import { useSignals } from '../hooks/queries';
-import type { EntryState, Signal } from '../types';
+import type { SignalResponse } from '../lib/api';
 
-const PAGE_LIMIT = 20;
-
-const STATE_COLOR: Record<EntryState, { bg: string; text: string }> = {
-  ENTRY_OK: { bg: '#065f46', text: '#34d399' },
-  SCORE_LOW: { bg: '#3d2e00', text: '#fbbf24' },
-  RISK_NG: { bg: '#4c0519', text: '#f87171' },
-  LOCKED: { bg: '#1e293b', text: '#94a3b8' },
-  COOLDOWN: { bg: '#2e1065', text: '#a78bfa' },
+// Signal type ごとの配色
+const TYPE_COLOR: Record<string, { bg: string; text: string }> = {
+  ENTRY_OK:         { bg: 'rgba(52,211,153,0.12)', text: '#34d399' },
+  SCORE_LOW:        { bg: 'rgba(251,191,36,0.12)',  text: '#fbbf24' },
+  RISK_NG:          { bg: 'rgba(248,113,113,0.12)', text: '#f87171' },
+  LOCKED:           { bg: 'rgba(148,163,184,0.12)', text: '#94a3b8' },
+  COOLDOWN:         { bg: 'rgba(167,139,250,0.12)', text: '#a78bfa' },
+  PATTERN_DETECTED: { bg: 'rgba(96,165,250,0.12)',  text: '#60a5fa' },
 };
 
 export default function SignalsPage() {
   const [page, setPage] = useState(1);
-  const [symbolFilter, setSymbolFilter] = useState('');
+  const LIMIT = 20;
 
-  const { data, isLoading, error } = useSignals({
-    page,
-    limit: PAGE_LIMIT,
-    symbol: symbolFilter || undefined,
-  });
+  const { data, isLoading, error } = useSignals({ page, limit: LIMIT });
 
-  const totalPages = data ? Math.ceil(data.total / PAGE_LIMIT) : 1;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / LIMIT)) : 1;
 
   return (
     <div>
       <h1 style={styles.title}>Signals</h1>
 
-      {/* Filter */}
-      <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
-        <input
-          placeholder="Symbol filter (e.g. USDJPY)"
-          value={symbolFilter}
-          onChange={(e) => { setSymbolFilter(e.target.value.toUpperCase()); setPage(1); }}
-          style={{ ...styles.input, width: 200 }}
-        />
-        <span style={{ fontSize: 12, color: '#64748b', alignSelf: 'center' }}>
-          自動更新: 60秒
-        </span>
-      </div>
-
       {isLoading && <p style={styles.muted}>Loading...</p>}
-      {error && <p style={styles.errText}>Signals 取得エラー</p>}
+      {error    && <p style={styles.errText}>Signals 取得エラー</p>}
 
-      {data && (
+      {data && data.data.length === 0 && (
+        <p style={styles.muted}>シグナルがありません。</p>
+      )}
+
+      {data && data.data.length > 0 && (
         <>
-          <div style={styles.tableWrapper}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  {['Symbol', 'Entry State', 'Score Band', 'Score', 'Generated At'].map((h) => (
-                    <th key={h} style={styles.th}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.data.map((s) => (
-                  <SignalRow key={s.id} signal={s} />
-                ))}
-              </tbody>
-            </table>
+          <div style={styles.list}>
+            {data.data.map((s) => (
+              <SignalCard key={s.id} signal={s} />
+            ))}
           </div>
 
           <div style={styles.pagination}>
-            <button style={styles.pageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>‹ Prev</button>
-            <span style={styles.pageInfo}>{page} / {totalPages} ({data.total} signals)</span>
-            <button style={styles.pageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next ›</button>
+            <button
+              style={styles.pageBtn}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              ‹ Prev
+            </button>
+            <span style={styles.pageInfo}>
+              {page} / {totalPages} ({data.total} 件)
+            </span>
+            <button
+              style={styles.pageBtn}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+            >
+              Next ›
+            </button>
           </div>
         </>
       )}
@@ -74,53 +73,55 @@ export default function SignalsPage() {
   );
 }
 
-function SignalRow({ signal }: { signal: Signal }) {
-  const colors = STATE_COLOR[signal.entryState] ?? { bg: '#1e293b', text: '#94a3b8' };
+function SignalCard({ signal }: { signal: SignalResponse }) {
+  const colors = TYPE_COLOR[signal.type] ?? { bg: '#1e293b', text: '#94a3b8' };
+
   return (
-    <tr style={styles.tr}>
-      <td style={{ ...styles.td, fontWeight: 700, color: '#60a5fa' }}>{signal.symbol}</td>
-      <td style={styles.td}>
-        <span style={{
-          display: 'inline-block',
-          padding: '3px 10px',
-          borderRadius: 4,
-          fontSize: 12,
-          fontWeight: 700,
-          backgroundColor: colors.bg,
-          color: colors.text,
-        }}>
-          {signal.entryState}
+    <div style={{ ...styles.card, borderLeft: `3px solid ${colors.text}` }}>
+      <div style={styles.cardHeader}>
+        <span
+          style={{
+            ...styles.typeBadge,
+            backgroundColor: colors.bg,
+            color: colors.text,
+          }}
+        >
+          {signal.type}
         </span>
-      </td>
-      <td style={styles.td}>
-        <ScoreBandBadge band={signal.scoreBand} />
-      </td>
-      <td style={{ ...styles.td, fontWeight: 600 }}>{signal.score}</td>
-      <td style={{ ...styles.td, color: '#64748b', fontSize: 12 }}>
-        {new Date(signal.generatedAt).toLocaleString('ja-JP')}
-      </td>
-    </tr>
+        {signal.acknowledgedAt == null && (
+          <span style={styles.unackBadge}>未確認</span>
+        )}
+        <span style={styles.time}>
+          {new Date(signal.triggeredAt).toLocaleString('ja-JP')}
+        </span>
+      </div>
+
+      <div style={styles.cardBody}>
+        <span style={styles.metaItem}>ID: {signal.id.slice(0, 8)}...</span>
+        {signal.acknowledgedAt && (
+          <span style={styles.metaItem}>
+            確認: {new Date(signal.acknowledgedAt).toLocaleString('ja-JP')}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 
-function ScoreBandBadge({ band }: { band: string }) {
-  const map: Record<string, string> = { HIGH: '#34d399', MID: '#fbbf24', LOW: '#f87171' };
-  return (
-    <span style={{ color: map[band] ?? '#94a3b8', fontWeight: 700, fontSize: 13 }}>{band}</span>
-  );
-}
-
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  title: { fontSize: 22, fontWeight: 700, marginBottom: 20, color: '#f1f5f9' },
-  tableWrapper: { overflowX: 'auto', borderRadius: 8, border: '1px solid #2d3148' },
-  table: { width: '100%', borderCollapse: 'collapse', backgroundColor: '#1a1d27' },
-  th: { padding: '10px 14px', textAlign: 'left', fontSize: 12, color: '#64748b', fontWeight: 700, backgroundColor: '#141722', borderBottom: '1px solid #2d3148' },
-  tr: { borderBottom: '1px solid #1e2540' },
-  td: { padding: '10px 14px', fontSize: 13, color: '#e2e8f0' },
-  pagination: { display: 'flex', alignItems: 'center', gap: 16, marginTop: 16, justifyContent: 'center' },
-  pageBtn: { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' },
-  pageInfo: { fontSize: 13, color: '#64748b' },
-  input: { padding: '7px 11px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13 },
-  muted: { color: '#475569', fontSize: 13 },
-  errText: { color: '#f87171', fontSize: 13 },
+  title:      { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
+  list:       { display: 'flex', flexDirection: 'column', gap: 10 },
+  card:       { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 18px' },
+  cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
+  cardBody:   { display: 'flex', gap: 16 },
+  typeBadge:  { fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: 0.5 },
+  unackBadge: { fontSize: 11, color: '#fbbf24', border: '1px solid #78350f', borderRadius: 4, padding: '2px 8px' },
+  time:       { fontSize: 12, color: '#64748b', marginLeft: 'auto' },
+  metaItem:   { fontSize: 12, color: '#475569' },
+  pagination: { display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 },
+  pageBtn:    { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
+  pageInfo:   { color: '#64748b', fontSize: 13 },
+  muted:      { color: '#475569', fontSize: 13 },
+  errText:    { color: '#f87171', fontSize: 13 },
 };

@@ -1,3 +1,19 @@
+/**
+ * apps/web/src/pages/Trades.tsx
+ *
+ * 修正内容（監査レポート A-1 対応）:
+ *   Trade 独自型 → TradeDto (@fxde/types)
+ *   direction → side  (BUY/SELL)
+ *   LONG/SHORT → BUY/SELL
+ *   lotSize → size
+ *   stopLoss → sl / takeProfit → tp
+ *   openedAt → entryTime / closedAt → exitTime
+ *   notes → note / strategyTag → tags (string[])
+ *   pnl → Number(trade.pnl) キャスト
+ *   CANCELLED → CANCELED（末尾 D 1 つ）
+ *   CloseTradeInput: exitTime フィールド追加
+ */
+
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,15 +23,20 @@ import {
   useDeleteTrade,
   useUpdateTrade,
 } from '../hooks/queries';
-import type { Trade } from '../types';
+import type { TradeDto } from '@fxde/types';
 
 const PAGE_LIMIT = 10;
 
+const SYMBOLS = [
+  'USDJPY', 'EURUSD', 'GBPUSD', 'AUDUSD', 'USDCHF',
+  'USDCAD', 'BTCUSD', 'ETHUSD',
+];
+
 export default function TradesPage() {
-  const navigate = useNavigate();
-  const [page, setPage] = useState(1);
+  const navigate  = useNavigate();
+  const [page, setPage]               = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate]   = useState(false);
 
   const { data, isLoading, error } = useTrades({
     page,
@@ -26,36 +47,40 @@ export default function TradesPage() {
   const createTrade = useCreateTrade();
   const deleteTrade = useDeleteTrade();
 
-  // ── Create form state ─────────────────────────────────────────────────────
+  // ── Create form ──────────────────────────────────────────────────────────
   const emptyForm = {
-    symbol: 'USDJPY',
-    direction: 'LONG' as 'LONG' | 'SHORT',
+    symbol:     'USDJPY',
+    side:       'BUY' as 'BUY' | 'SELL',
     entryPrice: '',
-    lotSize: '',
-    stopLoss: '',
-    takeProfit: '',
-    notes: '',
-    strategyTag: '',
+    entryTime:  new Date().toISOString().slice(0, 16), // datetime-local format
+    size:       '',
+    sl:         '',
+    tp:         '',
+    note:       '',
+    tagsRaw:    '', // comma-separated → tags[]
   };
   const [form, setForm] = useState(emptyForm);
 
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     await createTrade.mutateAsync({
-      symbol: form.symbol,
-      direction: form.direction,
+      symbol:     form.symbol,
+      side:       form.side,
       entryPrice: Number(form.entryPrice),
-      lotSize: Number(form.lotSize),
-      stopLoss: form.stopLoss ? Number(form.stopLoss) : undefined,
-      takeProfit: form.takeProfit ? Number(form.takeProfit) : undefined,
-      notes: form.notes || undefined,
-      strategyTag: form.strategyTag || undefined,
+      entryTime:  new Date(form.entryTime).toISOString(),
+      size:       Number(form.size),
+      sl:         form.sl ? Number(form.sl) : undefined,
+      tp:         form.tp ? Number(form.tp) : undefined,
+      note:       form.note   || undefined,
+      tags:       form.tagsRaw
+        ? form.tagsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined,
     });
     setShowCreate(false);
     setForm(emptyForm);
   };
 
-  const totalPages = data ? Math.ceil(data.total / PAGE_LIMIT) : 1;
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_LIMIT)) : 1;
 
   return (
     <div>
@@ -77,7 +102,7 @@ export default function TradesPage() {
           <option value="">All Status</option>
           <option value="OPEN">OPEN</option>
           <option value="CLOSED">CLOSED</option>
-          <option value="CANCELLED">CANCELLED</option>
+          <option value="CANCELED">CANCELED</option>
         </select>
       </div>
 
@@ -95,14 +120,14 @@ export default function TradesPage() {
                 {SYMBOLS.map((s) => <option key={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="Direction">
+            <Field label="Side">
               <select
-                value={form.direction}
-                onChange={(e) => setForm({ ...form, direction: e.target.value as 'LONG' | 'SHORT' })}
+                value={form.side}
+                onChange={(e) => setForm({ ...form, side: e.target.value as 'BUY' | 'SELL' })}
                 style={styles.input}
               >
-                <option value="LONG">LONG</option>
-                <option value="SHORT">SHORT</option>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
               </select>
             </Field>
             <Field label="Entry Price *">
@@ -113,45 +138,52 @@ export default function TradesPage() {
                 style={styles.input}
               />
             </Field>
-            <Field label="Lot Size *">
+            <Field label="Entry Time *">
+              <input
+                type="datetime-local" required
+                value={form.entryTime}
+                onChange={(e) => setForm({ ...form, entryTime: e.target.value })}
+                style={styles.input}
+              />
+            </Field>
+            <Field label="Size (lots) *">
               <input
                 type="number" step="any" required
-                value={form.lotSize}
-                onChange={(e) => setForm({ ...form, lotSize: e.target.value })}
+                value={form.size}
+                onChange={(e) => setForm({ ...form, size: e.target.value })}
                 style={styles.input}
               />
             </Field>
             <Field label="Stop Loss">
               <input
                 type="number" step="any"
-                value={form.stopLoss}
-                onChange={(e) => setForm({ ...form, stopLoss: e.target.value })}
+                value={form.sl}
+                onChange={(e) => setForm({ ...form, sl: e.target.value })}
                 style={styles.input}
               />
             </Field>
             <Field label="Take Profit">
               <input
                 type="number" step="any"
-                value={form.takeProfit}
-                onChange={(e) => setForm({ ...form, takeProfit: e.target.value })}
+                value={form.tp}
+                onChange={(e) => setForm({ ...form, tp: e.target.value })}
                 style={styles.input}
               />
             </Field>
-            <Field label="Strategy Tag">
+            <Field label="Tags (comma separated)">
               <input
                 type="text"
-                value={form.strategyTag}
-                onChange={(e) => setForm({ ...form, strategyTag: e.target.value })}
-                placeholder="e.g. breakout, trend"
+                value={form.tagsRaw}
+                onChange={(e) => setForm({ ...form, tagsRaw: e.target.value })}
+                placeholder="breakout, trend"
                 style={styles.input}
               />
             </Field>
-            <div />
             <div style={{ gridColumn: '1/-1' }}>
-              <Field label="Notes">
+              <Field label="Note">
                 <textarea
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  value={form.note}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })}
                   rows={2}
                   style={{ ...styles.input, width: '100%', resize: 'vertical' }}
                 />
@@ -160,7 +192,7 @@ export default function TradesPage() {
             <div style={{ gridColumn: '1/-1', display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
               <button type="button" style={styles.secondaryBtn} onClick={() => setShowCreate(false)}>Cancel</button>
               <button type="submit" style={styles.primaryBtn} disabled={createTrade.isPending}>
-                {createTrade.isPending ? 'Saving...' : 'Create'}
+                {createTrade.isPending ? '...' : 'Create'}
               </button>
             </div>
           </form>
@@ -169,7 +201,7 @@ export default function TradesPage() {
 
       {/* ── Table ── */}
       {isLoading && <p style={styles.muted}>Loading...</p>}
-      {error && <p style={styles.errText}>Trades 取得エラー</p>}
+      {error     && <p style={styles.errText}>Trades 取得エラー</p>}
       {data && data.data.length === 0 && (
         <p style={styles.muted}>トレードがありません。</p>
       )}
@@ -180,7 +212,7 @@ export default function TradesPage() {
             <table style={styles.table}>
               <thead>
                 <tr>
-                  {['Symbol', 'Dir', 'Status', 'Entry', 'Exit', 'Lot', 'SL', 'TP', 'P&L', 'Opened', 'Strategy', 'Actions'].map((h) => (
+                  {['Symbol', 'Side', 'Status', 'Entry', 'Exit', 'Size', 'SL', 'TP', 'P&L', 'Entry Time', 'Tags', 'Actions'].map((h) => (
                     <th key={h} style={styles.th}>{h}</th>
                   ))}
                 </tr>
@@ -202,7 +234,6 @@ export default function TradesPage() {
             </table>
           </div>
 
-          {/* ── Pagination ── */}
           <div style={styles.pagination}>
             <button
               style={styles.pageBtn}
@@ -212,7 +243,7 @@ export default function TradesPage() {
               ‹ Prev
             </button>
             <span style={styles.pageInfo}>
-              {page} / {totalPages} &nbsp;({data.total} trades)
+              {page} / {totalPages} ({data.total} trades)
             </span>
             <button
               style={styles.pageBtn}
@@ -234,36 +265,45 @@ function TradeRow({
   onDetail,
   onDelete,
 }: {
-  trade: Trade;
+  trade: TradeDto;
   onDetail: () => void;
   onDelete: () => void;
 }) {
   const [showClose, setShowClose] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
-  const closeTrade = useCloseTrade(trade.id);
+  const [showEdit,  setShowEdit]  = useState(false);
+  const closeTrade  = useCloseTrade(trade.id);
   const updateTrade = useUpdateTrade(trade.id);
 
   const [exitPrice, setExitPrice] = useState('');
+  const [exitTime,  setExitTime]  = useState(new Date().toISOString().slice(0, 16));
+
   const [editForm, setEditForm] = useState({
-    stopLoss: trade.stopLoss != null ? String(trade.stopLoss) : '',
-    takeProfit: trade.takeProfit != null ? String(trade.takeProfit) : '',
-    strategyTag: trade.strategyTag ?? '',
-    notes: trade.notes ?? '',
+    sl:      trade.sl   != null ? String(trade.sl)   : '',
+    tp:      trade.tp   != null ? String(trade.tp)   : '',
+    tagsRaw: trade.tags.join(', '),
+    note:    trade.note ?? '',
   });
+
+  const pnlNum = trade.pnl != null ? Number(trade.pnl) : null;
 
   const handleClose = async (e: FormEvent) => {
     e.preventDefault();
-    await closeTrade.mutateAsync({ exitPrice: Number(exitPrice) });
+    await closeTrade.mutateAsync({
+      exitPrice: Number(exitPrice),
+      exitTime:  new Date(exitTime).toISOString(),
+    });
     setShowClose(false);
   };
 
   const handleEdit = async (e: FormEvent) => {
     e.preventDefault();
     await updateTrade.mutateAsync({
-      stopLoss: editForm.stopLoss ? Number(editForm.stopLoss) : undefined,
-      takeProfit: editForm.takeProfit ? Number(editForm.takeProfit) : undefined,
-      strategyTag: editForm.strategyTag || undefined,
-      notes: editForm.notes || undefined,
+      sl:   editForm.sl   ? Number(editForm.sl)   : undefined,
+      tp:   editForm.tp   ? Number(editForm.tp)   : undefined,
+      tags: editForm.tagsRaw
+        ? editForm.tagsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined,
+      note: editForm.note || undefined,
     });
     setShowEdit(false);
   };
@@ -271,43 +311,33 @@ function TradeRow({
   return (
     <>
       <tr style={styles.tr}>
-        {/* Symbol */}
         <td style={styles.td}>
           <button style={styles.linkBtn} onClick={onDetail}>{trade.symbol}</button>
         </td>
-        {/* Direction */}
-        <td style={{ ...styles.td, color: trade.direction === 'LONG' ? '#34d399' : '#f87171', fontWeight: 700 }}>
-          {trade.direction}
+        <td style={{ ...styles.td, color: trade.side === 'BUY' ? '#34d399' : '#f87171', fontWeight: 700 }}>
+          {trade.side}
         </td>
-        {/* Status */}
         <td style={styles.td}><StatusBadge status={trade.status} /></td>
-        {/* Entry */}
-        <td style={styles.td}>{trade.entryPrice}</td>
-        {/* Exit */}
-        <td style={{ ...styles.td, color: '#94a3b8' }}>{trade.exitPrice ?? '—'}</td>
-        {/* Lot */}
-        <td style={styles.td}>{trade.lotSize}</td>
-        {/* SL */}
-        <td style={{ ...styles.td, color: '#f87171', fontSize: 12 }}>{trade.stopLoss ?? '—'}</td>
-        {/* TP */}
-        <td style={{ ...styles.td, color: '#34d399', fontSize: 12 }}>{trade.takeProfit ?? '—'}</td>
-        {/* PnL */}
-        <td style={{
-          ...styles.td,
-          color: (trade.pnl ?? 0) >= 0 ? '#34d399' : '#f87171',
-          fontWeight: 700,
-        }}>
-          {trade.pnl != null ? (trade.pnl >= 0 ? '+' : '') + trade.pnl.toFixed(2) : '—'}
+        <td style={styles.td}>{Number(trade.entryPrice)}</td>
+        <td style={{ ...styles.td, color: '#94a3b8' }}>
+          {trade.exitPrice != null ? Number(trade.exitPrice) : '—'}
         </td>
-        {/* Opened */}
+        <td style={styles.td}>{Number(trade.size)}</td>
+        <td style={{ ...styles.td, color: '#f87171', fontSize: 12 }}>
+          {trade.sl != null ? Number(trade.sl) : '—'}
+        </td>
+        <td style={{ ...styles.td, color: '#34d399', fontSize: 12 }}>
+          {trade.tp != null ? Number(trade.tp) : '—'}
+        </td>
+        <td style={{ ...styles.td, color: pnlNum != null ? (pnlNum >= 0 ? '#34d399' : '#f87171') : '#94a3b8', fontWeight: 700 }}>
+          {pnlNum != null ? (pnlNum >= 0 ? '+' : '') + pnlNum.toFixed(2) : '—'}
+        </td>
         <td style={{ ...styles.td, color: '#64748b', fontSize: 12 }}>
-          {new Date(trade.openedAt).toLocaleDateString('ja-JP')}
+          {new Date(trade.entryTime).toLocaleDateString('ja-JP')}
         </td>
-        {/* Strategy */}
         <td style={{ ...styles.td, fontSize: 12, color: '#a78bfa' }}>
-          {trade.strategyTag ?? '—'}
+          {trade.tags.length > 0 ? trade.tags.join(', ') : '—'}
         </td>
-        {/* Actions */}
         <td style={styles.td}>
           <div style={{ display: 'flex', gap: 5 }}>
             <button style={styles.actionBtn} onClick={() => setShowEdit((v) => !v)}>Edit</button>
@@ -329,43 +359,27 @@ function TradeRow({
         </td>
       </tr>
 
-      {/* ── Inline Edit Form ── */}
+      {/* ── Inline Edit ── */}
       {showEdit && (
         <tr>
           <td colSpan={12} style={styles.inlineRow}>
             <form onSubmit={handleEdit} style={styles.inlineForm}>
               <span style={styles.inlineLabel}>SL:</span>
-              <input
-                type="number" step="any"
-                value={editForm.stopLoss}
-                onChange={(e) => setEditForm({ ...editForm, stopLoss: e.target.value })}
-                style={{ ...styles.smallInput, width: 90 }}
-                placeholder="Stop Loss"
-              />
+              <input type="number" step="any" value={editForm.sl}
+                onChange={(e) => setEditForm({ ...editForm, sl: e.target.value })}
+                style={{ ...styles.smallInput, width: 90 }} placeholder="Stop Loss" />
               <span style={styles.inlineLabel}>TP:</span>
-              <input
-                type="number" step="any"
-                value={editForm.takeProfit}
-                onChange={(e) => setEditForm({ ...editForm, takeProfit: e.target.value })}
-                style={{ ...styles.smallInput, width: 90 }}
-                placeholder="Take Profit"
-              />
-              <span style={styles.inlineLabel}>Tag:</span>
-              <input
-                type="text"
-                value={editForm.strategyTag}
-                onChange={(e) => setEditForm({ ...editForm, strategyTag: e.target.value })}
-                style={{ ...styles.smallInput, width: 110 }}
-                placeholder="Strategy"
-              />
-              <span style={styles.inlineLabel}>Notes:</span>
-              <input
-                type="text"
-                value={editForm.notes}
-                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                style={{ ...styles.smallInput, width: 160 }}
-                placeholder="Notes"
-              />
+              <input type="number" step="any" value={editForm.tp}
+                onChange={(e) => setEditForm({ ...editForm, tp: e.target.value })}
+                style={{ ...styles.smallInput, width: 90 }} placeholder="Take Profit" />
+              <span style={styles.inlineLabel}>Tags:</span>
+              <input type="text" value={editForm.tagsRaw}
+                onChange={(e) => setEditForm({ ...editForm, tagsRaw: e.target.value })}
+                style={{ ...styles.smallInput, width: 120 }} placeholder="tag1, tag2" />
+              <span style={styles.inlineLabel}>Note:</span>
+              <input type="text" value={editForm.note}
+                onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                style={{ ...styles.smallInput, width: 160 }} placeholder="Note" />
               <button type="submit" style={styles.primaryBtn} disabled={updateTrade.isPending}>
                 {updateTrade.isPending ? '...' : 'Save'}
               </button>
@@ -377,20 +391,24 @@ function TradeRow({
         </tr>
       )}
 
-      {/* ── Inline Close Form ── */}
+      {/* ── Inline Close ── */}
       {showClose && (
         <tr>
           <td colSpan={12} style={styles.inlineRow}>
             <form onSubmit={handleClose} style={styles.inlineForm}>
               <span style={styles.inlineLabel}>Exit Price:</span>
-              <input
-                type="number" step="any" required
-                value={exitPrice}
+              <input type="number" step="any" required value={exitPrice}
                 onChange={(e) => setExitPrice(e.target.value)}
-                style={{ ...styles.smallInput, width: 130 }}
-                placeholder="0.000"
-              />
-              <button type="submit" style={{ ...styles.primaryBtn, backgroundColor: '#d97706' }} disabled={closeTrade.isPending}>
+                style={{ ...styles.smallInput, width: 130 }} placeholder="0.000" />
+              <span style={styles.inlineLabel}>Exit Time:</span>
+              <input type="datetime-local" required value={exitTime}
+                onChange={(e) => setExitTime(e.target.value)}
+                style={{ ...styles.smallInput, width: 180 }} />
+              <button
+                type="submit"
+                style={{ ...styles.primaryBtn, backgroundColor: '#d97706' }}
+                disabled={closeTrade.isPending}
+              >
                 {closeTrade.isPending ? 'Closing...' : 'Confirm Close'}
               </button>
               <button type="button" style={styles.secondaryBtn} onClick={() => setShowClose(false)}>
@@ -404,17 +422,14 @@ function TradeRow({
   );
 }
 
-// ─── Status Badge ─────────────────────────────────────────────────────────────
+// ─── StatusBadge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
-  const bg: Record<string, string> = { OPEN: '#065f46', CLOSED: '#1e3a5f', CANCELLED: '#3d2a00' };
-  const fg: Record<string, string> = { OPEN: '#34d399', CLOSED: '#60a5fa', CANCELLED: '#fbbf24' };
+  const bg: Record<string, string> = { OPEN: '#065f46', CLOSED: '#1e3a5f', CANCELED: '#3d2a00' };
+  const fg: Record<string, string> = { OPEN: '#34d399', CLOSED: '#60a5fa', CANCELED: '#fbbf24' };
   return (
     <span style={{
-      display: 'inline-block',
-      padding: '2px 8px',
-      borderRadius: 4,
-      fontSize: 11,
-      fontWeight: 700,
+      display: 'inline-block', padding: '2px 8px', borderRadius: 4,
+      fontSize: 11, fontWeight: 700,
       backgroundColor: bg[status] ?? '#1e293b',
       color: fg[status] ?? '#94a3b8',
     }}>
@@ -423,61 +438,55 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── Modal Overlay ────────────────────────────────────────────────────────────
+// ─── Overlay ──────────────────────────────────────────────────────────────────
 function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div
-      style={styles.overlay}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div style={styles.modal}>{children}</div>
+    <div style={styles.overlay} onClick={onClose}>
+      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
     </div>
   );
 }
 
+// ─── Field ────────────────────────────────────────────────────────────────────
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <label style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{label}</label>
+    <div>
+      <label style={styles.fieldLabel}>{label}</label>
       {children}
     </div>
   );
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-const SYMBOLS = [
-  'USDJPY', 'EURUSD', 'GBPUSD', 'AUDUSD', 'NZDUSD',
-  'EURJPY', 'GBPJPY', 'AUDJPY', 'CADJPY',
-  'XAUUSD', 'XAGUSD', 'US30', 'NAS100',
-];
-
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: 700, color: '#f1f5f9' },
-  filters: { marginBottom: 16, display: 'flex', gap: 12 },
-  tableWrapper: { overflowX: 'auto', borderRadius: 8, border: '1px solid #2d3148' },
-  table: { width: '100%', borderCollapse: 'collapse', backgroundColor: '#1a1d27', whiteSpace: 'nowrap' },
-  th: { padding: '10px 12px', textAlign: 'left', fontSize: 11, color: '#64748b', fontWeight: 700, backgroundColor: '#141722', borderBottom: '1px solid #2d3148' },
-  tr: { borderBottom: '1px solid #1e2540' },
-  td: { padding: '9px 12px', fontSize: 13, color: '#e2e8f0' },
-  inlineRow: { backgroundColor: '#181c2a', padding: '10px 16px' },
-  inlineForm: { display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
-  inlineLabel: { fontSize: 12, color: '#64748b', fontWeight: 600 },
-  smallInput: { padding: '6px 10px', borderRadius: 5, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 12 },
-  pagination: { display: 'flex', alignItems: 'center', gap: 16, marginTop: 16, justifyContent: 'center' },
-  pageBtn: { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, fontSize: 13, cursor: 'pointer' },
-  pageInfo: { fontSize: 13, color: '#64748b' },
-  primaryBtn: { padding: '8px 18px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 13, cursor: 'pointer' },
-  secondaryBtn: { padding: '8px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 7, fontSize: 13, cursor: 'pointer' },
-  actionBtn: { padding: '4px 9px', fontSize: 11, backgroundColor: '#1e2d3d', color: '#60a5fa', border: '1px solid #1e3a5f', borderRadius: 4, cursor: 'pointer' },
-  linkBtn: { background: 'none', border: 'none', color: '#60a5fa', fontWeight: 700, fontSize: 13, cursor: 'pointer', textDecoration: 'underline' },
-  muted: { color: '#475569', fontSize: 13 },
-  errText: { color: '#f87171', fontSize: 13 },
-  input: { padding: '7px 11px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13, width: '100%' },
-  select: { padding: '7px 11px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13 },
-  overlay: { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 },
-  modal: { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 12, padding: '32px 36px', width: 520, maxWidth: '92vw', maxHeight: '90vh', overflowY: 'auto' },
-  modalTitle: { fontSize: 18, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
-  formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 },
+  title:       { fontSize: 22, fontWeight: 700, color: '#f1f5f9' },
+  header:      { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  filters:     { display: 'flex', gap: 10, marginBottom: 16 },
+  select:      { padding: '7px 12px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13 },
+  tableWrapper:{ overflowX: 'auto' },
+  table:       { width: '100%', borderCollapse: 'collapse', fontSize: 13 },
+  th:          { textAlign: 'left', padding: '10px 12px', color: '#64748b', borderBottom: '1px solid #1e2540', fontWeight: 600, whiteSpace: 'nowrap' },
+  tr:          { borderBottom: '1px solid #1e2540' },
+  td:          { padding: '10px 12px', color: '#cbd5e1' },
+  linkBtn:     { background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', fontWeight: 700, fontSize: 13, padding: 0 },
+  actionBtn:   { padding: '3px 10px', fontSize: 11, backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 5, cursor: 'pointer' },
+  inlineRow:   { backgroundColor: '#10131c', padding: '12px 16px' },
+  inlineForm:  { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  inlineLabel: { fontSize: 12, color: '#64748b' },
+  smallInput:  { padding: '5px 8px', borderRadius: 5, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 12 },
+  pagination:  { display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 },
+  pageBtn:     { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
+  pageInfo:    { color: '#64748b', fontSize: 13 },
+  primaryBtn:  { padding: '8px 18px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 7, fontWeight: 600, fontSize: 13, cursor: 'pointer' },
+  secondaryBtn:{ padding: '8px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 7, fontSize: 13, cursor: 'pointer' },
+  overlay:     { position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 60, zIndex: 999 },
+  modal:       { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 12, padding: '28px 32px', width: '100%', maxWidth: 640, maxHeight: '80vh', overflowY: 'auto' },
+  modalTitle:  { fontSize: 18, fontWeight: 700, marginBottom: 20, color: '#f1f5f9' },
+  formGrid:    { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 },
+  fieldLabel:  { display: 'block', fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 5 },
+  input:       { width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #334155', backgroundColor: '#0f1117', color: '#e2e8f0', fontSize: 13 },
+  muted:       { color: '#475569', fontSize: 13 },
+  errText:     { color: '#f87171', fontSize: 13 },
 };

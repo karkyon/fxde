@@ -2,11 +2,11 @@
  * apps/web/src/components/layout/Layout.tsx
  *
  * 変更理由:
- *   - components/Layout.tsx → components/layout/Layout.tsx に移動（Part 10 構成準拠）
+ *   - components/layout/Layout.tsx → components/layout/Layout.tsx に移動（Part 10 構成準拠）
  *   - Sidebar ナビゲーション項目を仕様正本（Part 5 §1.3）に統一
  *   - 廃止項目（/signals）削除
  *   - 追加項目（/strategy, /chart, /plan）追加
- *   - stores/authStore → stores/auth.store に変更
+ *   - stores/auth.store → stores/auth.store に変更
  *   - Outlet を react-router-dom から import
  *
  * 参照仕様: SPEC_v51_part5 §1.3「サイドバーナビゲーション（7 項目）」

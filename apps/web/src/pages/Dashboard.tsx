@@ -1,10 +1,20 @@
+/**
+ * apps/web/src/pages/Dashboard.tsx
+ *
+ * 修正内容:
+ *   - Signal / Trade 独自型を削除 → TradeDto (@fxde/types), SignalResponse (../lib/api) に変更
+ *   - useLatestSignals() は ApiPaginatedResponse<SignalResponse> を返すため .data.map() に修正
+ *   - snapshot.data は SnapshotResponse 型（queryFn 修正後に正しく推論される）
+ */
+
 import { useLatestSnapshot, useTrades, useLatestSignals } from '../hooks/queries';
-import type { Signal, Trade } from '../types';
+import type { TradeDto } from '@fxde/types';
+import type { SignalResponse } from '../lib/api';
 
 export default function DashboardPage() {
   const snapshot = useLatestSnapshot();
-  const trades = useTrades({ limit: 5, status: 'OPEN' });
-  const signals = useLatestSignals();
+  const trades   = useTrades({ limit: 5, status: 'OPEN' });
+  const signals  = useLatestSignals();
 
   return (
     <div>
@@ -18,11 +28,18 @@ export default function DashboardPage() {
           {snapshot.error && <ErrMsg msg="Snapshot 取得エラー" />}
           {snapshot.data && (
             <dl style={styles.dl}>
-              <Stat label="Total P&L" value={fmtPnl(snapshot.data.totalPnl)} color={pnlColor(snapshot.data.totalPnl)} />
-              <Stat label="Win Rate" value={`${(snapshot.data.winRate * 100).toFixed(1)}%`} />
-              <Stat label="Trades" value={String(snapshot.data.tradeCount)} />
-              <Stat label="Open" value={String(snapshot.data.openTradeCount)} />
-              <Stat label="Avg R:R" value={snapshot.data.avgRr != null ? snapshot.data.avgRr.toFixed(2) : '—'} />
+              <Stat
+                label="Total Score"
+                value={String(snapshot.data.scoreTotal)}
+                color={snapshot.data.scoreTotal >= 75 ? '#34d399' : '#f87171'}
+              />
+              <Stat label="Entry State" value={snapshot.data.entryState} />
+              <Stat label="Symbol"      value={snapshot.data.symbol} />
+              <Stat label="Timeframe"   value={snapshot.data.timeframe} />
+              <Stat
+                label="Captured"
+                value={new Date(snapshot.data.capturedAt).toLocaleString('ja-JP')}
+              />
             </dl>
           )}
           {!snapshot.data && !snapshot.isLoading && !snapshot.error && (
@@ -30,7 +47,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* ── Recent Trades ── */}
+        {/* ── Recent Open Trades ── */}
         <section style={styles.card}>
           <h2 style={styles.cardTitle}>💹 Open Trades</h2>
           {trades.isLoading && <Loader />}
@@ -50,11 +67,11 @@ export default function DashboardPage() {
           <h2 style={styles.cardTitle}>📡 Latest Signals</h2>
           {signals.isLoading && <Loader />}
           {signals.error && <ErrMsg msg="Signals 取得エラー" />}
-          {signals.data?.length === 0 && (
+          {signals.data?.data.length === 0 && (
             <p style={styles.muted}>シグナルなし</p>
           )}
           <ul style={styles.list}>
-            {signals.data?.map((s) => (
+            {signals.data?.data.map((s) => (
               <SignalRow key={s.id} signal={s} />
             ))}
           </ul>
@@ -84,107 +101,93 @@ function Stat({
 }) {
   return (
     <div style={styles.statRow}>
-      <dt style={styles.statLabel}>{label}</dt>
-      <dd style={{ ...styles.statValue, color: color ?? '#e2e8f0' }}>{value}</dd>
+      <span style={styles.statLabel}>{label}</span>
+      <span style={{ ...styles.statValue, color: color ?? '#e2e8f0' }}>{value}</span>
     </div>
   );
 }
 
-function TradeRow({ trade }: { trade: Trade }) {
+function TradeRow({ trade }: { trade: TradeDto }) {
+  const pnlNum = trade.pnl != null ? Number(trade.pnl) : null;
   return (
     <li style={styles.listItem}>
-      <span style={{ fontWeight: 600, color: '#60a5fa' }}>{trade.symbol}</span>
+      <span style={{ fontWeight: 700 }}>{trade.symbol}</span>
       <span
         style={{
-          fontSize: 12,
-          color: trade.direction === 'LONG' ? '#34d399' : '#f87171',
+          color: trade.side === 'BUY' ? '#34d399' : '#f87171',
+          fontWeight: 700,
+          marginLeft: 8,
         }}
       >
-        {trade.direction}
+        {trade.side}
       </span>
-      <span style={{ fontSize: 12, color: '#94a3b8' }}>
-        @ {trade.entryPrice}
-      </span>
+      {pnlNum != null && (
+        <span
+          style={{
+            marginLeft: 'auto',
+            color: pnlNum >= 0 ? '#34d399' : '#f87171',
+            fontWeight: 600,
+          }}
+        >
+          {pnlNum >= 0 ? '+' : ''}
+          {pnlNum.toFixed(2)}
+        </span>
+      )}
     </li>
   );
 }
 
-function SignalRow({ signal }: { signal: Signal }) {
-  const stateColor: Record<string, string> = {
-    ENTRY_OK: '#34d399',
-    SCORE_LOW: '#fbbf24',
-    RISK_NG: '#f87171',
-    LOCKED: '#94a3b8',
-    COOLDOWN: '#a78bfa',
-  };
+function SignalRow({ signal }: { signal: SignalResponse }) {
   return (
     <li style={styles.listItem}>
-      <span style={{ fontWeight: 600, color: '#60a5fa' }}>{signal.symbol}</span>
-      <span
-        style={{
-          fontSize: 12,
-          color: stateColor[signal.entryState] ?? '#e2e8f0',
-          fontWeight: 600,
-        }}
-      >
-        {signal.entryState}
+      <span style={{ color: '#60a5fa', fontWeight: 600 }}>{signal.type}</span>
+      <span style={{ color: '#64748b', fontSize: 12, marginLeft: 8 }}>
+        {new Date(signal.triggeredAt).toLocaleString('ja-JP')}
       </span>
-      <span style={{ fontSize: 12, color: '#94a3b8' }}>
-        Score: {signal.score}
-      </span>
+      {signal.acknowledgedAt == null && (
+        <span
+          style={{
+            marginLeft: 'auto',
+            fontSize: 11,
+            color: '#fbbf24',
+            border: '1px solid #78350f',
+            borderRadius: 4,
+            padding: '1px 6px',
+          }}
+        >
+          未確認
+        </span>
+      )}
     </li>
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function fmtPnl(v: number) {
-  return (v >= 0 ? '+' : '') + v.toFixed(2);
-}
-function pnlColor(v: number) {
-  return v >= 0 ? '#34d399' : '#f87171';
-}
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: 700,
-    marginBottom: 24,
-    color: '#f1f5f9',
-  },
+  pageTitle: { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
   grid3: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
     gap: 20,
   },
   card: {
     backgroundColor: '#1a1d27',
     border: '1px solid #2d3148',
     borderRadius: 10,
-    padding: '20px 24px',
+    padding: '24px 28px',
   },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    marginBottom: 16,
-    color: '#94a3b8',
-    letterSpacing: '0.3px',
-  },
-  dl: { display: 'flex', flexDirection: 'column', gap: 10 },
-  statRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  statLabel: { fontSize: 13, color: '#64748b' },
-  statValue: { fontSize: 15, fontWeight: 700 },
-  list: { listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 },
+  cardTitle: { fontSize: 15, fontWeight: 700, marginBottom: 16, color: '#94a3b8' },
+  dl:   { display: 'flex', flexDirection: 'column', gap: 8 },
+  list: { listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 },
   listItem: {
     display: 'flex',
-    gap: 12,
     alignItems: 'center',
-    padding: '8px 0',
+    fontSize: 13,
+    padding: '6px 0',
     borderBottom: '1px solid #1e2540',
   },
+  statRow: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #1e2540' },
+  statLabel: { fontSize: 13, color: '#64748b' },
+  statValue: { fontSize: 13, fontWeight: 600 },
   muted: { color: '#475569', fontSize: 13 },
 };
