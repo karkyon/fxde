@@ -16,7 +16,7 @@
 import { Module }          from '@nestjs/common';
 import { ConfigModule }    from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { BullMQModule }    from '@nestjs/bullmq';
+import { BullModule  }    from '@nestjs/bullmq';
 import { PrismaModule }    from './prisma/prisma.module';
 import { AuthModule }      from './modules/auth/auth.module';
 import { UsersModule }     from './modules/users/users.module';
@@ -38,7 +38,7 @@ import { PredictionsModule } from './modules/predictions/predictions.module';
     // BullMQ ルート設定（全モジュール共通）
     // PredictionsModule の forFeature / prediction-dispatch キュー使用に必要
     // 参照: SPEC_v51_part4 §5.1 REDIS_URL 環境変数
-    BullMQModule.forRoot({
+    BullModule.forRoot({
       connection: {
         host: process.env.REDIS_HOST ?? 'localhost',
         port: parseInt(process.env.REDIS_PORT ?? '6379', 10),

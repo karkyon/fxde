@@ -48,7 +48,7 @@ export const STUB_PREDICTION_RESULT = {
 // ── PredictionScenario レスポンス型（Part3 §10 正本）─────────────────────────
 // サービス層で DB オブジェクト型 → 配列型に変換して返す
 // フロントは配列型のみ受け取る（DB shape と API shape を意図的に分離）
-interface PredictionScenario {
+export interface PredictionScenario {
   id:          'bull' | 'neutral' | 'bear';
   label:       string;
   probability: number;
