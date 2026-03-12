@@ -41,8 +41,7 @@ import { ChartModule }     from './modules/chart/chart.module';
     // 参照: SPEC_v51_part4 §5.1 REDIS_URL 環境変数
     BullModule.forRoot({
       connection: {
-        host: process.env.REDIS_HOST ?? 'localhost',
-        port: parseInt(process.env.REDIS_PORT ?? '6379', 10),
+        url: process.env.REDIS_URL ?? 'redis://localhost:6379',
       },
     }),
     PrismaModule,

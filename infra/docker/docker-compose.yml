@@ -32,7 +32,7 @@ services:
     image: redis:7-alpine
     container_name: fxde_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
     ports:
       - "6386:6379"
     volumes:
@@ -52,7 +52,7 @@ services:
   #     - "3000:3000"
   #   environment:
   #     DATABASE_URL: postgresql://fxde:fxde_password@postgres:5432/fxde_db
-  #     REDIS_HOST: redis
+  #     REDIS_URL: redis://redis:6379
   #     REDIS_PORT: 6379
   #   depends_on:
   #     postgres:

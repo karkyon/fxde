@@ -250,17 +250,80 @@ export default function ChartPage() {
                 fill="none" stroke={C.info} strokeWidth={1.5}
               />
             )}
-            {ovToggles.prediction && isPro && (
-              <>
-                <line x1="400" y1="0" x2="400" y2="480"
-                  stroke={C.prediction} strokeOpacity={0.4} strokeDasharray="4 4" />
-                <polyline
-                  points="400,200 500,185 600,170 700,158 800,145"
-                  fill="none" stroke={C.prediction} strokeWidth={2} strokeDasharray="6 3"
-                />
-                <text x="406" y="195" fill={C.prediction} fontSize={11}>Prediction path</text>
-              </>
-            )}
+            {ovToggles.prediction && isPro && (() => {
+              // prediction.data 未取得時のフォールバック
+              if (!prediction.data) {
+                return (
+                  <>
+                    <line x1="400" y1="0" x2="400" y2="480"
+                      stroke={C.prediction} strokeOpacity={0.25} strokeDasharray="4 4" />
+                    <text x="406" y="194" fill={C.prediction} fontSize={10} opacity={0.6}>
+                      {prediction.isLoading ? 'Prediction loading…' : 'No prediction data'}
+                    </text>
+                  </>
+                );
+              }
+
+              // prediction.data を使って動的にパスを計算
+              const cy    = 200;                                          // 現在価格の Y 座標
+              const x0    = 400;                                          // 現在位置の X 座標
+              const pips  = prediction.data.expectedMovePips;
+              const scale = Math.min(2.5, 100 / Math.max(pips, 1));      // 最大 100px にキャップ
+              const dy    = Math.round(pips * scale);                     // Bull: -dy / Bear: +dy
+
+              const bProb = prediction.data.probabilities.bullish;
+              const nProb = prediction.data.probabilities.neutral;
+              const rProb = prediction.data.probabilities.bearish;
+
+              // 曲線的に見えるよう4点で補間（polyline）
+              const pts = (offsetY: number) =>
+                `${x0},${cy} ${x0+100},${cy+offsetY*0.25} ${x0+200},${cy+offsetY*0.55} ${x0+300},${cy+offsetY*0.82} ${x0+400},${cy+offsetY}`;
+
+              return (
+                <>
+                  {/* 現在位置の縦線 */}
+                  <line x1={x0} y1="0" x2={x0} y2="480"
+                    stroke={C.prediction} strokeOpacity={0.35} strokeDasharray="4 4" />
+
+                  {/* Bull パス — 確率に応じて透明度変化 */}
+                  <polyline points={pts(-dy)} fill="none" stroke={C.bullish}
+                    strokeWidth={2} strokeDasharray="7 3"
+                    opacity={0.4 + bProb * 0.6} />
+
+                  {/* Neutral パス */}
+                  <polyline points={pts(0)} fill="none" stroke={C.neutral}
+                    strokeWidth={1.5} strokeDasharray="4 4"
+                    opacity={0.4 + nProb * 0.6} />
+
+                  {/* Bear パス */}
+                  <polyline points={pts(dy)} fill="none" stroke={C.bearish}
+                    strokeWidth={2} strokeDasharray="7 3"
+                    opacity={0.4 + rProb * 0.6} />
+
+                  {/* 右端の確率ラベル */}
+                  <text x="795" y={Math.max(14, cy - dy - 2)}
+                    fill={C.bullish} fontSize={10} textAnchor="end">
+                    ▲{Math.round(bProb * 100)}%
+                  </text>
+                  <text x="795" y={cy - 4}
+                    fill={C.neutral} fontSize={10} textAnchor="end">
+                    ─{Math.round(nProb * 100)}%
+                  </text>
+                  <text x="795" y={Math.min(470, cy + dy + 10)}
+                    fill={C.bearish} fontSize={10} textAnchor="end">
+                    ▼{Math.round(rProb * 100)}%
+                  </text>
+
+                  {/* 現在位置付近のシナリオラベル */}
+                  <text x="406" y={cy - 12} fill={C.prediction} fontSize={10}>
+                    {prediction.data.mainScenario}
+                  </text>
+                  <text x="406" y={cy - 2} fill={C.prediction} fontSize={9} opacity={0.7}>
+                    conf:{prediction.data.confidence} · {prediction.data.forecastHorizonH}h
+                  </text>
+                </>
+              );
+            })()}
             {ovToggles.pattern_labels && 
               (patterns.data?.markers ?? ([] as PatternMarker[])).slice(0, 3).map((m: PatternMarker, i: number) => (
               <g key={m.id}>
