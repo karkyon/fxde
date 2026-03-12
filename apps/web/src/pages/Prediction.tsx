@@ -27,10 +27,11 @@ import {
   useLatestPrediction,
 } from '../hooks/usePredictionJob';
 import type { PredictionScenario } from '../lib/api';
+import type { Timeframe } from '@fxde/types';
 
 // ── 定数 ─────────────────────────────────────────────────────────────────────
 const SYMBOLS = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'USDCHF', 'USDCAD', 'XAUUSD'];
-const TIMEFRAMES = ['M15', 'M30', 'H1', 'H4', 'H8', 'D1'];
+const TIMEFRAMES: Timeframe[] = ['M15', 'M30', 'H1', 'H4', 'H8', 'D1'];
 
 // TfWeight スライダー（v5.1 は UI 表示のみ / 保存 API は仕様外）
 const TF_WEIGHTS_DEFAULT = [
@@ -51,7 +52,7 @@ const SCENARIO_COLOR: Record<string, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function PredictionPage() {
   const [symbol,    setSymbol]    = useState('EURUSD');
-  const [timeframe, setTimeframe] = useState('H4');
+  const [timeframe, setTimeframe] = useState<Timeframe>('H4');
   const [jobId,     setJobId]     = useState<string | null>(null);
   const [tfWeights, setTfWeights] = useState(TF_WEIGHTS_DEFAULT);
 
@@ -122,7 +123,7 @@ export default function PredictionPage() {
 
             <div style={styles.formRow}>
               <label style={styles.label}>Timeframe</label>
-              <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} style={styles.select}>
+              <select value={timeframe} onChange={(e) => setTimeframe(e.target.value as Timeframe)} style={styles.select}>
                 {TIMEFRAMES.map((tf) => <option key={tf} value={tf}>{tf}</option>)}
               </select>
             </div>
