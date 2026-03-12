@@ -1,4 +1,10 @@
 // apps/api/src/modules/signals/signals.service.ts
+//
+// 変更内容:
+//   [Task2] findLatest() メソッド削除
+//           → GET /signals/latest は SPEC_v51_part10 §6.5 に存在しない
+//           → GetSignalsLatestQuery import も削除
+//
 import {
   Injectable,
   Logger,
@@ -6,7 +12,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import type { GetSignalsQuery, GetSignalsLatestQuery } from '@fxde/types';
+import type { GetSignalsQuery } from '@fxde/types';
 
 // Prisma include 定義（snapshot.id / scoreTotal / entryState のみ select）
 const SIGNAL_INCLUDE = {
@@ -27,6 +33,7 @@ export class SignalsService {
 
   // ─────────────────────────────────────────────
   // GET /signals  (一覧 + ページネーション)
+  // 参照: SPEC_v51_part10 §6.5（正本）
   // ─────────────────────────────────────────────
   async findAll(userId: string, query: GetSignalsQuery) {
     const pageNum  = Number(query.page  ?? 1);
@@ -79,36 +86,8 @@ export class SignalsService {
   }
 
   // ─────────────────────────────────────────────
-  // GET /signals/latest  (単一 / 404 あり)
-  // ─────────────────────────────────────────────
-  async findLatest(userId: string, query: GetSignalsLatestQuery) {
-    this.logger.debug(
-      `findLatest user=${userId} symbol=${query.symbol ?? '-'} ` +
-      `timeframe=${query.timeframe ?? '-'}`,
-    );
-
-    const where: Record<string, unknown> = { userId };
-    if (query.symbol)    where['symbol']    = query.symbol;
-    if (query.timeframe) where['timeframe'] = query.timeframe;
-
-    const signal = await this.prisma.signal.findFirst({
-      where,
-      include:  SIGNAL_INCLUDE,
-      orderBy:  { triggeredAt: 'desc' },
-    });
-
-    if (!signal) {
-      this.logger.debug('findLatest: Signal not found');
-      throw new NotFoundException('Signal not found');
-    }
-
-    this.logger.debug(`findLatest: found id=${signal.id}`);
-    return this.format(signal);
-  }
-
-  // ─────────────────────────────────────────────
   // POST /signals/:id/ack  (既読化)
-  // 参照: SPEC_v51_part3 §9 — POST 確定
+  // 参照: SPEC_v51_part10 §6.5（正本）
   // ─────────────────────────────────────────────
   async acknowledge(userId: string, id: string) {
     const signal = await this.prisma.signal.findUnique({
@@ -137,14 +116,18 @@ export class SignalsService {
   // Private helper: Prisma Signal → SignalResponse
   // ─────────────────────────────────────────────
   private format(signal: {
-    id: string;
-    symbol: string;
-    timeframe: string;
-    type: string;
-    triggeredAt: Date;
+    id:             string;
+    symbol:         string;
+    timeframe:      string;
+    type:           string;
+    triggeredAt:    Date;
     acknowledgedAt: Date | null;
-    metadata: unknown;
-    snapshot: { id: string; scoreTotal: number; entryState: string };
+    metadata:       unknown;
+    snapshot: {
+      id:         string;
+      scoreTotal: number;
+      entryState: string;
+    };
   }) {
     return {
       id:             signal.id,

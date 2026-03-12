@@ -1,20 +1,26 @@
 // apps/api/src/modules/signals/signals.controller.ts
+//
+// 変更内容:
+//   [Task1] Patch import 削除（@Patch デコレータは未使用だったため）
+//   [Task2] GET /signals/latest エンドポイント削除
+//           → SPEC_v51_part10 §6.5 正本に存在しない
+//           → findLatest() メソッド / @Get('latest') / GetLatestSignalQueryDto import をすべて削除
+//
 import {
   Controller,
   Get,
   Post,
-  Patch,
   Param,
   Query,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { SignalsService }              from './signals.service';
-import { GetSignalsQueryDto, GetLatestSignalQueryDto } from './dto/signals.dto';
-import { JwtAuthGuard }               from '../../common/guards/jwt-auth.guard';
-import { CurrentUser }                from '../../common/decorators/current-user.decorator';
-import type { JwtPayload }            from '../../common/decorators/current-user.decorator';
+import { SignalsService }     from './signals.service';
+import { GetSignalsQueryDto } from './dto/signals.dto';
+import { JwtAuthGuard }       from '../../common/guards/jwt-auth.guard';
+import { CurrentUser }        from '../../common/decorators/current-user.decorator';
+import type { JwtPayload }    from '../../common/decorators/current-user.decorator';
 
 @Controller('signals')
 @UseGuards(JwtAuthGuard)
@@ -23,8 +29,8 @@ export class SignalsController {
 
   /**
    * GET /api/v1/signals
-   * Signals 一覧取得（pagination）
-   * 参照: SPEC_v51_part3 §9
+   * シグナル一覧取得（ページネーション・フィルター）
+   * 参照: SPEC_v51_part10 §6.5（正本）
    */
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -36,27 +42,11 @@ export class SignalsController {
   }
 
   /**
-   * GET /api/v1/signals/latest
-   * 最新 Signal 取得（データ無し → 404）
-   * 参照: SPEC_v51_part3 §9
-   *
-   * ⚠️ NestJS のルーティング競合回避のため :id より前に定義すること
-   */
-  @Get('latest')
-  @HttpCode(HttpStatus.OK)
-  findLatest(
-    @CurrentUser() user: JwtPayload,
-    @Query() query: GetLatestSignalQueryDto,
-  ) {
-    return this.signalsService.findLatest(user.sub, query);
-  }
-
-  /**
    * POST /api/v1/signals/:id/ack
    * シグナル確認済み登録（acknowledgedAt を現在時刻にセット）
-   * 参照: SPEC_v51_part3 §9 — POST メソッド確定
+   * 参照: SPEC_v51_part10 §6.5（正本）
    */
-  @Post(':id/ack')            // ← @Patch → @Post
+  @Post(':id/ack')
   @HttpCode(HttpStatus.OK)
   acknowledge(
     @CurrentUser() user: JwtPayload,

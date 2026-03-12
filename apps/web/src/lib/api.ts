@@ -1,20 +1,14 @@
+// apps/web/src/lib/api.ts
+//
+// 変更内容:
+//   [Task3] signalsApi.latest 削除
+//           → GET /signals/latest は SPEC_v51_part10 §6.5 に存在しない
+//           → フロント側の使用箇所なし（queries.ts の useLatestSignals は list({limit:5}) を使用済み）
+//
 /**
- * apps/web/src/lib/api.ts
- *
- * 変更理由:
- *   独自型定義 (apps/web/src/types/index.ts) から @fxde/types へ一本化。
- *   signalsApi.latest() を Signal 単体返却に修正（backend findLatest と一致）。
- *   Settings/Trade フィールドを仕様準拠フィールド名に統一。
- *
- * 【今回修正】
- *   - ApiPaginatedResponse<T> ローカル定義を削除
- *   - @fxde/types の PaginatedResponse<T> { data, total, page, limit } に統一
- *   - PaginatedResponse を @fxde/types から import
- *   参照: SPEC_v51_part3 §2「共通型定義」packages/types/src/api.ts
- *
  * 参照仕様:
  *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）
- *   監査レポート A-1, A-2, B-1
+ *   SPEC_v51_part10 §6.5（signals API 正本）
  */
 
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
@@ -39,9 +33,6 @@ import type {
 } from '@fxde/types';
 
 // ── ローカル補完型 ──────────────────────────────────────────────────────────
-// 下記型は backend の返却形式に合わせた補完定義。
-// packages/types/src/index.ts への移動は今後のリファクタで対応する。
-
 /** バックエンド trades.service.ts getReview 返却形式 */
 export interface TradeReviewResponse {
   id: string;
@@ -55,9 +46,6 @@ export interface TradeReviewResponse {
 }
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
-// PaginatedResponse<T> は @fxde/types から import 済み。
-// PaginationParams は api.ts 内のクエリパラメータ構築用ローカル型として残す。
-// （@fxde/types の PaginationQuery と同一形状）
 export interface PaginationParams {
   page?: number;
   limit?: number;
@@ -76,7 +64,7 @@ const api: AxiosInstance = axios.create({
 });
 
 // ── メモリトークン管理 ─────────────────────────────────────────────────────
-// localStorage 保存禁止（SPEC_v51_part5 §9.6 セキュリティ要件）
+// localStorage 保存禁止（SPEC_v51_part4 セキュリティ要件）
 let memoryToken: string | null = null;
 
 export function getAccessToken(): string | null { return memoryToken; }
@@ -164,7 +152,6 @@ export const authApi = {
 };
 
 // ── Users API ─────────────────────────────────────────────────────────────
-// 注意: UserDto に 'name' フィールドはない（SPEC_v51_part3 §4）
 export const userApi = {
   me:     () => api.get<UserDto>('/users/me').then((r) => r.data),
   update: (body: { password?: string }) =>
@@ -229,15 +216,15 @@ export const snapshotsApi = {
 };
 
 // ── Signals API ───────────────────────────────────────────────────────────
-// ⚠️ /signals/latest は【単一 SignalResponse】を返す。
-//    旧実装が Signal[] として扱っていたのは誤り（監査レポート A-2）。
-//    backend findLatest() は prisma.signal.findFirst() → 1 件返却のみ。
-// 参照: SPEC_v51_part3 §9
+// 参照: SPEC_v51_part10 §6.5（正本）
+// エンドポイント:
+//   GET  /signals        → 一覧（ページネーション・フィルター）
+//   POST /signals/:id/ack → 確認済み登録
+// ⚠️ /signals/latest は SPEC_v51_part10 §6.5 に存在しないため削除
+//    Dashboard の最新シグナル表示は list({ limit: 5 }) で代替
 export const signalsApi = {
-  list:   (params?: PaginationParams & { symbol?: string }) =>
+  list: (params?: PaginationParams & { symbol?: string }) =>
     api.get<PaginatedResponse<SignalResponse>>('/signals', { params }).then((r) => r.data),
-  latest: (params?: { symbol?: string }) =>
-    api.get<SignalResponse>('/signals/latest', { params }).then((r) => r.data),
-  ack:    (id: string) =>
+  ack:  (id: string) =>
     api.post<SignalResponse>(`/signals/${id}/ack`).then((r) => r.data),
 };

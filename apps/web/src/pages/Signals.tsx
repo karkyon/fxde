@@ -1,12 +1,12 @@
-/**
- * apps/web/src/pages/Signals.tsx
- *
- * 修正内容:
- *   - Signal 独自型を削除 → SignalResponse (../lib/api) に変更
- *   - EntryState は SignalResponse に存在しないため TYPE_COLOR に変更
- *   - signal.entryState → signal.type
- */
-
+// apps/web/src/pages/Signals.tsx
+//
+// 変更内容:
+//   [Task4] SignalCard に以下の表示を追加（SignalResponse 型に存在するフィールド）
+//           - signal.symbol      ← 未表示だったため追加
+//           - signal.timeframe   ← 未表示だったため追加
+//           - signal.snapshot.scoreTotal  ← 未表示だったため追加（スコア帯カラー付き）
+//           - signal.snapshot.entryState  ← 未表示だったため追加
+//
 import { useState } from 'react';
 import { useSignals } from '../hooks/queries';
 import type { SignalResponse } from '@fxde/types';
@@ -20,6 +20,22 @@ const TYPE_COLOR: Record<string, { bg: string; text: string }> = {
   COOLDOWN:         { bg: 'rgba(167,139,250,0.12)', text: '#a78bfa' },
   PATTERN_DETECTED: { bg: 'rgba(96,165,250,0.12)',  text: '#60a5fa' },
 };
+
+// EntryState ごとの配色
+const ENTRY_STATE_COLOR: Record<string, string> = {
+  OK:         '#34d399',
+  SCORE_LOW:  '#fbbf24',
+  RISK_NG:    '#f87171',
+  LOCKED:     '#94a3b8',
+  COOLDOWN:   '#a78bfa',
+};
+
+// scoreTotal → カラー
+function scoreColor(score: number): string {
+  if (score >= 75) return '#34d399'; // high
+  if (score >= 50) return '#fbbf24'; // mid
+  return '#f87171';                  // low
+}
 
 export default function SignalsPage() {
   const [page, setPage] = useState(1);
@@ -78,16 +94,14 @@ function SignalCard({ signal }: { signal: SignalResponse }) {
 
   return (
     <div style={{ ...styles.card, borderLeft: `3px solid ${colors.text}` }}>
+
+      {/* ── Row 1: type badge / symbol / timeframe / 未確認 / 日時 ── */}
       <div style={styles.cardHeader}>
-        <span
-          style={{
-            ...styles.typeBadge,
-            backgroundColor: colors.bg,
-            color: colors.text,
-          }}
-        >
+        <span style={{ ...styles.typeBadge, backgroundColor: colors.bg, color: colors.text }}>
           {signal.type}
         </span>
+        <span style={styles.symbolBadge}>{signal.symbol}</span>
+        <span style={styles.timeframeBadge}>{signal.timeframe}</span>
         {signal.acknowledgedAt == null && (
           <span style={styles.unackBadge}>未確認</span>
         )}
@@ -96,32 +110,47 @@ function SignalCard({ signal }: { signal: SignalResponse }) {
         </span>
       </div>
 
+      {/* ── Row 2: snapshot.scoreTotal / snapshot.entryState / 確認日時 ── */}
       <div style={styles.cardBody}>
-        <span style={styles.metaItem}>ID: {signal.id.slice(0, 8)}...</span>
+        <span style={styles.metaItem}>
+          Score:{' '}
+          <strong style={{ color: scoreColor(signal.snapshot.scoreTotal) }}>
+            {signal.snapshot.scoreTotal}
+          </strong>
+        </span>
+        <span style={styles.metaItem}>
+          State:{' '}
+          <strong style={{ color: ENTRY_STATE_COLOR[signal.snapshot.entryState] ?? '#94a3b8' }}>
+            {signal.snapshot.entryState}
+          </strong>
+        </span>
         {signal.acknowledgedAt && (
           <span style={styles.metaItem}>
             確認: {new Date(signal.acknowledgedAt).toLocaleString('ja-JP')}
           </span>
         )}
       </div>
+
     </div>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
-  title:      { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
-  list:       { display: 'flex', flexDirection: 'column', gap: 10 },
-  card:       { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 18px' },
-  cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 },
-  cardBody:   { display: 'flex', gap: 16 },
-  typeBadge:  { fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: 0.5 },
-  unackBadge: { fontSize: 11, color: '#fbbf24', border: '1px solid #78350f', borderRadius: 4, padding: '2px 8px' },
-  time:       { fontSize: 12, color: '#64748b', marginLeft: 'auto' },
-  metaItem:   { fontSize: 12, color: '#475569' },
-  pagination: { display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 },
-  pageBtn:    { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
-  pageInfo:   { color: '#64748b', fontSize: 13 },
-  muted:      { color: '#475569', fontSize: 13 },
-  errText:    { color: '#f87171', fontSize: 13 },
+  title:         { fontSize: 22, fontWeight: 700, marginBottom: 24, color: '#f1f5f9' },
+  list:          { display: 'flex', flexDirection: 'column', gap: 10 },
+  card:          { backgroundColor: '#1a1d27', border: '1px solid #2d3148', borderRadius: 8, padding: '14px 18px' },
+  cardHeader:    { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  cardBody:      { display: 'flex', gap: 16, flexWrap: 'wrap' },
+  typeBadge:     { fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 20, letterSpacing: 0.5 },
+  symbolBadge:   { fontSize: 12, fontWeight: 700, color: '#60a5fa', padding: '2px 8px', backgroundColor: 'rgba(96,165,250,0.1)', borderRadius: 4 },
+  timeframeBadge:{ fontSize: 11, color: '#94a3b8', padding: '2px 6px', border: '1px solid #334155', borderRadius: 4 },
+  unackBadge:    { fontSize: 11, color: '#fbbf24', border: '1px solid #78350f', borderRadius: 4, padding: '2px 8px' },
+  time:          { fontSize: 12, color: '#64748b', marginLeft: 'auto' },
+  metaItem:      { fontSize: 12, color: '#475569' },
+  pagination:    { display: 'flex', alignItems: 'center', gap: 16, marginTop: 20 },
+  pageBtn:       { padding: '6px 14px', backgroundColor: '#1e293b', color: '#94a3b8', border: '1px solid #334155', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
+  pageInfo:      { color: '#64748b', fontSize: 13 },
+  muted:         { color: '#475569', fontSize: 13 },
+  errText:       { color: '#f87171', fontSize: 13 },
 };
