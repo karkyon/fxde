@@ -432,3 +432,32 @@ export const chartApi = {
   predictionOverlay: (params: { symbol: string; timeframe: Timeframe }): Promise<ChartPredictionOverlayResponse> =>
     api.get<ChartPredictionOverlayResponse>('/chart/prediction-overlay', { params }).then((r) => r.data),
 };
+
+// ── AI Summary API ───────────────────────────────────────────────────────────
+// 参照: SPEC_v51_part3 §14 / SPEC_v51_part10 §6.7
+
+export interface AiSummaryResponse {
+  id:             string | null;
+  symbol:         string;
+  timeframe:      string;
+  summary:        string;
+  generatedAt:    string | null;
+  snapshotId:     string | null;
+  remainingToday: number | null; // null = 無制限（PRO | PRO_PLUS | ADMIN）
+}
+
+export const aiSummaryApi = {
+  /**
+   * POST /api/v1/ai-summary
+   * AI マーケットサマリー生成
+   */
+  generate: (body: { symbol: string; timeframe: string; snapshotId?: string }) =>
+    api.post<AiSummaryResponse>('/ai-summary', body).then((r) => r.data),
+
+  /**
+   * GET /api/v1/ai-summary/latest
+   * 最新 AI サマリー取得
+   */
+  latest: (params: { symbol: string; timeframe: string }) =>
+    api.get<AiSummaryResponse>('/ai-summary/latest', { params }).then((r) => r.data),
+};

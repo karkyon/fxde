@@ -27,6 +27,7 @@ import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SignalsModule }    from './modules/signals/signals.module';
 import { PredictionsModule } from './modules/predictions/predictions.module';
 import { ChartModule }     from './modules/chart/chart.module';
+import { AiSummaryModule } from './ai-summary/ai-summary.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { ChartModule }     from './modules/chart/chart.module';
     SignalsModule,
     PredictionsModule,
     ChartModule,
+    AiSummaryModule,
   ],
 })
 export class AppModule {}

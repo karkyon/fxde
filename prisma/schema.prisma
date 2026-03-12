@@ -122,6 +122,7 @@ model User {
   auditLogs         AuditLog[]
   patternDetections PatternDetection[]
   chartSnapshots    ChartSnapshot[]
+  aiSummaries       AiSummary[]
 
   @@map("users")
 }
@@ -419,6 +420,25 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
   @@map("audit_logs")
+}
+
+// ============================================================
+// AI 要約（SPEC_v51_part4 §6）
+// ============================================================
+
+model AiSummary {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  symbol    String
+  text      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, symbol])
+  @@index([userId, createdAt])
+  @@map("ai_summaries")
 }
 
 // ============================================================

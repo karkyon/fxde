@@ -12,6 +12,7 @@ import { useTrades }         from '../hooks/useTrades';
 import { useLatestSignals }  from '../hooks/useSignals';
 import type { TradeDto } from '@fxde/types';
 import type { SignalResponse } from '@fxde/types';
+import AiSummaryBox from '../components/dashboard/AiSummaryBox';
 
 export default function DashboardPage() {
   const snapshot = useLatestSnapshot();
@@ -79,6 +80,15 @@ export default function DashboardPage() {
           </ul>
         </section>
       </div>
+      {/* ── AI Summary ── */}
+      {snapshot.data && (
+        <div style={{ marginTop: 16 }}>
+          <AiSummaryBox
+            symbol={snapshot.data.symbol}
+            timeframe={snapshot.data.timeframe}
+          />
+        </div>
+      )}
     </div>
   );
 }

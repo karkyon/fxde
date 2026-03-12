@@ -44,7 +44,7 @@ export class PredictionDispatchProcessor extends WorkerHost {
 
   constructor(
     private readonly db:     PrismaService,
-    private readonly worker: PredictionWorker,
+    private readonly predictionRunner: PredictionWorker,
   ) {
     super();
   }
@@ -70,7 +70,7 @@ export class PredictionDispatchProcessor extends WorkerHost {
     try {
       // ステップ 2: PredictionWorker に処理を委譲
       // フロー: loadMtfCandles → generateFeatures → runInference → saveResult
-      await this.worker.runJob(jobId);
+      await this.predictionRunner.runJob(jobId);
 
       // ステップ 3: SUCCEEDED に更新
       await this.db.predictionJob.update({
