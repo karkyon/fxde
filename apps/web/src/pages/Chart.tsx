@@ -62,6 +62,104 @@ const C = {
   label:      '#94a3b8',
 };
 
+interface RawCandle {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+ 
+function CandleChart({
+  candles,
+  width  = 800,
+  height = 430,
+}: {
+  candles: RawCandle[];
+  width?:  number;
+  height?: number;
+}) {
+  if (candles.length === 0) return null;
+ 
+  const PAD_L = 8, PAD_R = 52, PAD_T = 10, PAD_B = 24;
+  const cW = width  - PAD_L - PAD_R;
+  const cH = height - PAD_T  - PAD_B;
+ 
+  const maxP = Math.max(...candles.map((c) => c.high));
+  const minP = Math.min(...candles.map((c) => c.low));
+  const range = maxP - minP || 0.0001;
+ 
+  const toY = (p: number) => PAD_T + cH - ((p - minP) / range) * cH;
+  const slot  = cW / candles.length;
+  const bodyW = Math.max(1, slot * 0.65);
+  const toX   = (i: number) => PAD_L + i * slot + slot / 2;
+ 
+  const gridLines = Array.from({ length: 5 }, (_, i) => {
+    const price = minP + (range * i) / 4;
+    return { y: toY(price), price };
+  });
+ 
+  const maxLabels = Math.min(8, candles.length);
+  const labelStep = Math.max(1, Math.floor(candles.length / maxLabels));
+ 
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: '100%', height: '100%' }}>
+      {/* グリッドライン */}
+      {gridLines.map(({ y, price }) => (
+        <g key={price.toFixed(6)}>
+          <line
+            x1={PAD_L} y1={y} x2={PAD_L + cW} y2={y}
+            stroke="#2d3748" strokeOpacity={0.6} strokeDasharray="3 3"
+          />
+          <text
+            x={PAD_L + cW + 4} y={y + 3.5}
+            fill="#64748b" fontSize={9} fontFamily="monospace"
+          >
+            {price.toFixed(4)}
+          </text>
+        </g>
+      ))}
+ 
+      {/* ローソク足 */}
+      {candles.map((c, i) => {
+        const isUp  = c.close >= c.open;
+        const col   = isUp ? '#2EC96A' : '#E05252';
+        const x     = toX(i);
+        const topY  = toY(Math.max(c.open, c.close));
+        const botY  = toY(Math.min(c.open, c.close));
+        const bodyH = Math.max(1, botY - topY);
+        return (
+          <g key={c.time}>
+            <line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={col} strokeWidth={1} />
+            <rect
+              x={x - bodyW / 2} y={topY}
+              width={bodyW} height={bodyH}
+              fill={col} opacity={0.85}
+            />
+          </g>
+        );
+      })}
+ 
+      {/* 時刻ラベル */}
+      {candles.map((c, i) => {
+        if (i % labelStep !== 0) return null;
+        const d = new Date(c.time);
+        const label = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        return (
+          <text
+            key={c.time}
+            x={toX(i)} y={height - 4}
+            fill="#64748b" fontSize={8} fontFamily="monospace" textAnchor="middle"
+          >
+            {label}
+          </text>
+        );
+      })}
+    </svg>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ChartPage() {
   const user     = useAuthStore((s) => s.user);
@@ -224,131 +322,64 @@ export default function ChartPage() {
         <h2 style={s.cardTitle}>Main Chart</h2>
         {/* placeholder — v6 で Lightweight Charts 実装 */}
         <div style={s.mainChartPlaceholder}>
-          <svg viewBox="0 0 800 480" style={{ width: '100%', height: '100%' }}>
-            {/* placeholder ローソク足グリッド */}
-            {[80, 160, 240, 320, 400].map((y) => (
-              <line key={y} x1="0" y1={y} x2="800" y2={y}
-                stroke="#2d3748" strokeOpacity={0.5} />
-            ))}
-            {/* overlay ラベル群（SPEC_v51_part10 §10.7 準拠） */}
-            {ovToggles.entry_sl_tp && (
+ 
+          {/* ロード中 */}
+          {candles.isLoading && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: '#64748b', fontSize: 13,
+            }}>
+              📡 ローソク足を読み込み中...
+            </div>
+          )}
+ 
+          {/* エラー */}
+          {candles.isError && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 8, color: '#E05252',
+            }}>
+              <span style={{ fontSize: 24 }}>⚠️</span>
+              <span style={{ fontSize: 13 }}>データ取得エラー</span>
+            </div>
+          )}
+ 
+          {/* データなし */}
+          {!candles.isLoading && !candles.isError && (candles.data?.candles.length ?? 0) === 0 && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexDirection: 'column', gap: 8, color: '#64748b',
+            }}>
+              <span style={{ fontSize: 24 }}>📭</span>
+              <span style={{ fontSize: 13 }}>
+                市場データなし — seed未実行 または OANDA未接続
+              </span>
+            </div>
+          )}
+ 
+          {/* ローソク足描画（データあり） */}
+          {(candles.data?.candles.length ?? 0) > 0 && (
+            <CandleChart candles={candles.data!.candles} width={800} height={430} />
+          )}
+ 
+        </div>
+ 
+        <div style={s.lowerPane}>
+          <span style={s.muted}>
+            Candles: {candles.data?.candles.length ?? 0} bars
+            {candles.data && candles.data.candles.length > 0 && (
               <>
-                <line x1="0" y1="200" x2="800" y2="200"
-                  stroke={C.bullish} strokeWidth={2} />
-                <text x="8" y="196" fill={C.bullish} fontSize={12} fontWeight={700}>Entry</text>
-                <line x1="0" y1="280" x2="800" y2="280"
-                  stroke={C.bearish} strokeWidth={1.5} strokeDasharray="6 3" />
-                <text x="8" y="276" fill={C.bearish} fontSize={12} fontWeight={700}>SL</text>
-                <line x1="0" y1="130" x2="800" y2="130"
-                  stroke={C.info} strokeWidth={1.5} strokeDasharray="6 3" />
-                <text x="8" y="126" fill={C.info} fontSize={12} fontWeight={700}>TP</text>
+                {' '}— 最終:{' '}
+                {new Date(
+                  candles.data.candles[candles.data.candles.length - 1].time,
+                ).toLocaleString('ja-JP')}
               </>
             )}
-            {indToggles.MA && (
-              <polyline
-                points="0,220 100,215 200,210 300,205 400,200 500,195 600,190 700,188 800,185"
-                fill="none" stroke={C.info} strokeWidth={1.5}
-              />
-            )}
-            {ovToggles.prediction && isPro && (() => {
-              // prediction.data 未取得時のフォールバック
-              if (!prediction.data) {
-                return (
-                  <>
-                    <line x1="400" y1="0" x2="400" y2="480"
-                      stroke={C.prediction} strokeOpacity={0.25} strokeDasharray="4 4" />
-                    <text x="406" y="194" fill={C.prediction} fontSize={10} opacity={0.6}>
-                      {prediction.isLoading ? 'Prediction loading…' : 'No prediction data'}
-                    </text>
-                  </>
-                );
-              }
-
-              // prediction.data を使って動的にパスを計算
-              const cy    = 200;                                          // 現在価格の Y 座標
-              const x0    = 400;                                          // 現在位置の X 座標
-              const pips  = prediction.data.expectedMovePips;
-              const scale = Math.min(2.5, 100 / Math.max(pips, 1));      // 最大 100px にキャップ
-              const dy    = Math.round(pips * scale);                     // Bull: -dy / Bear: +dy
-
-              const bProb = prediction.data.probabilities.bullish;
-              const nProb = prediction.data.probabilities.neutral;
-              const rProb = prediction.data.probabilities.bearish;
-
-              // 曲線的に見えるよう4点で補間（polyline）
-              const pts = (offsetY: number) =>
-                `${x0},${cy} ${x0+100},${cy+offsetY*0.25} ${x0+200},${cy+offsetY*0.55} ${x0+300},${cy+offsetY*0.82} ${x0+400},${cy+offsetY}`;
-
-              return (
-                <>
-                  {/* 現在位置の縦線 */}
-                  <line x1={x0} y1="0" x2={x0} y2="480"
-                    stroke={C.prediction} strokeOpacity={0.35} strokeDasharray="4 4" />
-
-                  {/* Bull パス — 確率に応じて透明度変化 */}
-                  <polyline points={pts(-dy)} fill="none" stroke={C.bullish}
-                    strokeWidth={2} strokeDasharray="7 3"
-                    opacity={0.4 + bProb * 0.6} />
-
-                  {/* Neutral パス */}
-                  <polyline points={pts(0)} fill="none" stroke={C.neutral}
-                    strokeWidth={1.5} strokeDasharray="4 4"
-                    opacity={0.4 + nProb * 0.6} />
-
-                  {/* Bear パス */}
-                  <polyline points={pts(dy)} fill="none" stroke={C.bearish}
-                    strokeWidth={2} strokeDasharray="7 3"
-                    opacity={0.4 + rProb * 0.6} />
-
-                  {/* 右端の確率ラベル */}
-                  <text x="795" y={Math.max(14, cy - dy - 2)}
-                    fill={C.bullish} fontSize={10} textAnchor="end">
-                    ▲{Math.round(bProb * 100)}%
-                  </text>
-                  <text x="795" y={cy - 4}
-                    fill={C.neutral} fontSize={10} textAnchor="end">
-                    ─{Math.round(nProb * 100)}%
-                  </text>
-                  <text x="795" y={Math.min(470, cy + dy + 10)}
-                    fill={C.bearish} fontSize={10} textAnchor="end">
-                    ▼{Math.round(rProb * 100)}%
-                  </text>
-
-                  {/* 現在位置付近のシナリオラベル */}
-                  <text x="406" y={cy - 12} fill={C.prediction} fontSize={10}>
-                    {prediction.data.mainScenario}
-                  </text>
-                  <text x="406" y={cy - 2} fill={C.prediction} fontSize={9} opacity={0.7}>
-                    conf:{prediction.data.confidence} · {prediction.data.forecastHorizonH}h
-                  </text>
-                </>
-              );
-            })()}
-            {ovToggles.pattern_labels && 
-              (patterns.data?.markers ?? ([] as PatternMarker[])).slice(0, 3).map((m: PatternMarker, i: number) => (
-              <g key={m.id}>
-                <circle cx={100 + i * 200} cy={200} r={6}
-                  fill={m.direction === 'bullish' ? C.bullish : m.direction === 'bearish' ? C.bearish : C.neutral} />
-                <text x={108 + i * 200} y={204} fill="#94a3b8" fontSize={10}>{m.label}</text>
-              </g>
-            ))}
-            {/* placeholder テキスト */}
-            <text x="400" y="440" textAnchor="middle" fill="#334155" fontSize={14}>
-              Main Chart Placeholder — v6 で Lightweight Charts を実装
-            </text>
-          </svg>
-          {/* Lower Indicator Pane Placeholder */}
-          <div style={s.lowerPane}>
-            <span style={{ color: C.muted, fontSize: 12 }}>Lower Indicator Pane Placeholder</span>
-          </div>
+          </span>
         </div>
-        {/* candles 件数表示 */}
-        {candles.data && (
-          <p style={{ ...s.muted, fontSize: 11, marginTop: 4 }}>
-            Candles: {candles.data.candles.length} bars
-            {candles.data.cachedAt && ` · cached ${new Date(candles.data.cachedAt).toLocaleTimeString('ja-JP')}`}
-          </p>
-        )}
       </section>
 
       {/* ══════════════════════════════════════════

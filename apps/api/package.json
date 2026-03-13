@@ -13,7 +13,8 @@
     "test:cov": "jest --coverage",
     "prisma:generate": "prisma generate --schema=../../prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema=../../prisma/schema.prisma",
-    "prisma:seed": "ts-node ../../prisma/seed.ts"
+    "prisma:seed": "ts-node ../../prisma/seed.ts",
+    "seed:candles": "tsx ../../prisma/seed-candles.ts"
   },
   "dependencies": {
     "@fxde/config": "workspace:*",
