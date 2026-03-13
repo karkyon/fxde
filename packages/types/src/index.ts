@@ -11,6 +11,10 @@
  *     正本は packages/types/src/api.ts の PaginatedResponse { data, total, page, limit }
  *   - export * from './api' を追加（PaginationQuery / PaginatedResponse を外部公開）
  *   参照: SPEC_v51_part3 §2「共通型定義」
+ *   - SymbolWithSettingDto を追加（round8-reaudit P1）
+ *     GET /api/v1/symbols の「システム定義 + ユーザー設定マージ」レスポンス型
+ *   - EquityCurveResponse / TradeSummaryResponse を追加（round8-reaudit P2）
+ *     apps/web/src/lib/api.ts のローカル定義を packages/types 正本へ寄せる
  */
 
 // ══════════════════════════════════════════
@@ -389,6 +393,25 @@ export interface SnapshotResponse {
   createdAt: string
 }
 
+// ── Symbol ────────────────────────────────
+
+/**
+ * GET /api/v1/symbols レスポンス要素
+ * システム定義通貨ペア + ユーザー個別設定のマージ結果
+ * SymbolSetting が未作成のペアは既定値で補完される。
+ * 参照: SPEC_v51_part3 §6
+ */
+export interface SymbolWithSettingDto {
+  symbol:           string
+  pipSize:          number
+  /** ユーザーがこのペアを有効化しているか（SymbolSetting 未作成時は true）*/
+  enabled:          boolean
+  /** ユーザーのデフォルト時間足（SymbolSetting 未作成時は 'H4'）*/
+  defaultTimeframe: Timeframe
+  /** ユーザーのカスタムエントリー閾値（null = UserSetting の scoreThreshold を使用）*/
+  customThreshold:  number | null
+}
+
 // ── Signal ────────────────────────────────
 // 参照: SPEC_v51_part3 §9
 
@@ -452,6 +475,39 @@ export interface CreatePredictionJobDto {
   timeframe: Timeframe
 }
 
+// ── Analytics / Trades 集計系 ─────────────────────────────────────────────
+// 参照: SPEC_v51_part3 §11 集計 API
+
+/**
+ * GET /api/v1/trades/equity-curve?period=1M|3M|1Y
+ * apps/web/src/lib/api.ts のローカル定義を正本に寄せた。
+ */
+export interface EquityCurveResponse {
+  labels:         string[]
+  balance:        number[]
+  drawdown:       number[]
+  startBalance:   number
+  currentBalance: number
+  totalPnl:       number
+  totalReturnPct: number
+  mdd:            number
+  cachedAt:       string  // キャッシュ値の場合に UI でバッジ表示
+}
+
+/**
+ * GET /api/v1/trades/stats/summary
+ * apps/web/src/lib/api.ts のローカル定義を正本に寄せた。
+ */
+export interface TradeSummaryResponse {
+  period:         string          // "2025-03"
+  totalPnl:       number
+  winRate:        number
+  tradeCount:     number
+  maxDd:          number
+  disciplineRate: number
+  warningMessage: string | null   // 規律違反多時に表示
+}
+
 // ══════════════════════════════════════════
 // 定数
 // ══════════════════════════════════════════
@@ -464,11 +520,11 @@ export const DEFAULT_SYMBOLS = [...FX_SYMBOLS, ...CRYPTO_SYMBOLS] as const
 
 // プラン別制限
 export const PLAN_LIMITS: Record<UserRole, { maxSymbols: number; maxSnapshotsPerDay: number; aiSummaryPerDay: number }> = {
-  FREE:     { maxSymbols: 1,  maxSnapshotsPerDay: 20,         aiSummaryPerDay: 0  },
-  BASIC:    { maxSymbols: 4,  maxSnapshotsPerDay: Infinity,   aiSummaryPerDay: 3  },
-  PRO:      { maxSymbols: 8,  maxSnapshotsPerDay: Infinity,   aiSummaryPerDay: Infinity },
-  PRO_PLUS: { maxSymbols: 8,  maxSnapshotsPerDay: Infinity,   aiSummaryPerDay: Infinity },
-  ADMIN:    { maxSymbols: 999, maxSnapshotsPerDay: Infinity,  aiSummaryPerDay: Infinity },
+  FREE:     { maxSymbols: 1,   maxSnapshotsPerDay: 20,       aiSummaryPerDay: 0        },
+  BASIC:    { maxSymbols: 4,   maxSnapshotsPerDay: Infinity, aiSummaryPerDay: 3        },
+  PRO:      { maxSymbols: 8,   maxSnapshotsPerDay: Infinity, aiSummaryPerDay: Infinity },
+  PRO_PLUS: { maxSymbols: 8,   maxSnapshotsPerDay: Infinity, aiSummaryPerDay: Infinity },
+  ADMIN:    { maxSymbols: 999, maxSnapshotsPerDay: Infinity, aiSummaryPerDay: Infinity },
 }
 
 // ══════════════════════════════════════════

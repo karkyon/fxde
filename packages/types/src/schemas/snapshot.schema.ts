@@ -21,11 +21,11 @@ export type EntryState = z.infer<typeof EntryStateSchema>;
 // ── Snapshot sub-structures ────────────────────────────────────────────────
 
 export const ScoreBreakdownSchema = z.object({
-  technical:      z.number(),
-  fundamental:    z.number(),
-  market:         z.number(),
-  rr:             z.number(),
-  patternBonus:   z.number(),
+  technical:    z.number(),
+  fundamental:  z.number(),
+  market:       z.number(),
+  rr:           z.number(),
+  patternBonus: z.number(),
 });
 
 export const MaSchema = z.object({
@@ -84,55 +84,57 @@ export const MtfAlignmentItemSchema = z.object({
 export const MtfAlignmentSchema = z.record(MtfAlignmentItemSchema);
 
 export const EntryContextSchema = z.object({
-  rr:             z.number(),
-  lotSize:        z.number(),
-  isEventWindow:  z.boolean(),
-  isCooldown:     z.boolean(),
-  forceLock:      z.boolean(),
+  rr:            z.number(),
+  lotSize:       z.number(),
+  isEventWindow: z.boolean(),
+  isCooldown:    z.boolean(),
+  forceLock:     z.boolean(),
 });
 
-// ── Capture DTO schema ─────────────────────────────────────────────────────
+// ── GET /snapshots クエリ ──────────────────────────────────────────────────
 
-/**
- * POST /api/v1/snapshots/capture リクエストボディ
- * 参照: SPEC_v51_part3 §7
- */
-export const CaptureSnapshotSchema = z.object({
-  /** 通貨ペア（例: "EURUSD"）*/
-  symbol:    z.string().min(1),
-  /** 時間足 */
-  timeframe: TimeframeSchema,
-  /**
-   * 省略時はコネクタから最新データを取得。
-   * 指定時はそのデータで計算（バックテスト用途）。
-   */
-  asOf:      z.string().datetime({ offset: true }).optional(),
-});
-export type CaptureSnapshotDto = z.infer<typeof CaptureSnapshotSchema>;
-
-// ── Query schemas ──────────────────────────────────────────────────────────
-
-/**
- * GET /snapshots クエリパラメータ
- * page / limit / symbol / timeframe / entryState / from / to
- */
 export const GetSnapshotsQuerySchema = z.object({
-  page:       z.coerce.number().int().min(1).default(1),
-  limit:      z.coerce.number().int().min(1).max(100).default(20),
   symbol:     z.string().optional(),
   timeframe:  TimeframeSchema.optional(),
   entryState: EntryStateSchema.optional(),
-  from:       z.string().datetime({ offset: true }).optional(),
-  to:         z.string().datetime({ offset: true }).optional(),
+  from:       z.string().datetime().optional(),
+  to:         z.string().datetime().optional(),
+  page:       z.coerce.number().int().min(1).default(1),
+  limit:      z.coerce.number().int().min(1).max(100).default(20),
 });
 export type GetSnapshotsQuery = z.infer<typeof GetSnapshotsQuerySchema>;
 
-/**
- * GET /snapshots/latest クエリパラメータ
- * symbol / timeframe で直近1件を絞り込む
- */
+// ── GET /snapshots/latest クエリ ───────────────────────────────────────────
+
 export const GetSnapshotsLatestQuerySchema = z.object({
   symbol:    z.string().optional(),
   timeframe: TimeframeSchema.optional(),
 });
 export type GetSnapshotsLatestQuery = z.infer<typeof GetSnapshotsLatestQuerySchema>;
+
+// ── POST /snapshots/capture リクエストボディ ───────────────────────────────
+// 参照: SPEC_v51_part3 §7
+
+export const CaptureSnapshotSchema = z.object({
+  /** 通貨ペア（例: "EURUSD"）*/
+  symbol:    z.string().min(1),
+  /** 時間足 */
+  timeframe: TimeframeSchema,
+  /** バックテスト用途（省略時はコネクタから最新データを取得）*/
+  asOf:      z.string().datetime().optional(),
+});
+export type CaptureSnapshotDto = z.infer<typeof CaptureSnapshotSchema>;
+
+// ── POST /snapshots/evaluate リクエストボディ ─────────────────────────────
+// 参照: SPEC_v51_part3 §7
+// capture と同じ入力を受けるが、DB 保存を行わない
+
+export const EvaluateSnapshotSchema = z.object({
+  /** 通貨ペア（例: "EURUSD"）*/
+  symbol:    z.string().min(1),
+  /** 時間足 */
+  timeframe: TimeframeSchema,
+  /** バックテスト用途（省略時はコネクタから最新データを取得）*/
+  asOf:      z.string().datetime().optional(),
+});
+export type EvaluateSnapshotDto = z.infer<typeof EvaluateSnapshotSchema>;

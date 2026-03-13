@@ -15,6 +15,12 @@
 //   [Task3] tradesApi.equityCurve / summary → backend route 実装完了により復元
 //           EquityCurveResponse / TradeSummaryResponse 型定義追加
 //
+// 変更内容（round8-reaudit）:
+//   [Task4] symbolsApi.list() 返却型を SymbolWithSettingDto[] に変更
+//           （GET /symbols がシステム定義+ユーザー設定マージ形式に対応済みのため）
+//   [Task5] snapshotsApi.getById() / evaluate() を追加
+//           GET /snapshots/:id / POST /snapshots/evaluate が実装済みのため
+//
 /**
  * 参照仕様:
  *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）
@@ -37,6 +43,7 @@ import type {
   UpdateSettingsDto,
   ApplyPresetDto,
   UpdateSymbolSettingDto,
+  SymbolWithSettingDto,
   PaginatedResponse,
   SignalResponse,
   SnapshotResponse,
@@ -210,8 +217,9 @@ export const settingsApi = {
 
 // ── Symbols API ───────────────────────────────────────────────────────────
 // 参照: SPEC_v51_part3 §6
+// list() はシステム定義8ペア + ユーザー SymbolSetting をマージした一覧を返す
 export const symbolsApi = {
-  list:   () => api.get<unknown[]>('/symbols').then((r) => r.data),
+  list:   () => api.get<SymbolWithSettingDto[]>('/symbols').then((r) => r.data),
   update: (symbol: string, body: UpdateSymbolSettingDto) =>
     api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
 };
@@ -250,12 +258,16 @@ export const tradesApi = {
 // /snapshots/latest → 単一 SnapshotResponse
 // 参照: SPEC_v51_part3 §7
 export const snapshotsApi = {
-  list:    (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
+  list:     (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
     api.get<PaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
-  latest:  (params?: { symbol?: string; timeframe?: string }) =>
+  latest:   (params?: { symbol?: string; timeframe?: string }) =>
     api.get<SnapshotResponse>('/snapshots/latest', { params }).then((r) => r.data),
-  capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
+  capture:  (body: { symbol: string; timeframe: string; asOf?: string }) =>
     api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
+  getById:  (id: string) =>
+    api.get<SnapshotResponse>(`/snapshots/${id}`).then((r) => r.data),
+  evaluate: (body: { symbol: string; timeframe: string; asOf?: string }) =>
+    api.post<SnapshotResponse>('/snapshots/evaluate', body).then((r) => r.data),
 };
 
 // ── Signals API ───────────────────────────────────────────────────────────

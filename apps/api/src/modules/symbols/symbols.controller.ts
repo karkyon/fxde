@@ -1,10 +1,9 @@
 /**
  * apps/api/src/modules/symbols/symbols.controller.ts
  *
- * 変更内容（round8）:
- *   [Task2] PATCH /api/v1/symbols/:symbol を追加
- *           DTO: UpdateSymbolSettingBodyDto（packages/types の Zod Schema から派生）
- *           認証: JwtAuthGuard / @CurrentUser() user.sub
+ * 変更内容（round8-reaudit）:
+ *   [P1] GET / の findAll() に user.sub を渡すよう修正
+ *        レスポンスが SymbolWithSettingDto[] になりユーザー設定がマージされる
  *
  * 参照仕様: SPEC_v51_part3 §6「Symbols API」
  */
@@ -24,13 +23,11 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiOkResponse,
-  ApiCreatedResponse,
   ApiParam,
 } from '@nestjs/swagger';
 import { JwtAuthGuard }            from '../../common/guards/jwt-auth.guard';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { SymbolsService }          from './symbols.service';
-import { SymbolDefinition }        from './symbols.constants';
 import { UpdateSymbolSettingBodyDto } from './dto/symbols.dto';
 
 @ApiTags('symbols')
@@ -42,13 +39,15 @@ export class SymbolsController {
 
   /**
    * GET /api/v1/symbols
-   * システム定義の通貨ペア一覧を返す。
+   * システム定義通貨ペア + ユーザー個別設定のマージ一覧を返す。
+   * SymbolSetting が未作成のペアは既定値で補完する。
+   * 参照: SPEC_v51_part3 §6
    */
   @Get()
-  @ApiOperation({ summary: 'サポートされている FX 通貨ペア一覧を返す（システム定義・固定）' })
-  @ApiOkResponse({ description: '通貨ペア配列' })
-  findAll(): SymbolDefinition[] {
-    return this.symbolsService.findAll();
+  @ApiOperation({ summary: 'ペア設定一覧（システム定義 + ユーザー設定のマージ）' })
+  @ApiOkResponse({ description: 'SymbolWithSettingDto 配列' })
+  findAll(@CurrentUser() user: JwtPayload) {
+    return this.symbolsService.findAll(user.sub);
   }
 
   /**
