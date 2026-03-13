@@ -1,14 +1,6 @@
 /**
  * apps/web/src/pages/Prediction.tsx  — PG-04 MTF 予測
  *
- * 変更内容:
- *   placeholder から仕様準拠の骨格 UI に前進。
- *   - TfWeightSlider（スライダー + 💾 保存 / ↺ デフォルト ボタン）
- *   - ジョブ作成フォーム（symbol / timeframe）
- *   - ジョブ状態ポーリング（usePredictionJob）
- *   - 最新予測結果表示（useLatestPrediction）
- *   - 3 シナリオ（bull / neutral / bear）確率バー表示
- *
  * アクセス権限: PRO | PRO_PLUS | ADMIN のみ（App.tsx ProGuard + backend RolesGuard）
  * 参照仕様: SPEC_v51_part5 §4「PG-04 MTF 予測（スタブ）」
  *           SPEC_v51_part3 §10「Predictions API」
@@ -19,16 +11,6 @@
  * v5.1 実装状況:
  *   完了: ジョブ作成 / ポーリング / 結果表示骨格 / TfWeight 保存（PATCH）
  *   完了: PredictionChart SVG 動的化（latestResult.data 使用）
- *
- * 【修正履歴】
- *   - [Task A] TfWeightSlider に 💾 保存 / ↺ デフォルト ボタンを追加
- *     useUpdateTfWeights を接続（jobId がない場合は disabled）
- *     スライダー min=5, max=50（SPEC_v51_part8 §2.3 準拠）
- *   - [Task C] PredictionScenario の import 元を @fxde/types に統一
- *     apps/web/src/lib/api.ts のローカル定義は廃止（re-export 経由）
- *   - [round5 Task3] PredictionChart SVG を動的化
- *     latestResult.data が存在する場合: probability → opacity / expectedMovePips → slope
- *     latestResult.data が未取得の場合: フォールバック静的値を表示
  */
 
 import { useState } from 'react';
@@ -41,7 +23,7 @@ import {
 import type { PredictionScenario } from '@fxde/types';
 import type { Timeframe }          from '@fxde/types';
 
-// ── 定数 ─────────────────────────────────────────────────────────────────────
+// ── 定数 ──────────────────────────────────────────────────────────────────────
 const SYMBOLS = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD', 'USDCHF', 'USDCAD', 'XAUUSD'];
 const TIMEFRAMES: Timeframe[] = ['M15', 'M30', 'H1', 'H4', 'H8', 'D1'];
 
@@ -91,7 +73,7 @@ function polylinePoints(offsetY: number): string {
   ].join(' ');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 export default function PredictionPage() {
   const [symbol,    setSymbol]    = useState('EURUSD');
   const [timeframe, setTimeframe] = useState<Timeframe>('H4');
@@ -134,11 +116,11 @@ export default function PredictionPage() {
 
   // ── PredictionChart 用データ計算 ────────────────────────────────────────
   // latestResult が存在する場合は確率値を使用、未取得時はスタブ固定値
-  const scenarios    = latestResult.data?.result.scenarios;
-  const bullProb     = scenarios?.find((s) => s.id === 'bull')?.probability    ?? 0.63;
-  const neutralProb  = scenarios?.find((s) => s.id === 'neutral')?.probability ?? 0.22;
-  const bearProb     = scenarios?.find((s) => s.id === 'bear')?.probability    ?? 0.15;
-  const hasRealData  = !!scenarios;
+  const scenarios   = latestResult.data?.result.scenarios;
+  const bullProb    = scenarios?.find((s) => s.id === 'bull')?.probability    ?? 0.63;
+  const neutralProb = scenarios?.find((s) => s.id === 'neutral')?.probability ?? 0.22;
+  const bearProb    = scenarios?.find((s) => s.id === 'bear')?.probability    ?? 0.15;
+  const hasRealData = !!scenarios;
 
   const dy = calcDy(STUB_EXPECTED_PIPS);
 
@@ -304,7 +286,7 @@ export default function PredictionPage() {
               )}
             </h2>
             <div style={styles.chartPlaceholder}>
-              {/* [round5 Task3] 動的 SVG — latestResult.data の probability → opacity / slope に反映 */}
+              {/* 動的 SVG — latestResult.data の probability → opacity / slope に反映 */}
               <svg viewBox="0 0 700 360" style={{ width: '100%', height: '100%' }}>
                 {/* グリッドライン */}
                 {[90, 135, 180, 225, 270].map((y) => (

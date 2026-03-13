@@ -1,9 +1,6 @@
 /**
  * apps/web/src/pages/Register.tsx
  *
- * 変更内容（round6）:
- *   placeholder から脱却し、実装状態に引き上げ。
- *
  * backend 契約:
  *   POST /api/v1/auth/register
  *   body: { email: string; password: string }
@@ -273,10 +270,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop:       4,
   },
   footer: {
-    textAlign: 'center',
-    fontSize:  13,
-    color:     '#64748b',
-    marginTop: 20,
+    textAlign:    'center',
+    fontSize:     13,
+    color:        '#64748b',
+    marginTop:    20,
     marginBottom: 0,
   },
   link: {

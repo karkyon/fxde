@@ -1,14 +1,9 @@
 /**
  * apps/api/src/modules/trades/trades.service.ts
  *
- * 変更内容（round8）:
- *   [Task3] getEquityCurve() を追加: GET /api/v1/trades/equity-curve?period=1M|3M|1Y
- *           getStatsSummary() を追加: GET /api/v1/trades/stats/summary
- *           実装方針: 都度 SQL 集計（SPEC_v51_part3 §11）
- *           キャッシュ: Redis 1時間キャッシュ（SPEC準拠）は今フェーズでは省略・TODO
- *
  * 参照仕様: SPEC_v51_part3 §11「集計 API」
  *           SPEC_v51_part7 §1.2「損益曲線 Recharts データ仕様」
+ *           SPEC_v51_part10 §6.4 §6.8
  */
 
 import {
@@ -28,7 +23,7 @@ import type {
   GetTradesQueryInput as GetTradesQuery,
 } from '@fxde/types';
 
-// Prisma が生成するエnum と一致させる（import はしない: 型整合のため string 比較）
+// Prisma が生成する enum と一致させる（import はしない: 型整合のため string 比較）
 const TradeStatus = { OPEN: 'OPEN', CLOSED: 'CLOSED', CANCELED: 'CANCELED' } as const;
 
 @Injectable()
@@ -63,9 +58,9 @@ export class TradesService {
   // FIND ALL
   // ─────────────────────────────────────────────
   async findAll(userId: string, query: GetTradesQuery) {
-    const page       = Number(query.page  ?? 1);
-    const limit      = Number(query.limit ?? 20);
-    const skip       = (page - 1) * limit;
+    const page          = Number(query.page  ?? 1);
+    const limit         = Number(query.limit ?? 20);
+    const skip          = (page - 1) * limit;
     const includeReview = query.include === 'review';
 
     const where: Record<string, unknown> = { userId };
@@ -279,8 +274,8 @@ export class TradesService {
       drawdown.push(Math.round(dd * 100) / 100);
     }
 
-    const totalPnl        = runningBalance - BASE_BALANCE;
-    const totalReturnPct  = BASE_BALANCE > 0 ? (totalPnl / BASE_BALANCE) * 100 : 0;
+    const totalPnl       = runningBalance - BASE_BALANCE;
+    const totalReturnPct = BASE_BALANCE > 0 ? (totalPnl / BASE_BALANCE) * 100 : 0;
 
     return {
       labels,
@@ -302,8 +297,8 @@ export class TradesService {
   // ─────────────────────────────────────────────
   async getStatsSummary(userId: string) {
     // 当月の CLOSED トレードを集計
-    const now         = new Date();
-    const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1);
+    const now        = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const trades = await this.prisma.trade.findMany({
       where: {
@@ -314,14 +309,14 @@ export class TradesService {
       select: { pnl: true, exitTime: true },
     });
 
-    const tradeCount  = trades.length;
-    const totalPnl    = trades.reduce((sum, t) => sum + Number(t.pnl ?? 0), 0);
-    const winCount    = trades.filter((t) => Number(t.pnl ?? 0) > 0).length;
-    const winRate     = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
+    const tradeCount = trades.length;
+    const totalPnl   = trades.reduce((sum, t) => sum + Number(t.pnl ?? 0), 0);
+    const winCount   = trades.filter((t) => Number(t.pnl ?? 0) > 0).length;
+    const winRate    = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
 
     // 最大ドローダウン計算（当月内）
-    let peak = 0;
-    let maxDd = 0;
+    let peak    = 0;
+    let maxDd   = 0;
     let running = 0;
     for (const t of trades) {
       running += Number(t.pnl ?? 0);
@@ -344,7 +339,9 @@ export class TradesService {
 
     const reviewCount      = reviewedTrades.length;
     const disciplinedCount = reviewedTrades.filter((t) => t.review?.disciplined).length;
-    const disciplineRate   = reviewCount > 0 ? (disciplinedCount / reviewCount) * 100 : 0;
+    const disciplineRate   = reviewCount > 0
+      ? (disciplinedCount / reviewCount) * 100
+      : 0;
 
     // warningMessage: 規律遵守率が 70% を下回る場合に表示
     let warningMessage: string | null = null;

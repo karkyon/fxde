@@ -521,6 +521,28 @@ export interface TradeSummaryResponse {
   warningMessage: string | null   // 規律違反多時に表示
 }
 
+// ── TradeReview ───────────────────────────
+// GET /api/v1/trades/:id/review レスポンス型
+// POST /api/v1/trades/:id/review レスポンス型
+// 正本: trades.service.ts formatReview() の返却 shape と完全一致
+// 参照: SPEC_v51_part3 §8
+
+/**
+ * TradeReviewResponse — GET/POST /api/v1/trades/:id/review レスポンス型
+ * ⚠️ apps/web/src/lib/api.ts でのローカル定義は廃止。必ずここから import。
+ * 参照: SPEC_v51_part3 §8
+ */
+export interface TradeReviewResponse {
+  id:           string
+  tradeId:      string
+  scoreAtEntry: number
+  ruleChecks:   unknown
+  psychology:   unknown
+  disciplined:  boolean
+  createdAt:    string
+  updatedAt:    string
+}
+
 // ══════════════════════════════════════════
 // 定数
 // ══════════════════════════════════════════

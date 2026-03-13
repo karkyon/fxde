@@ -30,20 +30,8 @@ import type {
   EquityCurveResponse,
   TradeSummaryResponse,
   CorrelationMatrix,
+  TradeReviewResponse,
 } from '@fxde/types';
-
-// ── ローカル補完型 ──────────────────────────────────────────────────────────
-/** バックエンド trades.service.ts getReview 返却形式 */
-export interface TradeReviewResponse {
-  id: string;
-  tradeId: string;
-  scoreAtEntry: number;
-  ruleChecks: unknown;
-  psychology: unknown;
-  disciplined: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
 export interface PaginationParams {
@@ -191,6 +179,9 @@ export const symbolsApi = {
 
 // UpdateSymbolSettingDto を外部に再エクスポート（useUpdateSymbol が参照するため型だけ保持）
 export type { UpdateSymbolSettingDto };
+
+// TradeReviewResponse を re-export（TradeDetail.tsx が '../lib/api' から参照するため）
+export type { TradeReviewResponse } from '@fxde/types';
 
 // ── Trades API ────────────────────────────────────────────────────────────
 // 正本フィールド: side / size / sl / tp / entryTime / exitTime / note / tags
