@@ -679,7 +679,7 @@ const s: Record<string, React.CSSProperties> = {
   bottomLeft:    {},
   bottomRight:   {},
   indGrid:       { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 },
-  indCard:       { background: C.bg, border: '1px solid', borderRadius: 8, padding: '10px 12px' },
+  indCard:       { background: C.bg, borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent', borderRadius: 8, padding: '10px 12px' },
   indLabel:      { display: 'block', fontSize: 10, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 4 },
   indValue:      { display: 'block', fontSize: 12, fontWeight: 600 },
   tradeRow:      { display: 'flex', justifyContent: 'space-between', fontSize: 13, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 },

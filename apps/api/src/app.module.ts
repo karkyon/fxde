@@ -27,7 +27,9 @@ import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SignalsModule }    from './modules/signals/signals.module';
 import { PredictionsModule } from './modules/predictions/predictions.module';
 import { ChartModule }     from './modules/chart/chart.module';
-import { AiSummaryModule } from './ai-summary/ai-summary.module';
+import { AiSummaryModule } from './ai-summary/ai-summary.module';// 追加 import 2行
+import { ConnectorsModule }  from './modules/connectors/connectors.module';
+import { MarketDataModule }  from './modules/market-data/market-data.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { AiSummaryModule } from './ai-summary/ai-summary.module';
     PredictionsModule,
     ChartModule,
     AiSummaryModule,
+    ConnectorsModule,
+    MarketDataModule,
   ],
 })
 export class AppModule {}

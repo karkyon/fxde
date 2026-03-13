@@ -469,8 +469,8 @@ function PatternCardItem({
       {/* SVGプレビュー */}
       <div style={s.svgBox}>
         <svg viewBox="0 0 140 100" style={{ width: '100%', height: 60 }}>
-          <polyline
-            points={pattern.svgPreview}
+          <path
+            d={pattern.svgPreview}
             fill="none"
             stroke={dirColor}
             strokeWidth={2}
