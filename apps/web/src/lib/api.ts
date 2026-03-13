@@ -1,30 +1,10 @@
-// apps/web/src/lib/api.ts
-//
-// 変更内容（round6）:
-//   [Task2-1] snapshotsApi.capture → backend POST /snapshots/capture が不在のためコメントアウト
-//             snapshots.controller.ts には GET /latest / GET / のみ実装済み
-//   [Task2-2] symbolsApi.update   → backend PATCH /symbols/:symbol が不在のためコメントアウト
-//             symbols.controller.ts には GET /symbols のみ実装済み
-//   [Task2-3] tradesApi.equityCurve / summary → backend route 不在のためコメントアウト
-//             trades.controller.ts に equity-curve / stats/summary route なし
-//   ※ 上記は仕様上必要な API。backend 実装完了後に復元する。
-//
-// 変更内容（round8）:
-//   [Task1] snapshotsApi.capture → backend POST /snapshots/capture 実装完了により復元
-//   [Task2] symbolsApi.update    → backend PATCH /symbols/:symbol 実装完了により復元
-//   [Task3] tradesApi.equityCurve / summary → backend route 実装完了により復元
-//           EquityCurveResponse / TradeSummaryResponse 型定義追加
-//
-// 変更内容（round8-reaudit）:
-//   [Task4] symbolsApi.list() 返却型を SymbolWithSettingDto[] に変更
-//           （GET /symbols がシステム定義+ユーザー設定マージ形式に対応済みのため）
-//   [Task5] snapshotsApi.getById() / evaluate() を追加
-//           GET /snapshots/:id / POST /snapshots/evaluate が実装済みのため
-//
 /**
+ * apps/web/src/lib/api.ts
+ *
  * 参照仕様:
- *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）
- *   SPEC_v51_part10 §6.5（signals API 正本）
+ *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）§11（集計）
+ *   SPEC_v51_part10 §6.5（signals API 正本）§6.8（集計・統計系）
+ *   SPEC_v51_part11（Chart API）
  */
 
 import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
@@ -47,6 +27,9 @@ import type {
   PaginatedResponse,
   SignalResponse,
   SnapshotResponse,
+  EquityCurveResponse,
+  TradeSummaryResponse,
+  CorrelationMatrix,
 } from '@fxde/types';
 
 // ── ローカル補完型 ──────────────────────────────────────────────────────────
@@ -66,31 +49,6 @@ export interface TradeReviewResponse {
 export interface PaginationParams {
   page?: number;
   limit?: number;
-}
-
-// ── 集計系レスポンス型（SPEC_v51_part3 §11）─────────────────────────────────
-// GET /api/v1/trades/equity-curve?period=1M|3M|1Y
-export interface EquityCurveResponse {
-  labels:         string[];
-  balance:        number[];
-  drawdown:       number[];
-  startBalance:   number;
-  currentBalance: number;
-  totalPnl:       number;
-  totalReturnPct: number;
-  mdd:            number;
-  cachedAt:       string; // キャッシュ値の場合に UI でバッジ表示
-}
-
-// GET /api/v1/trades/stats/summary
-export interface TradeSummaryResponse {
-  period:          string;           // "2025-03"
-  totalPnl:        number;
-  winRate:         number;
-  tradeCount:      number;
-  maxDd:           number;
-  disciplineRate:  number;
-  warningMessage:  string | null; // 規律違反多時に表示
 }
 
 // ── Axios インスタンス ──────────────────────────────────────────────────────
@@ -165,11 +123,7 @@ api.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const { data } = await axios.post<{ accessToken: string }>(
-        `${API_BASE_URL}/api/v1/auth/refresh`,
-        {},
-        { withCredentials: true, timeout: 15000 },
-      );
+      const { data } = await api.post<{ accessToken: string }>('/auth/refresh');
       setAccessToken(data.accessToken);
       processQueue(null, data.accessToken);
       orig.headers = orig.headers ?? {};
@@ -185,22 +139,24 @@ api.interceptors.response.use(
   },
 );
 
-export default api;
-
-// ── Auth API ────────────────────────────────────────────────────────────────
+// ── Auth API ──────────────────────────────────────────────────────────────
+// 参照: SPEC_v51_part3 §3
 export const authApi = {
   login:    (body: LoginRequestDto) =>
     api.post<LoginResponseDto>('/auth/login', body).then((r) => r.data),
+  refresh:  () =>
+    api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
+  logout:   () =>
+    api.post('/auth/logout').then((r) => r.data),
   register: (body: { email: string; password: string }) =>
     api.post<LoginResponseDto>('/auth/register', body).then((r) => r.data),
-  logout:   () => api.post('/auth/logout').then((r) => r.data),
-  refresh:  () => api.post<{ accessToken: string }>('/auth/refresh').then((r) => r.data),
 };
 
 // ── Users API ─────────────────────────────────────────────────────────────
-export const userApi = {
+// 参照: SPEC_v51_part3 §4
+export const usersApi = {
   me:     () => api.get<UserDto>('/users/me').then((r) => r.data),
-  update: (body: { password?: string }) =>
+  update: (body: { email?: string; password?: string }) =>
     api.patch<UserDto>('/users/me', body).then((r) => r.data),
 };
 
@@ -216,12 +172,21 @@ export const settingsApi = {
 };
 
 // ── Symbols API ───────────────────────────────────────────────────────────
-// 参照: SPEC_v51_part3 §6
+// 参照: SPEC_v51_part3 §6 / §11
 // list() はシステム定義8ペア + ユーザー SymbolSetting をマージした一覧を返す
+// correlation() は PRO | PRO_PLUS | ADMIN のみ利用可
 export const symbolsApi = {
   list:   () => api.get<SymbolWithSettingDto[]>('/symbols').then((r) => r.data),
   update: (symbol: string, body: UpdateSymbolSettingDto) =>
     api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
+  /**
+   * GET /api/v1/symbols/correlation?period=30d|90d
+   * 通貨ペア相関マトリクス（−1.0〜+1.0）
+   * 権限: PRO | PRO_PLUS | ADMIN
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
+   */
+  correlation: (params?: { period?: '30d' | '90d' }) =>
+    api.get<CorrelationMatrix>('/symbols/correlation', { params }).then((r) => r.data),
 };
 
 // UpdateSymbolSettingDto を外部に再エクスポート（useUpdateSymbol が参照するため型だけ保持）
@@ -255,13 +220,17 @@ export const tradesApi = {
 };
 
 // ── Snapshots API ─────────────────────────────────────────────────────────
-// /snapshots/latest → 単一 SnapshotResponse
+// /snapshots/latest → SnapshotResponse | null（スナップショット未存在時は null）
 // 参照: SPEC_v51_part3 §7
 export const snapshotsApi = {
   list:     (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
     api.get<PaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
-  latest:   (params?: { symbol?: string; timeframe?: string }) =>
-    api.get<SnapshotResponse>('/snapshots/latest', { params }).then((r) => r.data),
+  /**
+   * GET /api/v1/snapshots/latest
+   * スナップショット未存在時は null を返す（backend getLatest() の仕様）
+   */
+  latest:   (params?: { symbol?: string; timeframe?: string }): Promise<SnapshotResponse | null> =>
+    api.get<SnapshotResponse | null>('/snapshots/latest', { params }).then((r) => r.data),
   capture:  (body: { symbol: string; timeframe: string; asOf?: string }) =>
     api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
   getById:  (id: string) =>
@@ -381,10 +350,6 @@ export interface ChartCandlesResponse {
   timeframe: Timeframe;
   candles:   Candle[];
   cachedAt:  string | null;
-}
-
-export interface IndicatorStatus {
-  status: 'bullish' | 'bearish' | 'neutral';
 }
 
 export interface ChartIndicatorsResponse {

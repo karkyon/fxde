@@ -494,6 +494,30 @@ export interface EquityCurveResponse {
   cachedAt:       string  // キャッシュ値の場合に UI でバッジ表示
 }
 
+// ── Symbol Correlation ────────────────────────────────────────────────────
+// GET /api/v1/symbols/correlation?period=30d|90d
+// 権限: PRO | PRO_PLUS | ADMIN
+// 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
+ 
+/**
+ * 通貨ペア相関マトリクス
+ * matrix[i][j] = symbols[i] と symbols[j] の相関係数（−1.0〜+1.0）
+ *
+ * 色定義（UI 用参考）:
+ *   +0.8〜+1.0: 濃赤（強い正の相関 / 同時エントリー危険）
+ *   +0.5〜+0.8: 薄赤
+ *    0.0〜+0.5: 白
+ *   −0.5〜 0.0: 薄緑
+ *   −0.8〜−0.5: 中緑
+ *   −1.0〜−0.8: 濃緑（強い逆相関 / ヘッジとして使える）
+ */
+export interface CorrelationMatrix {
+  symbols:  string[]
+  matrix:   number[][]   // matrix[i][j] ∈ [−1.0, +1.0]
+  period:   '30d' | '90d'
+  cachedAt: string       // ISO 8601（Redis キャッシュ値の場合に非 null）
+}
+
 /**
  * GET /api/v1/trades/stats/summary
  * apps/web/src/lib/api.ts のローカル定義を正本に寄せた。

@@ -1,11 +1,15 @@
 /**
  * apps/api/src/modules/symbols/symbols.controller.ts
  *
- * 変更内容（round8-reaudit）:
- *   [P1] GET / の findAll() に user.sub を渡すよう修正
- *        レスポンスが SymbolWithSettingDto[] になりユーザー設定がマージされる
+ * 変更内容（round8-reaudit2）:
+ *   [Task3] GET /correlation を追加
+ *           権限: PRO | PRO_PLUS | ADMIN（RolesGuard）
+ *           参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
  *
- * 参照仕様: SPEC_v51_part3 §6「Symbols API」
+ * 注意: NestJS ルート順
+ *   GET /correlation は GET /:symbol より前に定義すること（static route 優先）
+ *
+ * 参照仕様: SPEC_v51_part3 §6「Symbols API」§11「集計 API」
  */
 
 import {
@@ -14,6 +18,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -24,11 +29,14 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { JwtAuthGuard }            from '../../common/guards/jwt-auth.guard';
+import { RolesGuard }              from '../../common/guards/roles.guard';
+import { Roles }                   from '../../common/decorators/roles.decorator';
 import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
 import { SymbolsService }          from './symbols.service';
-import { UpdateSymbolSettingBodyDto } from './dto/symbols.dto';
+import { UpdateSymbolSettingBodyDto, CorrelationQueryDto } from './dto/symbols.dto';
 
 @ApiTags('symbols')
 @ApiBearerAuth()
@@ -48,6 +56,27 @@ export class SymbolsController {
   @ApiOkResponse({ description: 'SymbolWithSettingDto 配列' })
   findAll(@CurrentUser() user: JwtPayload) {
     return this.symbolsService.findAll(user.sub);
+  }
+
+  /**
+   * GET /api/v1/symbols/correlation?period=30d|90d
+   * 通貨ペア相関マトリクス（−1.0〜+1.0）
+   * 権限: PRO | PRO_PLUS | ADMIN
+   * v5.1: Redis 1時間キャッシュ + スタブ固定値
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
+   */
+  @Get('correlation')
+  @HttpCode(HttpStatus.OK)
+  @Roles('PRO', 'PRO_PLUS', 'ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: '通貨ペア相関マトリクス（PRO | PRO_PLUS | ADMIN）' })
+  @ApiQuery({ name: 'period', enum: ['30d', '90d'], required: false, description: '集計期間（デフォルト: 30d）' })
+  @ApiOkResponse({ description: 'CorrelationMatrix' })
+  getCorrelation(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: CorrelationQueryDto,
+  ) {
+    return this.symbolsService.getCorrelation(user.sub, query);
   }
 
   /**
