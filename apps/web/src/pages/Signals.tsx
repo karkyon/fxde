@@ -1,7 +1,7 @@
 // apps/web/src/pages/Signals.tsx
 //
 // 変更内容:
-//   [Task4] SignalCard に以下の表示を追加（SignalResponse 型に存在するフィールド）
+//   SignalCard に以下の表示を追加（SignalResponse 型に存在するフィールド）
 //           - signal.symbol      ← 未表示だったため追加
 //           - signal.timeframe   ← 未表示だったため追加
 //           - signal.snapshot.scoreTotal  ← 未表示だったため追加（スコア帯カラー付き）

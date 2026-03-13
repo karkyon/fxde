@@ -15,12 +15,7 @@
  *
  * 権限:
  *   全エンドポイントで PRO | PRO_PLUS | ADMIN のみ許可。
- *   「PRO以上」という表現は SPEC 禁止。必ず列挙する。
  *   参照: SPEC_v51_part4 §4.1 / SPEC_v51_part1 権限表現ルール
- *
- * 【修正履歴】
- *   - [Task A] PATCH /predictions/jobs/:id/tf-weights を追加
- *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
  */
 
 import {
@@ -120,7 +115,7 @@ export class PredictionsController {
    * PATCH /api/v1/predictions/jobs/:id/tf-weights
    * TF 重みの上書き保存
    *
-   * [Task A] v5.1 で新規追加
+   * v5.1 で新規追加
    *
    * リクエストボディ: { weights: Partial<Record<Timeframe, number>> }
    *   各値は 0.05〜0.50 の範囲。サービス層で合計 1.0 に自動正規化。

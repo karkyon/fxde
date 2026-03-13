@@ -1,13 +1,8 @@
 /**
  * apps/api/src/modules/predictions/predictions.module.ts
  *
- * 変更内容:
- *   [round5 Task1] PredictionWorker を providers に追加。
- *   PredictionWorker は PredictionsService + PrismaService に依存する。
- *   PredictionDispatchProcessor は PredictionWorker に依存する（委譲パターン）。
- *
- *   依存関係:
- *     PredictionDispatchProcessor → PredictionWorker → PredictionsService
+ * 依存関係:
+ *   PredictionDispatchProcessor → PredictionWorker → PredictionsService
  *                                                    → PrismaService（global）
  *
  * 参照仕様:
@@ -42,7 +37,7 @@ import { QUEUE_NAMES }                 from '../../jobs/queues';
   controllers: [PredictionsController],
   providers: [
     PredictionsService,
-    // [round5 Task1] PredictionWorker: フロー処理を担うヘルパー
+    // PredictionWorker: フロー処理を担うヘルパー
     // PredictionsService + PrismaService を注入して使用する。
     PredictionWorker,
     // v5.1 Processor（ステータス管理 + PredictionWorker への委譲）

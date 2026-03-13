@@ -1,10 +1,6 @@
 /**
  * apps/web/src/hooks/useTrades.ts
  *
- * 変更内容（round8-reaudit）:
- *   [P2] stale コメント（"⚠️ backend 未実装"、"enabled: false で無効化中" 等）を除去
- *   [P2] EquityCurveResponse / TradeSummaryResponse を @fxde/types から import に変更
- *
  * 含まれるフック:
  *   useTrades()         → GET /api/v1/trades（一覧）
  *   useTrade(id)        → GET /api/v1/trades/:id（詳細）

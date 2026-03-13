@@ -197,7 +197,7 @@ export const STUB_PREDICTION_RESULT: PredictionResultData = {
   hmmState: null,
 }
 
-// ── [Task C] TfWeight 型（SPEC_v51_part8 §2.2 正本）────────────────────────────
+// ── TfWeight 型（SPEC_v51_part8 §2.2 正本）────────────────────────────
 /**
  * TfWeight: あるエントリー足を基準とした参照先時間足ごとの重み
  * 参照: SPEC_v51_part8 §2.2
@@ -216,7 +216,7 @@ export const DEFAULT_TF_WEIGHTS: Partial<Record<Timeframe, TfWeight>> = {
   M15: { H4: 0.30, H1: 0.25, M30: 0.20, M15: 0.15, M5: 0.10 },
 }
 
-// ── [Task C] Prediction API 型（SPEC_v51_part3 §10 正本）────────────────────────
+// ── Prediction API 型（SPEC_v51_part3 §10 正本）────────────────────────
 /**
  * PredictionScenario — GET /api/v1/predictions/latest レスポンス配列要素型
  * ⚠️ frontend / backend のローカル定義はすべて廃止。必ずここから import。

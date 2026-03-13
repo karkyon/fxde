@@ -1,14 +1,13 @@
 /**
  * apps/api/src/modules/trades/trades.controller.ts
  *
- * 変更内容（round8）:
- *   [Task3] GET /api/v1/trades/equity-curve を追加
- *           GET /api/v1/trades/stats/summary を追加
- *   ⚠️ NestJS ルート解決順序に注意:
- *      static path (equity-curve / stats/summary) は :id より先に定義する。
+ * 参照仕様:
+ *   SPEC_v51_part3 §11「集計 API」
+ *   SPEC_v51_part10 §6.8
  *
- * 参照仕様: SPEC_v51_part3 §11「集計 API」
- *           SPEC_v51_part10 §6.8
+ * 注意:
+ *   NestJS ルート解決順序により、
+ *   static path (equity-curve / stats/summary) は :id より先に定義すること。
  */
 
 import {

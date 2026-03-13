@@ -9,16 +9,13 @@
  *   useCreatePredictionJob() → POST /api/v1/predictions/jobs
  *   usePredictionJob(jobId)  → GET  /api/v1/predictions/jobs/:id（5秒ポーリング）
  *   useLatestPrediction()    → GET  /api/v1/predictions/latest
- *   useUpdateTfWeights()     → PATCH /api/v1/predictions/jobs/:id/tf-weights  [Task A]
+ *   useUpdateTfWeights()     → PATCH /api/v1/predictions/jobs/:id/tf-weights
  *
  * 権限: PRO | PRO_PLUS | ADMIN のみ（App.tsx ProGuard + backend RolesGuard）
  * 参照仕様: SPEC_v51_part3 §10「Predictions API」
  *           SPEC_v51_part8 §2.3「PATCH /predictions/jobs/:id/tf-weights」
  *           SPEC_v51_part10 §5「hooks ディレクトリ構成（確定）」
- *
- * 【修正履歴】
- *   - [Task A] useUpdateTfWeights を追加
- *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
+ *           SPEC_v51_part10 §6.6「予測系エンドポイント（確定）」  
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';

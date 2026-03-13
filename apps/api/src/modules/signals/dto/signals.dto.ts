@@ -1,7 +1,7 @@
 // apps/api/src/modules/signals/dto/signals.dto.ts
 //
 // 変更内容:
-//   [Task2] GetLatestSignalQueryDto を削除
+//   GetLatestSignalQueryDto を削除
 //           → GET /signals/latest は SPEC_v51_part10 §6.5 に存在しないエンドポイントのため
 //           → GetSignalsLatestQuerySchema import も削除
 //

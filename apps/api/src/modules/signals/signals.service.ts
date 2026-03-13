@@ -1,7 +1,7 @@
 // apps/api/src/modules/signals/signals.service.ts
 //
 // 変更内容:
-//   [Task2] findLatest() メソッド削除
+//   findLatest() メソッド削除
 //           → GET /signals/latest は SPEC_v51_part10 §6.5 に存在しない
 //           → GetSignalsLatestQuery import も削除
 //

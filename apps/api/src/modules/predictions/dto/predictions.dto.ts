@@ -13,9 +13,6 @@
  *   SPEC_v51_part3 §10 より v5.1 受付フィールドは symbol / timeframe のみ。
  *   lookbackYears / minSimilarity / topK は v6 アルゴリズムパラメータのため定義しない。
  *
- * 【修正履歴】
- *   - [Task A] UpdateTfWeightsDto を追加
- *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
  */
 
 import { createZodDto } from 'nestjs-zod';
@@ -43,7 +40,7 @@ export const GetPredictionLatestQuerySchema = z.object({
 export class GetPredictionLatestQueryDto extends createZodDto(GetPredictionLatestQuerySchema) {}
 
 // ── PATCH /predictions/jobs/:id/tf-weights ─────────────────────────────────
-// [Task A] TF 重みの上書き保存
+// TF 重みの上書き保存
 // 参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
 // Zod 正本: packages/types/src/schemas/prediction.schema.ts (UpdateTfWeightsSchema)
 export class UpdateTfWeightsDto extends createZodDto(UpdateTfWeightsSchema) {}

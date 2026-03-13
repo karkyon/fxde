@@ -16,14 +16,6 @@
  *   DTW / HMM / 類似検索 / WFV / 重み自動学習
  *   これらは SPEC_v51_part8 §B（v6 設計資料）に保持されている。
  *
- * 【修正履歴】
- *   - [Task D] STUB_PREDICTION_RESULT の import 元を
- *     '../modules/predictions/predictions.service' → '@fxde/types' に変更
- *     理由: service → processor の逆流依存を解消
- *   - [round5 Task1] PredictionWorker への委譲に変更
- *     Processor はステータス管理のみ担当。
- *     フロー処理（MTF ローソク足ロード / 特徴量生成 / 推論 / 結果保存）は
- *     PredictionWorker.runJob() に委譲する。
  */
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';

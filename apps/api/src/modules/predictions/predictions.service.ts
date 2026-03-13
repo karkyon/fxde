@@ -18,14 +18,6 @@
  * 実装禁止（v6 設計資料）:
  *   DTW / HMM / 類似検索 / WFV / 重み自動学習
  *
- * 【修正履歴】
- *   - [Task B/C] STUB_PREDICTION_RESULT / PredictionScenario のローカル定義を廃止
- *     @fxde/types からの import に統一（packages/types/src/index.ts が唯一の正本）
- *   - [Task A] updateTfWeights() を追加
- *     参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
- *   - [round5 Task2] generatePrediction() を追加
- *     PredictionWorker の runInference ステップから呼び出される。
- *     v5.1: STUB_PREDICTION_RESULT 準拠の固定値を返す。
  */
 
 import {
@@ -196,7 +188,7 @@ export class PredictionsService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // [Task A] PATCH /predictions/jobs/:id/tf-weights
+  // PATCH /predictions/jobs/:id/tf-weights
   // TF 重みを PredictionJob.requestData.tfWeights に保存
   //
   // 参照: SPEC_v51_part8 §2.3 / SPEC_v51_part10 §6.6
@@ -248,7 +240,7 @@ export class PredictionsService {
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // [round5 Task2] generatePrediction
+  // v5.1 スタブ推論
   // PredictionWorker の runInference ステップから呼び出される推論メソッド。
   //
   // 入力: symbol / timeframe / horizonH（予測ホライズン時間）

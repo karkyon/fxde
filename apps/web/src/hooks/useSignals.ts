@@ -1,7 +1,7 @@
 // apps/web/src/hooks/useSignals.ts
 //
 // 変更内容:
-//   [Task5] queries.ts から Signals 関連フック・ミューテーションを分離
+//   queries.ts から Signals 関連フック・ミューテーションを分離
 //           SPEC_v51_part10 §5（フロントディレクトリ正本）に準拠
 //
 // 含まれるフック:

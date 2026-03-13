@@ -1,8 +1,8 @@
 // apps/api/src/modules/signals/signals.controller.ts
 //
 // 変更内容:
-//   [Task1] Patch import 削除（@Patch デコレータは未使用だったため）
-//   [Task2] GET /signals/latest エンドポイント削除
+//   Patch import 削除（@Patch デコレータは未使用だったため）
+//   GET /signals/latest エンドポイント削除
 //           → SPEC_v51_part10 §6.5 正本に存在しない
 //           → findLatest() メソッド / @Get('latest') / GetLatestSignalQueryDto import をすべて削除
 //
