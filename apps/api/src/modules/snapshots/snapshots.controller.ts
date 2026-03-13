@@ -1,9 +1,7 @@
 /**
  * apps/api/src/modules/snapshots/snapshots.controller.ts
  *
- * 変更内容（round8-reaudit）:
- *   [P1] GET /api/v1/snapshots/:id を追加（認証ユーザー本人のみ取得可能）
- *   [P1] POST /api/v1/snapshots/evaluate を追加（保存なし評価のみ）
+ * 役割: Snapshots API エンドポイント定義
  *
  * NestJS ルート順序の注意:
  *   static route（'capture', 'evaluate', 'latest', ''）を ':id' より必ず前に定義する。

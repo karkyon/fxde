@@ -1,15 +1,20 @@
 /**
  * apps/api/src/modules/symbols/symbols.controller.ts
  *
- * 変更内容（round8-reaudit2）:
- *   [Task3] GET /correlation を追加
- *           権限: PRO | PRO_PLUS | ADMIN（RolesGuard）
- *           参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
+ * 役割: Symbols API コントローラ
+ *
+ * エンドポイント:
+ *   GET   /api/v1/symbols              → 全ロール（システム定義 + ユーザー設定マージ一覧）
+ *   GET   /api/v1/symbols/correlation  → PRO | PRO_PLUS | ADMIN のみ（相関マトリクス）
+ *   PATCH /api/v1/symbols/:symbol      → 全ロール（個別設定更新）
  *
  * 注意: NestJS ルート順
- *   GET /correlation は GET /:symbol より前に定義すること（static route 優先）
+ *   GET /correlation は GET /:symbol より前に定義する（static route 優先）
  *
- * 参照仕様: SPEC_v51_part3 §6「Symbols API」§11「集計 API」
+ * 参照仕様:
+ *   SPEC_v51_part3 §6「Symbols API」§11「集計 API」
+ *   SPEC_v51_part7 §2.4「通貨相関マトリクス（ProOnly）」
+ *   SPEC_v51_part10 §6.8「集計・統計系」
  */
 
 import {
@@ -62,7 +67,7 @@ export class SymbolsController {
    * GET /api/v1/symbols/correlation?period=30d|90d
    * 通貨ペア相関マトリクス（−1.0〜+1.0）
    * 権限: PRO | PRO_PLUS | ADMIN
-   * v5.1: Redis 1時間キャッシュ + スタブ固定値
+   * Redis 1時間キャッシュ + v5.1 スタブ固定値
    * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
    */
   @Get('correlation')

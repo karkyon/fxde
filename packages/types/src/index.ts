@@ -6,15 +6,7 @@
  * DB命名: snake_case / Prisma / TypeScript命名: camelCase / PascalCase
  * Phase2確定版 - 推測カラム追加禁止
  *
- * 【修正履歴】
- *   - PaginationMeta / PaginatedResponse { items, meta } を削除（仕様誤り）
- *     正本は packages/types/src/api.ts の PaginatedResponse { data, total, page, limit }
- *   - export * from './api' を追加（PaginationQuery / PaginatedResponse を外部公開）
- *   参照: SPEC_v51_part3 §2「共通型定義」
- *   - SymbolWithSettingDto を追加（round8-reaudit P1）
- *     GET /api/v1/symbols の「システム定義 + ユーザー設定マージ」レスポンス型
- *   - EquityCurveResponse / TradeSummaryResponse を追加（round8-reaudit P2）
- *     apps/web/src/lib/api.ts のローカル定義を packages/types 正本へ寄せる
+ * 参照: SPEC_v51_part3 §2「共通型定義」
  */
 
 // ══════════════════════════════════════════
@@ -275,10 +267,9 @@ export interface TfWeightsUpdateResponse {
 }
 
 // ══════════════════════════════════════════
-// API 型定義
+// API レスポンス型
 // ══════════════════════════════════════════
 
-// 標準 API レスポンス形式
 export interface ApiSuccess<T = unknown> {
   success: true
   data: T
@@ -480,7 +471,6 @@ export interface CreatePredictionJobDto {
 
 /**
  * GET /api/v1/trades/equity-curve?period=1M|3M|1Y
- * apps/web/src/lib/api.ts のローカル定義を正本に寄せた。
  */
 export interface EquityCurveResponse {
   labels:         string[]
@@ -498,7 +488,7 @@ export interface EquityCurveResponse {
 // GET /api/v1/symbols/correlation?period=30d|90d
 // 権限: PRO | PRO_PLUS | ADMIN
 // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
- 
+
 /**
  * 通貨ペア相関マトリクス
  * matrix[i][j] = symbols[i] と symbols[j] の相関係数（−1.0〜+1.0）
@@ -520,7 +510,6 @@ export interface CorrelationMatrix {
 
 /**
  * GET /api/v1/trades/stats/summary
- * apps/web/src/lib/api.ts のローカル定義を正本に寄せた。
  */
 export interface TradeSummaryResponse {
   period:         string          // "2025-03"

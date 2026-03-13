@@ -1,19 +1,17 @@
 /**
  * apps/web/src/hooks/useSymbols.ts
  *
- * 変更内容（round8-reaudit2）:
- *   [Task3] useCorrelation() を追加
- *           GET /api/v1/symbols/correlation（PRO | PRO_PLUS | ADMIN）
- *           権限が不足する場合は 403 が返り、isError が true になる
+ * 役割: Symbols API に関する TanStack Query フック群
  *
  * 含まれるフック:
  *   useSymbols()      → GET /api/v1/symbols（システム定義 + ユーザー設定マージ一覧）
  *   useUpdateSymbol() → PATCH /api/v1/symbols/:symbol（ペア個別設定更新）
- *   useCorrelation()  → GET /api/v1/symbols/correlation（PRO 以上専用）
+ *   useCorrelation()  → GET /api/v1/symbols/correlation（PRO | PRO_PLUS | ADMIN のみ）
  *
- * 参照仕様: SPEC_v51_part10 §5「hooks ディレクトリ構成（確定）」
- *           SPEC_v51_part3 §6「Symbols API」§11「集計 API」
- *           SPEC_v51_part7 §2.4「通貨相関マトリクス（ProOnly）」
+ * 参照仕様:
+ *   SPEC_v51_part10 §5「hooks ディレクトリ構成（確定）」
+ *   SPEC_v51_part3 §6「Symbols API」§11「集計 API」
+ *   SPEC_v51_part7 §2.4「通貨相関マトリクス（ProOnly）」
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -62,7 +60,7 @@ export function useUpdateSymbol() {
  * GET /api/v1/symbols/correlation?period=30d|90d
  * 通貨ペア相関マトリクスを取得する。
  * 権限: PRO | PRO_PLUS | ADMIN（FREE / BASIC は 403）
- * Redis 1時間キャッシュ（v5.1 はスタブ値）
+ * staleTime を 1時間に設定し、バックエンドの Redis キャッシュ TTL と整合させる。
  * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
  */
 export function useCorrelation(
@@ -70,10 +68,10 @@ export function useCorrelation(
   options?: { enabled?: boolean },
 ) {
   return useQuery<CorrelationMatrix>({
-    queryKey: symbolKeys.correlation(period),
-    queryFn:  () => symbolsApi.correlation({ period }),
-    enabled:  options?.enabled ?? true,
-    retry:    false, // 403 はリトライしない（権限不足）
-    staleTime: 60 * 60 * 1000, // 1時間（Redis キャッシュと整合）
+    queryKey:  symbolKeys.correlation(period),
+    queryFn:   () => symbolsApi.correlation({ period }),
+    enabled:   options?.enabled ?? true,
+    retry:     false,             // 403（権限不足）はリトライしない
+    staleTime: 60 * 60 * 1000,   // 1時間（Redis キャッシュ TTL と整合）
   });
 }

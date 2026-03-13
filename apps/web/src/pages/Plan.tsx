@@ -1,17 +1,17 @@
 /**
  * apps/web/src/pages/Plan.tsx (PG-06)
  *
- * 変更内容（round6）:
- *   placeholder から脱却し、仕様範囲内の最低限完成状態に引き上げ。
+ * 役割: プラン比較・アップグレード誘導ページ
  *
  * 表示内容:
  *   - FREE / BASIC / PRO / PRO_PLUS / ADMIN のプラン比較
  *   - PLAN_LIMITS（packages/types）に基づいた制限値表示
  *   - 現在のユーザーロールのハイライト
- *   - /prediction（PRO以上）への誘導
+ *   - /prediction（PRO | PRO_PLUS | ADMIN のみ）への誘導
  *
- * 参照: SPEC_v51_part5 §6 / packages/types/src/index.ts PLAN_LIMITS
- *       FXDE_v51_wireframe_integrated_v4.html (PG-06)
+ * 参照:
+ *   SPEC_v51_part5 §6 / packages/types/src/index.ts PLAN_LIMITS
+ *   FXDE_v51_wireframe_integrated_v4.html (PG-06)
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -110,7 +110,7 @@ export default function PlanPage() {
           <div style={s.bannerLeft}>
             <span style={s.bannerIcon}>🔮</span>
             <div>
-              <p style={s.bannerTitle}>予測エンジンを利用するには PRO 以上が必要です</p>
+              <p style={s.bannerTitle}>予測エンジンを利用するには PRO | PRO_PLUS | ADMIN が必要です</p>
               <p style={s.bannerDesc}>
                 Prediction ページでは AI ベースの相場予測（stub実装）を確認できます。
                 PRO プランにアップグレードしてご利用ください。
@@ -225,7 +225,7 @@ export default function PlanPage() {
           </button>
         ) : (
           <button style={s.upgradeBtn2} onClick={() => alert('プランアップグレードは管理者にお問い合わせください')}>
-            PRO にアップグレードして予測エンジンを使う
+            PRO | PRO_PLUS | ADMIN にアップグレードして予測エンジンを使う
           </button>
         )}
         <button style={s.secondaryBtn} onClick={() => navigate('/dashboard')}>
@@ -336,10 +336,10 @@ const s: Record<string, React.CSSProperties> = {
     margin: 0,
   },
   dlRow: {
-    display:       'flex',
+    display:        'flex',
     justifyContent: 'space-between',
-    borderBottom:  '1px solid #1e2030',
-    padding:       '5px 0',
+    borderBottom:   '1px solid #1e2030',
+    padding:        '5px 0',
   },
   dt: {
     fontSize: 11,
@@ -355,10 +355,10 @@ const s: Record<string, React.CSSProperties> = {
     marginBottom: 32,
   },
   sectionTitle: {
-    fontSize:     16,
-    fontWeight:   700,
-    color:        '#e2e8f0',
-    margin:       '0 0 12px',
+    fontSize:      16,
+    fontWeight:    700,
+    color:         '#e2e8f0',
+    margin:        '0 0 12px',
     paddingBottom: 8,
     borderBottom:  '1px solid #2d3148',
   },
@@ -368,27 +368,27 @@ const s: Record<string, React.CSSProperties> = {
     fontSize:       13,
   },
   th: {
-    padding:     '8px 12px',
-    textAlign:   'center',
-    color:       '#94a3b8',
-    fontWeight:  600,
+    padding:      '8px 12px',
+    textAlign:    'center',
+    color:        '#94a3b8',
+    fontWeight:   600,
     borderBottom: '2px solid #2d3148',
-    whiteSpace:  'nowrap',
+    whiteSpace:   'nowrap',
   },
   tdLabel: {
-    padding:     '7px 12px',
-    color:       '#94a3b8',
+    padding:      '7px 12px',
+    color:        '#94a3b8',
     borderBottom: '1px solid #1e2030',
-    fontSize:    12,
-    whiteSpace:  'nowrap',
+    fontSize:     12,
+    whiteSpace:   'nowrap',
   },
   td: {
-    padding:     '7px 12px',
+    padding:      '7px 12px',
     borderBottom: '1px solid #1e2030',
   },
   actions: {
-    display: 'flex',
-    gap:     12,
+    display:  'flex',
+    gap:      12,
     flexWrap: 'wrap',
   },
   primaryBtn: {

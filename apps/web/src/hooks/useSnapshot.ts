@@ -1,14 +1,20 @@
-// apps/web/src/hooks/useSnapshot.ts
-//
-// 変更内容（round8-reaudit2）:
-//   [Task2] useLatestSnapshot() の queryFn 返却型を SnapshotResponse | null に整合
-//           backend getLatest() はスナップショット未存在時に null を返す仕様のため
-//           snapshotsApi.latest() の返却型が Promise<SnapshotResponse | null> になったことに追従
-//
-// 含まれるフック:
-//   useLatestSnapshot(params?) → GET /api/v1/snapshots/latest（300秒ポーリング）
-//   useSnapshots(params?)      → GET /api/v1/snapshots（一覧）
-//
+/**
+ * apps/web/src/hooks/useSnapshot.ts
+ *
+ * 役割: Snapshots API に関する TanStack Query フック群
+ *
+ * 含まれるフック:
+ *   useLatestSnapshot(params?) → GET /api/v1/snapshots/latest（300秒ポーリング）
+ *   useSnapshots(params?)      → GET /api/v1/snapshots（一覧）
+ *
+ * 注意: backend getLatest() はスナップショット未存在時に null を返す。
+ *       useLatestSnapshot の data は SnapshotResponse | null となる。
+ *
+ * 参照仕様:
+ *   SPEC_v51_part10 §6.3
+ *   SPEC_v51_part3 §7「Snapshots API」
+ */
+
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { snapshotsApi } from '../lib/api';
 import type { PaginationParams } from '../lib/api';

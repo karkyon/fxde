@@ -1,18 +1,20 @@
 /**
  * apps/api/src/modules/symbols/dto/symbols.dto.ts
  *
- * 変更内容（round8-reaudit2）:
- *   [Task3] CorrelationQueryDto を追加
- *           GET /api/v1/symbols/correlation クエリ DTO
+ * 役割: Symbols API の NestJS DTO 定義
+ *   - PATCH /api/v1/symbols/:symbol  → UpdateSymbolSettingBodyDto
+ *   - GET /api/v1/symbols/correlation → CorrelationQueryDto
  *
- * 参照仕様: SPEC_v51_part3 §6「Symbols API」§11「集計 API」
- *           packages/types/src/schemas/symbol.schema.ts（正本）
+ * 参照仕様:
+ *   SPEC_v51_part3 §6「Symbols API」§11「集計 API」
+ *   packages/types/src/schemas/symbol.schema.ts（正本）
  */
 import { createZodDto } from 'nestjs-zod';
 import { UpdateSymbolSettingSchema, CorrelationQuerySchema } from '@fxde/types';
 
 /**
  * PATCH /api/v1/symbols/:symbol リクエスト DTO
+ * enabled / defaultTimeframe / customThreshold を部分更新する。
  */
 export class UpdateSymbolSettingBodyDto extends createZodDto(UpdateSymbolSettingSchema) {}
 

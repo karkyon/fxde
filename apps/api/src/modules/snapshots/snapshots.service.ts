@@ -1,17 +1,17 @@
 /**
  * apps/api/src/modules/snapshots/snapshots.service.ts
  *
- * 変更内容（round8-reaudit）:
- *   [P1] formatSnapshot() に entryDecision を追加
- *        packages/types の SnapshotResponse と runtime レスポンスを一致させる
- *   [P1] getById() を追加（GET /api/v1/snapshots/:id）
- *        認証ユーザー本人のみ取得可能
- *   [P1] evaluate() を追加（POST /api/v1/snapshots/evaluate）
- *        DB 保存なし・capture と同一 response shape
+ * 役割: Snapshots API のビジネスロジック
+ *   - POST /api/v1/snapshots/capture  → capture()
+ *   - POST /api/v1/snapshots/evaluate → evaluate()
+ *   - GET  /api/v1/snapshots/latest   → getLatest()
+ *   - GET  /api/v1/snapshots/:id      → getById()
+ *   - GET  /api/v1/snapshots          → getList()
  *
- * 参照仕様: SPEC_v51_part3 §7「Snapshots API」
- *           packages/types/src/index.ts SnapshotResponse
- *           SPEC_v51_part4 §5.4「snapshot-capture ワーカー」
+ * 参照仕様:
+ *   SPEC_v51_part3 §7「Snapshots API」
+ *   packages/types/src/index.ts SnapshotResponse
+ *   SPEC_v51_part4 §5.4「snapshot-capture ワーカー」
  */
 
 import {
@@ -75,20 +75,20 @@ function buildEntryDecision(entryState: EntryState) {
     case 'RISK_NG':
       return {
         status:         'RISK_NG' as EntryState,
-        reasons:        ['リスク条件を満たしていません'],
-        recommendation: 'リスク設定を確認してください',
+        reasons:        ['リスク管理基準を超えています'],
+        recommendation: 'リスク設定を見直してください',
       };
     case 'LOCKED':
       return {
         status:         'LOCKED' as EntryState,
-        reasons:        ['経済指標イベントによりロック中です'],
-        recommendation: 'イベント終了後にエントリー可能になります',
+        reasons:        ['強制ロックが有効です'],
+        recommendation: 'ロックが解除されるまで待機してください',
       };
     case 'COOLDOWN':
       return {
         status:         'COOLDOWN' as EntryState,
-        reasons:        ['クールダウン期間中です'],
-        recommendation: 'クールダウン終了後にエントリー可能になります',
+        reasons:        ['冷却期間中です'],
+        recommendation: '冷却期間が終了するまで待機してください',
       };
     default:
       return null;
@@ -103,8 +103,9 @@ export class SnapshotsService {
 
   /**
    * POST /api/v1/snapshots/capture
-   * スコア計算 + 保存。
-   * v5.1: 指標・スコアはスタブ固定値。
+   * スコア計算 + スナップショット保存。
+   * v5.1: スタブ固定値を保存する。
+   * 参照: SPEC_v51_part3 §7 / SPEC_v51_part4 §5.4
    */
   async capture(userId: string, dto: CaptureSnapshotDto) {
     const { symbol, timeframe, asOf } = dto;
@@ -115,22 +116,22 @@ export class SnapshotsService {
         data: {
           userId,
           symbol,
-          timeframe:     timeframe as any,
+          timeframe:      timeframe as any,
           capturedAt,
-          indicators:    STUB_INDICATORS,
-          patterns:      [],
-          mtfAlignment:  {},
-          scoreTotal:    0,
+          indicators:     STUB_INDICATORS,
+          patterns:       [],
+          mtfAlignment:   {},
+          scoreTotal:     0,
           scoreBreakdown: STUB_SCORE_BREAKDOWN,
-          entryState:    'SCORE_LOW' as any,
-          entryContext:  STUB_ENTRY_CONTEXT,
+          entryState:     'SCORE_LOW',
+          entryContext:   STUB_ENTRY_CONTEXT,
         },
       });
 
       return this.formatSnapshot(snapshot);
     } catch (error) {
       this.logger.error(
-        `capture failed: userId=${userId} symbol=${symbol} timeframe=${timeframe}`,
+        `capture failed userId=${userId} symbol=${symbol}`,
         error instanceof Error ? error.stack : String(error),
       );
       throw error;

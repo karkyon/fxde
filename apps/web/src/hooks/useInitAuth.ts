@@ -1,19 +1,12 @@
 /**
  * apps/web/src/hooks/useInitAuth.ts
  *
- * 変更理由:
- *   旧実装は memoryToken が残っている場合のみ me を呼んでいた。
- *   ページリロード時には memoryToken が消えるため、refresh cookie が有効でも
- *   認証状態が復元されなかった（監査レポート B-4）。
+ * 役割: アプリ起動時の認証状態復元フック
  *
- *   修正後の起動フロー（SPEC_v51_part4 §4 認証フロー準拠）:
- *     1. POST /auth/refresh（HttpOnly Cookie の RT を使って AT を取得）
- *     2. 成功 → GET /users/me でユーザー情報取得 → auth store に保存
- *     3. 失敗 → 未認証状態として初期化完了（ログインページへリダイレクト）
- *
- * 変更内容（round8-reaudit2）:
- *   [fix] import を userApi → usersApi に修正
- *         api.ts の export 名が usersApi に統一されたため
+ * 起動フロー（SPEC_v51_part4 §4 認証フロー準拠）:
+ *   1. POST /auth/refresh（HttpOnly Cookie の RT を使って AT を取得）
+ *   2. 成功 → GET /users/me でユーザー情報取得 → auth store に保存
+ *   3. 失敗 → 未認証状態として初期化完了（ログインページへリダイレクト）
  *
  * 参照仕様: SPEC_v51_part4 §4「認証フロー」
  */

@@ -1,9 +1,11 @@
 /**
  * apps/api/src/modules/snapshots/dto/snapshots.dto.ts
  *
- * 変更内容（round8-reaudit）:
- *   [P1] EvaluateSnapshotBodyDto を追加
- *        POST /api/v1/snapshots/evaluate 用（EvaluateSnapshotSchema から派生）
+ * 役割: Snapshots API の NestJS Zod DTO 定義
+ *   - GET  /api/v1/snapshots         クエリ DTO
+ *   - GET  /api/v1/snapshots/latest  クエリ DTO
+ *   - POST /api/v1/snapshots/capture ボディ DTO
+ *   - POST /api/v1/snapshots/evaluate ボディ DTO
  *
  * 参照仕様: SPEC_v51_part3 §7「Snapshots API」
  *           packages/types/src/schemas/snapshot.schema.ts（正本）

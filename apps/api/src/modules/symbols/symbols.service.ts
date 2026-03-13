@@ -1,20 +1,25 @@
 /**
  * apps/api/src/modules/symbols/symbols.service.ts
  *
- * 変更内容（round8-reaudit2）:
- *   [Task3] getCorrelation() を追加
- *           GET /api/v1/symbols/correlation?period=30d|90d
- *           権限: PRO | PRO_PLUS | ADMIN（controller 側 RolesGuard で制御）
- *           v5.1: スタブ固定値を返す（Redis キャッシュ実装は v6 対象）
+ * 役割: Symbols API のビジネスロジック
+ *   - GET /api/v1/symbols              → findAll()
+ *   - GET /api/v1/symbols/correlation  → getCorrelation()
+ *   - PATCH /api/v1/symbols/:symbol    → updateSymbolSetting()
  *
- * 参照仕様: SPEC_v51_part3 §6「Symbols API」§11「集計 API」
- *           SPEC_v51_part7 §2.4「通貨相関マトリクス（ProOnly）」
- *           SPEC_v51_part10 §6.8「集計・統計系」
- *           packages/types/src/index.ts SymbolWithSettingDto / CorrelationMatrix
- *           prisma/schema.prisma SymbolSetting モデル
+ * 参照仕様:
+ *   SPEC_v51_part3 §6「Symbols API」§11「集計 API」
+ *   SPEC_v51_part7 §2.4「通貨相関マトリクス（ProOnly）」
+ *   SPEC_v51_part10 §6.8「集計・統計系」
+ *   packages/types/src/index.ts SymbolWithSettingDto / CorrelationMatrix
+ *   prisma/schema.prisma SymbolSetting モデル
+ *
+ * Redis キャッシュ:
+ *   キー: correlation:{userId}:{period}
+ *   TTL : 3600 秒（1時間）
+ *   仕様根拠: SPEC_v51_part3 §11 / SPEC_v51_part10 §6.8「全集計 API は Redis 1時間キャッシュ」
  */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SYMBOLS } from './symbols.constants';
 import type {
@@ -23,6 +28,7 @@ import type {
   CorrelationMatrix,
 } from '@fxde/types';
 import type { CorrelationQuery } from '@fxde/types';
+import Redis from 'ioredis';
 
 // ── v5.1 スタブ: 相関マトリクス固定値 ────────────────────────────────────────
 // 実際の相関係数は過去 N 日間の終値差分から Pearson 相関係数を計算する（v6 実装）
@@ -46,9 +52,17 @@ const STUB_MATRIX: number[][] = [
   [ 0.52,  -0.42,  0.48,  0.38,  0.62,  0.58, -0.32,  1.00], // XAUUSD
 ];
 
+// Redis キャッシュ TTL（1時間）
+const CORRELATION_CACHE_TTL_SEC = 3600;
+
 @Injectable()
 export class SymbolsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SymbolsService.name);
+  private readonly redis: Redis;
+
+  constructor(private readonly prisma: PrismaService) {
+    this.redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379');
+  }
 
   /**
    * GET /api/v1/symbols
@@ -78,17 +92,51 @@ export class SymbolsService {
   /**
    * GET /api/v1/symbols/correlation?period=30d|90d
    * 通貨ペア相関マトリクスを返す。
+   *
    * 権限チェックは controller 側 RolesGuard（PRO | PRO_PLUS | ADMIN）で実施済み。
-   * v5.1: スタブ固定値を返す。Redis キャッシュ / 実計算は v6 対象。
+   *
+   * キャッシュ戦略:
+   *   - Redis キー: correlation:{userId}:{period}
+   *   - TTL: 3600 秒（1時間）
+   *   - キャッシュヒット時: 保存済み JSON を返す（cachedAt はキャッシュ保存時刻）
+   *   - キャッシュミス時: スタブ値を生成して Redis に保存し返す
+   *
+   * v5.1: 相関値はスタブ固定値。実計算（Pearson 相関係数）は v6 対象。
    * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §2.4 / SPEC_v51_part10 §6.8
    */
-  async getCorrelation(_userId: string, query: CorrelationQuery): Promise<CorrelationMatrix> {
-    return {
+  async getCorrelation(userId: string, query: CorrelationQuery): Promise<CorrelationMatrix> {
+    const cacheKey = `correlation:${userId}:${query.period}`;
+
+    // ── キャッシュ参照 ──────────────────────────────────────────────────────
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        this.logger.debug(`correlation cache HIT key=${cacheKey}`);
+        return JSON.parse(cached) as CorrelationMatrix;
+      }
+    } catch (e) {
+      this.logger.warn(`Redis GET failed (key=${cacheKey}): ${String(e)}`);
+    }
+
+    // ── キャッシュミス: スタブ値を生成 ───────────────────────────────────────
+    this.logger.debug(`correlation cache MISS key=${cacheKey}`);
+
+    const result: CorrelationMatrix = {
       symbols:  STUB_SYMBOLS,
       matrix:   STUB_MATRIX,
       period:   query.period,
-      cachedAt: new Date().toISOString(), // v5.1 スタブでは常に現在時刻
+      cachedAt: new Date().toISOString(), // キャッシュ保存時刻
     };
+
+    // ── Redis に保存（TTL 1時間）───────────────────────────────────────────
+    try {
+      await this.redis.set(cacheKey, JSON.stringify(result), 'EX', CORRELATION_CACHE_TTL_SEC);
+      this.logger.debug(`correlation cache SET key=${cacheKey} TTL=${CORRELATION_CACHE_TTL_SEC}s`);
+    } catch (e) {
+      this.logger.warn(`Redis SET failed (key=${cacheKey}): ${String(e)}`);
+    }
+
+    return result;
   }
 
   /**
