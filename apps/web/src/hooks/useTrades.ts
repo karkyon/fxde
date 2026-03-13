@@ -24,7 +24,11 @@ import {
   keepPreviousData,
 } from '@tanstack/react-query';
 import { tradesApi } from '../lib/api';
-import type { PaginationParams } from '../lib/api';
+import type {
+  EquityCurveResponse,
+  TradeSummaryResponse,
+  PaginationParams,
+} from '../lib/api';
 import type {
   CloseTradeInput,
   CreateTradeReviewInput,
@@ -157,11 +161,10 @@ export function useCreateReview(tradeId: string) {
  *    enabled: false で無効化中。backend 実装後に enabled 条件を復元すること。
  */
 export function useEquityCurve(period: '1M' | '3M' | '1Y' = '1M') {
-  return useQuery({
+  return useQuery<EquityCurveResponse | null>({
     queryKey: ['trades', 'equity-curve', period] as const,
-    // TODO(backend): GET /trades/equity-curve 実装後に enabled を削除
-    queryFn:  () => Promise.resolve(null) as Promise<null>,
-    enabled:  false,
+    queryFn:  () => tradesApi.equityCurve(period),
+    retry:    false,
   });
 }
 
@@ -174,10 +177,9 @@ export function useEquityCurve(period: '1M' | '3M' | '1Y' = '1M') {
  *    enabled: false で無効化中。backend 実装後に enabled 条件を復元すること。
  */
 export function useTradeSummary() {
-  return useQuery({
+  return useQuery<TradeSummaryResponse | null>({
     queryKey: ['trades', 'stats', 'summary'] as const,
-    // TODO(backend): GET /trades/stats/summary 実装後に enabled を削除
-    queryFn:  () => Promise.resolve(null) as Promise<null>,
-    enabled:  false,
+    queryFn:  () => tradesApi.summary(),
+    retry:    false,
   });
 }

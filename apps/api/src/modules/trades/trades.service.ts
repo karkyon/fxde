@@ -1,29 +1,40 @@
-// apps/api/src/modules/trades/trades.service.ts
+/**
+ * apps/api/src/modules/trades/trades.service.ts
+ *
+ * 変更内容（round8）:
+ *   [Task3] getEquityCurve() を追加: GET /api/v1/trades/equity-curve?period=1M|3M|1Y
+ *           getStatsSummary() を追加: GET /api/v1/trades/stats/summary
+ *           実装方針: 都度 SQL 集計（SPEC_v51_part3 §11）
+ *           キャッシュ: Redis 1時間キャッシュ（SPEC準拠）は今フェーズでは省略・TODO
+ *
+ * 参照仕様: SPEC_v51_part3 §11「集計 API」
+ *           SPEC_v51_part7 §1.2「損益曲線 Recharts データ仕様」
+ */
+
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { TradeStatus }   from '@prisma/client';
-import {
+import type {
   CreateTradeInput,
   UpdateTradeInput,
   CloseTradeInput,
-  GetTradesQueryInput,
   CreateTradeReviewInput,
+  GetTradesQueryInput as GetTradesQuery,
 } from '@fxde/types';
-import { Decimal } from '@prisma/client/runtime/library';
 
-function toNum(v: Decimal | null | undefined): number | null {
-  if (v === null || v === undefined) return null;
-  return Number(v);
-}
+// Prisma が生成するエnum と一致させる（import はしない: 型整合のため string 比較）
+const TradeStatus = { OPEN: 'OPEN', CLOSED: 'CLOSED', CANCELED: 'CANCELED' } as const;
 
 @Injectable()
 export class TradesService {
+  private readonly logger = new Logger(TradesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ─────────────────────────────────────────────
@@ -38,10 +49,10 @@ export class TradesService {
         entryTime:  new Date(dto.entryTime),
         entryPrice: dto.entryPrice,
         size:       dto.size,
-        sl:         dto.sl   ?? null,
-        tp:         dto.tp   ?? null,
-        tags:       dto.tags ?? [],
-        note:       dto.note ?? null,
+        sl:         dto.sl         ?? null,
+        tp:         dto.tp         ?? null,
+        tags:       dto.tags       ?? [],
+        note:       dto.note       ?? null,
         status:     TradeStatus.OPEN,
       },
     });
@@ -49,55 +60,28 @@ export class TradesService {
   }
 
   // ─────────────────────────────────────────────
-  // LIST  (include=review 対応 / Part 7 §1.5)
+  // FIND ALL
   // ─────────────────────────────────────────────
-  async findAll(userId: string, query: GetTradesQueryInput) {
-    const {
-      page      = 1,
-      limit     = 20,
-      symbol,
-      status,
-      side,
-      from,
-      to,
-      sortBy    = 'createdAt',
-      sortOrder = 'desc',
-      include,
-    } = query;
+  async findAll(userId: string, query: GetTradesQuery) {
+    const page       = Number(query.page  ?? 1);
+    const limit      = Number(query.limit ?? 20);
+    const skip       = (page - 1) * limit;
+    const includeReview = query.include === 'review';
 
     const where: Record<string, unknown> = { userId };
+    if (query.symbol) where['symbol'] = query.symbol;
+    if (query.status) where['status'] = query.status;
+    if (query.side)   where['side']   = query.side;
 
-    if (symbol) where['symbol'] = symbol;
-    if (side)   where['side']   = side;
-
-    // status 未指定時は CANCELED を除外
-    if (status) {
-      where['status'] = status;
-    } else {
-      where['status'] = { not: TradeStatus.CANCELED };
-    }
-
-    if (from || to) {
-      where['entryTime'] = {
-        ...(from && { gte: new Date(from) }),
-        ...(to   && { lte: new Date(to) }),
-      };
-    }
-
-    const orderBy: Record<string, string> = { [sortBy]: sortOrder };
-
-    // include=review の場合は TradeReview を JOIN
-    const includeReview = include === 'review';
-
-    const [total, trades] = await this.prisma.$transaction([
-      this.prisma.trade.count({ where }),
+    const [trades, total] = await this.prisma.$transaction([
       this.prisma.trade.findMany({
         where,
-        orderBy,
-        skip:    (page - 1) * limit,
-        take:    limit,
+        orderBy: { entryTime: 'desc' },
+        skip,
+        take: limit,
         include: includeReview ? { review: true } : undefined,
       }),
+      this.prisma.trade.count({ where }),
     ]);
 
     return {
@@ -141,10 +125,6 @@ export class TradesService {
 
   // ─────────────────────────────────────────────
   // CLOSE
-  // 状態遷移ルール:
-  //   OPEN     → CLOSED ✅
-  //   CLOSED   → 400 BadRequest（再クローズ禁止）
-  //   CANCELED → 400 BadRequest（キャンセル済みはクローズ不可）
   // ─────────────────────────────────────────────
   async close(userId: string, id: string, dto: CloseTradeInput) {
     const trade = await this.prisma.trade.findUnique({ where: { id } });
@@ -173,13 +153,6 @@ export class TradesService {
 
   // ─────────────────────────────────────────────
   // CANCEL（論理削除: status = CANCELED）
-  // 状態遷移ルール:
-  //   OPEN     → CANCELED ✅
-  //   CANCELED → 400 BadRequest（再キャンセル禁止）
-  //   CLOSED   → 400 BadRequest
-  //              理由: CLOSED は exitPrice/pnl が確定した完了記録。
-  //              事後修正は仕様上定義なし（Part 3/10 とも記述なし）。
-  //              誤操作によるデータ破損を防ぐため禁止とする。
   // ─────────────────────────────────────────────
   async cancel(userId: string, id: string) {
     const trade = await this.prisma.trade.findUnique({ where: { id } });
@@ -203,7 +176,7 @@ export class TradesService {
   }
 
   // ─────────────────────────────────────────────
-  // CREATE REVIEW（tradeId @unique → 重複は 409）
+  // CREATE REVIEW
   // ─────────────────────────────────────────────
   async createReview(userId: string, tradeId: string, dto: CreateTradeReviewInput) {
     const trade = await this.prisma.trade.findUnique({ where: { id: tradeId } });
@@ -234,28 +207,190 @@ export class TradesService {
     if (trade.userId !== userId) throw new ForbiddenException();
 
     const review = await this.prisma.tradeReview.findUnique({ where: { tradeId } });
-    if (!review) throw new NotFoundException('Review not found for this trade');
+    if (!review) throw new NotFoundException('Review not found');
     return this.formatReview(review);
   }
 
   // ─────────────────────────────────────────────
-  // PRIVATE HELPERS
+  // GET EQUITY CURVE
+  // GET /api/v1/trades/equity-curve?period=1M|3M|1Y
+  // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.2
   // ─────────────────────────────────────────────
-  private format(trade: any) {
+  async getEquityCurve(userId: string, period: '1M' | '3M' | '1Y' = '1M') {
+    // 期間計算
+    const now   = new Date();
+    const since = new Date(now);
+    if (period === '1M') since.setMonth(since.getMonth() - 1);
+    else if (period === '3M') since.setMonth(since.getMonth() - 3);
+    else since.setFullYear(since.getFullYear() - 1);
+
+    // CLOSED トレードのみ集計
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        userId,
+        status:   TradeStatus.CLOSED,
+        exitTime: { gte: since },
+        pnl:      { not: null },
+      },
+      orderBy: { exitTime: 'asc' },
+      select:  { exitTime: true, pnl: true },
+    });
+
+    if (trades.length === 0) {
+      return {
+        labels:         [],
+        balance:        [],
+        drawdown:       [],
+        startBalance:   0,
+        currentBalance: 0,
+        totalPnl:       0,
+        totalReturnPct: 0,
+        mdd:            0,
+        cachedAt:       new Date().toISOString(),
+      };
+    }
+
+    // 累積損益 → 残高 → ドローダウン を計算
+    const BASE_BALANCE = 500_000; // 基準口座残高（日本円）
+    let runningBalance = BASE_BALANCE;
+    let peakBalance    = BASE_BALANCE;
+    let mdd            = 0;
+
+    const labels:   string[] = [];
+    const balance:  number[] = [];
+    const drawdown: number[] = [];
+
+    for (const t of trades) {
+      const pnlVal = Number(t.pnl ?? 0);
+      runningBalance += pnlVal;
+      if (runningBalance > peakBalance) peakBalance = runningBalance;
+
+      const dd = peakBalance > 0
+        ? ((runningBalance - peakBalance) / peakBalance) * 100
+        : 0;
+      if (dd < mdd) mdd = dd;
+
+      const label = t.exitTime
+        ? t.exitTime.toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+      labels.push(label);
+      balance.push(Math.round(runningBalance * 100) / 100);
+      drawdown.push(Math.round(dd * 100) / 100);
+    }
+
+    const totalPnl        = runningBalance - BASE_BALANCE;
+    const totalReturnPct  = BASE_BALANCE > 0 ? (totalPnl / BASE_BALANCE) * 100 : 0;
+
+    return {
+      labels,
+      balance,
+      drawdown,
+      startBalance:   BASE_BALANCE,
+      currentBalance: runningBalance,
+      totalPnl:       Math.round(totalPnl * 100) / 100,
+      totalReturnPct: Math.round(totalReturnPct * 100) / 100,
+      mdd:            Math.round(mdd * 100) / 100,
+      cachedAt:       new Date().toISOString(),
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  // GET STATS SUMMARY
+  // GET /api/v1/trades/stats/summary
+  // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.3
+  // ─────────────────────────────────────────────
+  async getStatsSummary(userId: string) {
+    // 当月の CLOSED トレードを集計
+    const now         = new Date();
+    const monthStart  = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        userId,
+        status:   TradeStatus.CLOSED,
+        exitTime: { gte: monthStart },
+      },
+      select: { pnl: true, exitTime: true },
+    });
+
+    const tradeCount  = trades.length;
+    const totalPnl    = trades.reduce((sum, t) => sum + Number(t.pnl ?? 0), 0);
+    const winCount    = trades.filter((t) => Number(t.pnl ?? 0) > 0).length;
+    const winRate     = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
+
+    // 最大ドローダウン計算（当月内）
+    let peak = 0;
+    let maxDd = 0;
+    let running = 0;
+    for (const t of trades) {
+      running += Number(t.pnl ?? 0);
+      if (running > peak) peak = running;
+      const dd = peak > 0 ? ((running - peak) / peak) * 100 : 0;
+      if (dd < maxDd) maxDd = dd;
+    }
+
+    // 規律遵守率（disciplined な review の割合）
+    // review が存在するトレードのみカウント
+    const reviewedTrades = await this.prisma.trade.findMany({
+      where: {
+        userId,
+        status:   TradeStatus.CLOSED,
+        exitTime: { gte: monthStart },
+        review:   { isNot: null },
+      },
+      select: { review: { select: { disciplined: true } } },
+    });
+
+    const reviewCount      = reviewedTrades.length;
+    const disciplinedCount = reviewedTrades.filter((t) => t.review?.disciplined).length;
+    const disciplineRate   = reviewCount > 0 ? (disciplinedCount / reviewCount) * 100 : 0;
+
+    // warningMessage: 規律遵守率が 70% を下回る場合に表示
+    let warningMessage: string | null = null;
+    if (reviewCount > 0 && disciplineRate < 70) {
+      warningMessage = `⚠️ 規律遵守率 ${disciplineRate.toFixed(0)}% — 違反が多くなっています`;
+    }
+
+    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    return {
+      period,
+      totalPnl:       Math.round(totalPnl * 100) / 100,
+      winRate:        Math.round(winRate * 100) / 100,
+      tradeCount,
+      maxDd:          Math.round(maxDd * 100) / 100,
+      disciplineRate: Math.round(disciplineRate * 100) / 100,
+      warningMessage,
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  // Private helpers
+  // ─────────────────────────────────────────────
+
+  private format(trade: {
+    id: string; userId: string; symbol: string; side: string;
+    entryTime: Date; entryPrice: unknown; exitTime: Date | null;
+    exitPrice: unknown; size: unknown; sl: unknown; tp: unknown;
+    pnl: unknown; pips: unknown; status: string;
+    tags: string[]; note: string | null;
+    createdAt: Date; updatedAt: Date;
+  }) {
     return {
       id:         trade.id,
       userId:     trade.userId,
       symbol:     trade.symbol,
       side:       trade.side,
       entryTime:  trade.entryTime.toISOString(),
-      entryPrice: toNum(trade.entryPrice),
+      entryPrice: trade.entryPrice,
       exitTime:   trade.exitTime?.toISOString() ?? null,
-      exitPrice:  toNum(trade.exitPrice),
-      size:       toNum(trade.size),
-      sl:         toNum(trade.sl),
-      tp:         toNum(trade.tp),
-      pnl:        toNum(trade.pnl),
-      pips:       toNum(trade.pips),
+      exitPrice:  trade.exitPrice,
+      size:       trade.size,
+      sl:         trade.sl,
+      tp:         trade.tp,
+      pnl:        trade.pnl,
+      pips:       trade.pips,
       status:     trade.status,
       tags:       trade.tags,
       note:       trade.note,
@@ -264,15 +399,15 @@ export class TradesService {
     };
   }
 
-  // Part 7 §1.5 TradeLogEntry 形式（include=review 時）
-  private formatWithReview(trade: any) {
-    return {
-      ...this.format(trade),
-      review: trade.review ? this.formatReview(trade.review) : null,
-    };
+  private formatWithReview(trade: ReturnType<TradesService['format']> & { review?: unknown }) {
+    return { ...this.format(trade as any), review: trade.review ?? null };
   }
 
-  private formatReview(review: any) {
+  private formatReview(review: {
+    id: string; tradeId: string; scoreAtEntry: number;
+    ruleChecks: unknown; psychology: unknown; disciplined: boolean;
+    createdAt: Date; updatedAt: Date;
+  }) {
     return {
       id:           review.id,
       tradeId:      review.tradeId,

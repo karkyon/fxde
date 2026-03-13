@@ -1,4 +1,16 @@
-// apps/api/src/modules/trades/trades.controller.ts
+/**
+ * apps/api/src/modules/trades/trades.controller.ts
+ *
+ * 変更内容（round8）:
+ *   [Task3] GET /api/v1/trades/equity-curve を追加
+ *           GET /api/v1/trades/stats/summary を追加
+ *   ⚠️ NestJS ルート解決順序に注意:
+ *      static path (equity-curve / stats/summary) は :id より先に定義する。
+ *
+ * 参照仕様: SPEC_v51_part3 §11「集計 API」
+ *           SPEC_v51_part10 §6.8
+ */
+
 import {
   Controller,
   Get,
@@ -18,10 +30,11 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
-import { JwtAuthGuard }                from '../../common/guards/jwt-auth.guard';
-import { CurrentUser, JwtPayload }     from '../../common/decorators/current-user.decorator';
-import { TradesService }               from './trades.service';
+import { JwtAuthGuard }            from '../../common/guards/jwt-auth.guard';
+import { CurrentUser, JwtPayload } from '../../common/decorators/current-user.decorator';
+import { TradesService }           from './trades.service';
 import {
   CreateTradeDto,
   UpdateTradeDto,
@@ -57,6 +70,36 @@ export class TradesController {
     @Query() query: GetTradesQueryDto,
   ) {
     return this.tradesService.findAll(user.sub, query);
+  }
+
+  /**
+   * GET /api/v1/trades/equity-curve?period=1M|3M|1Y
+   * ⚠️ static route → :id より前に定義すること（NestJS ルート解決順序）
+   * 参照: SPEC_v51_part3 §11
+   */
+  @Get('equity-curve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '損益曲線（period=1M|3M|1Y）' })
+  @ApiQuery({ name: 'period', enum: ['1M', '3M', '1Y'], required: false })
+  getEquityCurve(
+    @CurrentUser() user: JwtPayload,
+    @Query('period') period?: string,
+  ) {
+    const validPeriod =
+      period === '3M' || period === '1Y' ? period : '1M';
+    return this.tradesService.getEquityCurve(user.sub, validPeriod);
+  }
+
+  /**
+   * GET /api/v1/trades/stats/summary
+   * ⚠️ static route → :id より前に定義すること
+   * 参照: SPEC_v51_part3 §11
+   */
+  @Get('stats/summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '月次サマリー（勝率・損益・DD・規律遵守率）' })
+  getStatsSummary(@CurrentUser() user: JwtPayload) {
+    return this.tradesService.getStatsSummary(user.sub);
   }
 
   /** GET /api/v1/trades/:id */
@@ -97,7 +140,7 @@ export class TradesController {
     return this.tradesService.close(user.sub, id, dto);
   }
 
-  /** DELETE /api/v1/trades/:id  → 論理削除（status=CANCELED） */
+  /** DELETE /api/v1/trades/:id → 論理削除（status=CANCELED）*/
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'トレード論理削除（status=CANCELED）' })
@@ -112,7 +155,7 @@ export class TradesController {
   /** POST /api/v1/trades/:id/review */
   @Post(':id/review')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: '振り返り登録（1 トレードに 1 件のみ）' })
+  @ApiOperation({ summary: '振り返り登録' })
   @ApiParam({ name: 'id', format: 'uuid' })
   createReview(
     @CurrentUser() user: JwtPayload,

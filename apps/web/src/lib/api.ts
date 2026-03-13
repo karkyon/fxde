@@ -9,6 +9,12 @@
 //             trades.controller.ts に equity-curve / stats/summary route なし
 //   ※ 上記は仕様上必要な API。backend 実装完了後に復元する。
 //
+// 変更内容（round8）:
+//   [Task1] snapshotsApi.capture → backend POST /snapshots/capture 実装完了により復元
+//   [Task2] symbolsApi.update    → backend PATCH /symbols/:symbol 実装完了により復元
+//   [Task3] tradesApi.equityCurve / summary → backend route 実装完了により復元
+//           EquityCurveResponse / TradeSummaryResponse 型定義追加
+//
 /**
  * 参照仕様:
  *   SPEC_v51_part3 §2（共通型定義）§5（Settings）§8（Trades）§9（Signals）
@@ -53,6 +59,31 @@ export interface TradeReviewResponse {
 export interface PaginationParams {
   page?: number;
   limit?: number;
+}
+
+// ── 集計系レスポンス型（SPEC_v51_part3 §11）─────────────────────────────────
+// GET /api/v1/trades/equity-curve?period=1M|3M|1Y
+export interface EquityCurveResponse {
+  labels:         string[];
+  balance:        number[];
+  drawdown:       number[];
+  startBalance:   number;
+  currentBalance: number;
+  totalPnl:       number;
+  totalReturnPct: number;
+  mdd:            number;
+  cachedAt:       string; // キャッシュ値の場合に UI でバッジ表示
+}
+
+// GET /api/v1/trades/stats/summary
+export interface TradeSummaryResponse {
+  period:          string;           // "2025-03"
+  totalPnl:        number;
+  winRate:         number;
+  tradeCount:      number;
+  maxDd:           number;
+  disciplineRate:  number;
+  warningMessage:  string | null; // 規律違反多時に表示
 }
 
 // ── Axios インスタンス ──────────────────────────────────────────────────────
@@ -178,14 +209,11 @@ export const settingsApi = {
 };
 
 // ── Symbols API ───────────────────────────────────────────────────────────
-// ⚠️ update (PATCH /symbols/:symbol) は backend 未実装
-//    symbols.controller.ts には GET /symbols のみ
-//    仕様上必要。backend 実装後に復元すること。
+// 参照: SPEC_v51_part3 §6
 export const symbolsApi = {
-  list: () => api.get<unknown[]>('/symbols').then((r) => r.data),
-  // TODO(backend): PATCH /symbols/:symbol 実装後に復元
-  // update: (symbol: string, body: UpdateSymbolSettingDto) =>
-  //   api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
+  list:   () => api.get<unknown[]>('/symbols').then((r) => r.data),
+  update: (symbol: string, body: UpdateSymbolSettingDto) =>
+    api.patch(`/symbols/${symbol}`, body).then((r) => r.data),
 };
 
 // UpdateSymbolSettingDto を外部に再エクスポート（useUpdateSymbol が参照するため型だけ保持）
@@ -212,27 +240,22 @@ export const tradesApi = {
     api.get<TradeReviewResponse>(`/trades/${id}/review`).then((r) => r.data),
   createReview: (id: string, body: CreateTradeReviewInput) =>
     api.post<TradeReviewResponse>(`/trades/${id}/review`, body).then((r) => r.data),
-  // ⚠️ 以下 2 つは backend 未実装（trades.controller.ts に route なし）
-  //    仕様上必要。backend 実装後に復元すること。
-  // equityCurve: (period: '1M' | '3M' | '1Y') =>
-  //   api.get('/trades/equity-curve', { params: { period } }).then((r) => r.data),
-  // summary: () =>
-  //   api.get('/trades/stats/summary').then((r) => r.data),
+  equityCurve:  (period: '1M' | '3M' | '1Y' = '1M') =>
+    api.get<EquityCurveResponse>('/trades/equity-curve', { params: { period } }).then((r) => r.data),
+  summary:      () =>
+    api.get<TradeSummaryResponse>('/trades/stats/summary').then((r) => r.data),
 };
 
 // ── Snapshots API ─────────────────────────────────────────────────────────
 // /snapshots/latest → 単一 SnapshotResponse
 // 参照: SPEC_v51_part3 §7
 export const snapshotsApi = {
-  list:   (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
+  list:    (params?: PaginationParams & { symbol?: string; timeframe?: string }) =>
     api.get<PaginatedResponse<SnapshotResponse>>('/snapshots', { params }).then((r) => r.data),
-  latest: (params?: { symbol?: string; timeframe?: string }) =>
+  latest:  (params?: { symbol?: string; timeframe?: string }) =>
     api.get<SnapshotResponse>('/snapshots/latest', { params }).then((r) => r.data),
-  // ⚠️ capture (POST /snapshots/capture) は backend 未実装
-  //    snapshots.controller.ts には GET /latest / GET / のみ
-  //    仕様上必要。backend 実装後に復元すること。
-  // capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
-  //   api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
+  capture: (body: { symbol: string; timeframe: string; asOf?: string }) =>
+    api.post<SnapshotResponse>('/snapshots/capture', body).then((r) => r.data),
 };
 
 // ── Signals API ───────────────────────────────────────────────────────────

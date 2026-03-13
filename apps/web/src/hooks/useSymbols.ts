@@ -5,6 +5,9 @@
  *   [Task2] useUpdateSymbol → symbolsApi.update が backend 未実装のためコメントアウト
  *           symbols.controller.ts には GET /symbols のみ実装
  *           仕様上 PATCH /symbols/:symbol は必要。backend 実装後に復元すること。
+ *         （round8）:
+ *   [Task2] useUpdateSymbol → symbolsApi.update を復元
+ *           backend PATCH /symbols/:symbol 実装完了（symbols.controller.ts に追加済み）
  *
  * 含まれるフック:
  *   useSymbols()      → GET /api/v1/symbols
@@ -23,7 +26,7 @@ export const symbolKeys = {
   all:  () => ['symbols'] as const,
   list: () => ['symbols', 'list'] as const,
 };
-
+ 
 /**
  * useSymbols
  * GET /api/v1/symbols
@@ -53,9 +56,8 @@ export function useSymbols() {
 export function useUpdateSymbol() {
   const qc = useQueryClient();
   return useMutation({
-    // TODO(backend): 実装後に symbolsApi.update に戻す
-    mutationFn: (_params: { symbol: string; body: UpdateSymbolSettingDto }) =>
-      Promise.reject(new Error('PATCH /symbols/:symbol は backend 未実装です')),
+    mutationFn: ({ symbol, body }: { symbol: string; body: UpdateSymbolSettingDto }) =>
+      symbolsApi.update(symbol, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: symbolKeys.all() }),
   });
 }

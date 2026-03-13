@@ -91,6 +91,25 @@ export const EntryContextSchema = z.object({
   forceLock:      z.boolean(),
 });
 
+// ── Capture DTO schema ─────────────────────────────────────────────────────
+
+/**
+ * POST /api/v1/snapshots/capture リクエストボディ
+ * 参照: SPEC_v51_part3 §7
+ */
+export const CaptureSnapshotSchema = z.object({
+  /** 通貨ペア（例: "EURUSD"）*/
+  symbol:    z.string().min(1),
+  /** 時間足 */
+  timeframe: TimeframeSchema,
+  /**
+   * 省略時はコネクタから最新データを取得。
+   * 指定時はそのデータで計算（バックテスト用途）。
+   */
+  asOf:      z.string().datetime({ offset: true }).optional(),
+});
+export type CaptureSnapshotDto = z.infer<typeof CaptureSnapshotSchema>;
+
 // ── Query schemas ──────────────────────────────────────────────────────────
 
 /**
