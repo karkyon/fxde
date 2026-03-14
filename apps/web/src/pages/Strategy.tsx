@@ -286,7 +286,7 @@ export default function StrategyPage() {
   const [selectedPattern, setSelectedPattern] = useState<PatternCard | null>(null);
   const [ruleTab, setRuleTab]         = useState<'entry' | 'exit' | 'fib'>('entry');
   // plugins タブ用メインタブ state（fxde_plugin_system_完全設計書 §1.2）
-  const [activeMainTab, setActiveMainTab] = useState<'strategy' | 'plugins'>('strategy');
+  const [activeMainTab, setActiveMainTab] = useState<'overview' | 'patterns' | 'plugins'>('overview');
   const user = useAuthStore((s) => s.user);
 
   const filteredPatterns = PATTERNS.filter((p) => p.category === patternTab);
@@ -298,9 +298,10 @@ export default function StrategyPage() {
       {/* ── メインタブ（strategy / plugins）fxde_plugin_system_完全設計書 §1.2  */}
       <div style={s.mainTabRow}>
         {([
-          { id: 'strategy' as const, label: '📐 ストラテジー' },
-          { id: 'plugins'  as const, label: '🧩 Plugins'      },
-        ]).map(({ id, label }) => (
+         { id: 'overview'  as const, label: '📐 Overview'  },
+         { id: 'patterns'  as const, label: '🔍 Patterns'  },
+         { id: 'plugins'   as const, label: '🧩 Plugins'   },
+       ]).map(({ id, label }) => (
           <button
             key={id}
             style={{
@@ -320,7 +321,7 @@ export default function StrategyPage() {
       )}
 
       {/* ── strategy タブ（既存コンテンツ）*/}
-      {activeMainTab === 'strategy' && (<>
+      {(activeMainTab === 'overview' || activeMainTab === 'patterns') && (<>
 
         {/* ══════════════════════════════════════
             上段: 手法カード一覧

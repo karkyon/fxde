@@ -25,13 +25,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PluginsService }    from './plugins.service';
-import { GetPluginsQueryDto } from './dto/get-plugins.query.dto';
-import { PluginIdParamDto }  from './dto/plugin-id.param.dto';
+// 修正1: createZodDto() 版 DTO へ変更（class-validator 版は削除）
+import { GetPluginsQueryDto } from './dto/get-plugins.dto';
+import { PluginIdParamDto }  from './dto/plugin-id.dto';
 import { JwtAuthGuard }      from '../../common/guards/jwt-auth.guard';
 import { RolesGuard }        from '../../common/guards/roles.guard';
 import { Roles }             from '../../common/decorators/roles.decorator';
 import { CurrentUser }       from '../../common/decorators/current-user.decorator';
 import type { JwtPayload }   from '../../common/decorators/current-user.decorator';
+// 修正7: UserRole 型定数を明示 import（string リテラルが UserRole 型と一致することを保証）
+import type { UserRole }     from '@fxde/types';
 
 @Controller('plugins')
 @UseGuards(JwtAuthGuard)  // 全エンドポイントで JWT 必須
@@ -72,9 +75,10 @@ export class PluginsController {
   /**
    * POST /api/v1/plugins/:pluginId/enable
    * プラグイン有効化（ADMIN のみ）
+   * 修正7: UserRole 型に一致する文字列リテラルを明示
    */
   @Post(':pluginId/enable')
-  @Roles('ADMIN')
+  @Roles('ADMIN' satisfies UserRole)
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   enablePlugin(
@@ -87,9 +91,10 @@ export class PluginsController {
   /**
    * POST /api/v1/plugins/:pluginId/disable
    * プラグイン無効化（ADMIN のみ）
+   * 修正7: UserRole 型に一致する文字列リテラルを明示
    */
   @Post(':pluginId/disable')
-  @Roles('ADMIN')
+  @Roles('ADMIN' satisfies UserRole)
   @UseGuards(RolesGuard)
   @HttpCode(HttpStatus.OK)
   disablePlugin(

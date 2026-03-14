@@ -12,7 +12,7 @@
  *   4. Capabilities
  *   5. 入力データ（permissions）
  *   6. 依存プラグイン
- *   7. Source preview viewer（read-only）
+ *   7. Source preview viewer（read-only）← 修正3: 専用 API 経由に変更
  *   8. 有効 / 無効 toggle
  */
 
@@ -20,6 +20,8 @@ import React from 'react';
 import { PluginSourceViewer } from './PluginSourceViewer';
 import { PluginEnableToggle } from './PluginEnableToggle';
 import { PluginStatusBadge }  from './PluginStatusBadge';
+// 修正3: source preview は専用 API（GET /plugins/:id/source-preview）から取得
+import { usePluginSourcePreview } from '../../../hooks/usePluginSourcePreview';
 import type { PluginDetailResponse, PluginStatus } from '@fxde/types';
 
 interface PluginDetailDrawerProps {
@@ -52,6 +54,11 @@ export function PluginDetailDrawer({
   onClose,
   onToggle,
 }: PluginDetailDrawerProps) {
+  // 修正3: source preview は detail payload からではなく専用 API から取得
+  const sourcePreviewQuery = usePluginSourcePreview(
+    open ? detail?.manifest.id : undefined,
+  );
+
   if (!open) return null;
 
   const m = detail?.manifest;
@@ -170,9 +177,14 @@ export function PluginDetailDrawer({
                 </div>
               </section>
 
-              {/* Source Preview（read-only）*/}
+              {/* Source Preview（read-only）— 修正3: 専用API経由 */}
               <PluginSourceViewer
-                code={m.sourcePreview ?? '// No source preview available'}
+                code={
+                  sourcePreviewQuery.isLoading
+                    ? '// Loading source preview...'
+                    : (sourcePreviewQuery.data?.content ?? '// No source preview available')
+                }
+                language={sourcePreviewQuery.data?.language ?? 'typescript'}
               />
 
               {/* Enable / Disable toggle */}

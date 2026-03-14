@@ -155,6 +155,51 @@ export const PluginAuditLogListResponseSchema = z.object({
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// API Request Schemas（NestJS createZodDto() の正本）
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * フィルタ値（PluginType + status ショートカット）
+ * 修正4: PluginTypeSchema の全値 + 状態フィルタを完全一致させる
+ */
+export const PLUGIN_FILTER_VALUES = [
+  'all',
+  'enabled',
+  'disabled',
+  'pattern',
+  'indicator',
+  'strategy',
+  'risk',
+  'overlay',
+  'signal',
+  'ai',
+  'connector',
+] as const;
+
+export const PLUGIN_SORT_VALUES = [
+  'name',
+  'createdAt',
+  'pluginType',
+  'version',
+] as const;
+
+/** GET /api/v1/plugins クエリパラメータ Schema */
+export const GetPluginsQuerySchema = z.object({
+  filter: z.enum(PLUGIN_FILTER_VALUES).optional().default('all'),
+  sort:   z.enum(PLUGIN_SORT_VALUES).optional().default('name'),
+});
+
+/** プラグイン ID パスパラメータ Schema */
+export const PluginIdParamSchema = z.object({
+  pluginId: z.string().min(1),
+});
+
+export type GetPluginsQuery  = z.infer<typeof GetPluginsQuerySchema>;
+export type PluginIdParam    = z.infer<typeof PluginIdParamSchema>;
+export type PluginFilterValue = (typeof PLUGIN_FILTER_VALUES)[number];
+export type PluginSortValue   = (typeof PLUGIN_SORT_VALUES)[number];
+
+// ──────────────────────────────────────────────────────────────────────────
 // Inferred Types
 // ──────────────────────────────────────────────────────────────────────────
 

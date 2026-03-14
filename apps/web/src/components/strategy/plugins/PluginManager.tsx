@@ -10,16 +10,19 @@
  *   - detail open state 管理
  *   - toggle action 呼び出し
  *   - RBAC: user.role === 'ADMIN' のみ toggle 可
+ *
+ * 修正4: filter / sort を PluginFilterValue / PluginSortValue 型に統一
  */
 
 import React, { useMemo, useState } from 'react';
-import { usePlugins }       from '../../../hooks/usePlugins';
-import { usePluginDetail }  from '../../../hooks/usePluginDetail';
-import { usePluginToggle }  from '../../../hooks/usePluginToggle';
-import { PluginToolbar }    from './PluginToolbar';
-import { PluginGrid }       from './PluginGrid';
-import { PluginEmptyState } from './PluginEmptyState';
+import { usePlugins }        from '../../../hooks/usePlugins';
+import { usePluginDetail }   from '../../../hooks/usePluginDetail';
+import { usePluginToggle }   from '../../../hooks/usePluginToggle';
+import { PluginToolbar }     from './PluginToolbar';
+import { PluginGrid }        from './PluginGrid';
+import { PluginEmptyState }  from './PluginEmptyState';
 import { PluginDetailDrawer } from './PluginDetailDrawer';
+import type { PluginFilterValue, PluginSortValue } from '@fxde/types';
 
 interface PluginManagerProps {
   /** 現在のユーザーロール（auth.store の user.role を渡す）*/
@@ -27,8 +30,9 @@ interface PluginManagerProps {
 }
 
 export function PluginManager({ currentUserRole }: PluginManagerProps) {
-  const [filter, setFilter]                   = useState('all');
-  const [sort, setSort]                       = useState('name');
+  // 修正4: 型を PluginFilterValue / PluginSortValue に統一
+  const [filter, setFilter] = useState<PluginFilterValue>('all');
+  const [sort, setSort]     = useState<PluginSortValue>('name');
   const [selectedPluginId, setSelectedPluginId] = useState<string | undefined>();
 
   // ADMIN のみ toggle 可（§8 権限制御）
@@ -41,14 +45,7 @@ export function PluginManager({ currentUserRole }: PluginManagerProps) {
   const items = useMemo(() => data?.items ?? [], [data]);
 
   const handleToggle = (pluginId: string, nextEnabled: boolean) => {
-    toggleMutation.mutate(
-      { pluginId, nextEnabled },
-      {
-        onSuccess: () => {
-          // refetch は usePluginToggle 内で invalidate 済み
-        },
-      },
-    );
+    toggleMutation.mutate({ pluginId, nextEnabled });
   };
 
   const handleOpenDetail = (pluginId: string) => {

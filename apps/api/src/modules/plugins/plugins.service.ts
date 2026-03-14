@@ -25,7 +25,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService }   from '../../prisma/prisma.service';
 import { PluginsRegistry } from './plugins.registry';
-import { GetPluginsQueryDto } from './dto/get-plugins.query.dto';
+// 修正1: createZodDto() 版 DTO を使用
+import { GetPluginsQueryDto } from './dto/get-plugins.dto';
+import type { PluginSortValue } from '@fxde/types';
 
 @Injectable()
 export class PluginsService {
@@ -39,9 +41,12 @@ export class PluginsService {
   // ────────────────────────────────────────────────────────────
 
   async getPlugins(query: GetPluginsQueryDto) {
+    // 修正2: sort パラメータに応じた orderBy を構築
+    const orderBy = this._buildOrderBy(query.sort ?? 'name');
+
     const rows = await this.prisma.pluginManifest.findMany({
       include: { installedPlugins: true },
-      orderBy: { displayName: 'asc' },
+      orderBy,
     });
 
     const items = rows.map((row) => {
@@ -323,6 +328,21 @@ export class PluginsService {
       })),
       total: items.length,
     };
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // Internal: sort orderBy 生成
+  // 修正2: displayName 固定 → クエリパラメータ対応
+  // ────────────────────────────────────────────────────────────
+
+  private _buildOrderBy(sort: PluginSortValue): object {
+    switch (sort) {
+      case 'createdAt':  return { createdAt: 'asc'  as const };
+      case 'pluginType': return { pluginType: 'asc' as const };
+      case 'version':    return { version: 'asc'    as const };
+      case 'name':
+      default:           return { displayName: 'asc' as const };
+    }
   }
 
   // ────────────────────────────────────────────────────────────

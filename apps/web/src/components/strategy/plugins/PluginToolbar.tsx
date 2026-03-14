@@ -4,36 +4,44 @@
  * プラグイン一覧ツールバー（フィルタ / ソート）
  *
  * 参照仕様: fxde_plugin_system_完全設計書 §3.1 フィルタ / ソート定義
+ *
+ * 修正4: filter オプションを plugin.schema.ts の PLUGIN_FILTER_VALUES と完全一致
+ *        sort オプションを PLUGIN_SORT_VALUES と完全一致（API実装済みの値のみ）
  */
 
 import React from 'react';
+// 修正4: スキーマ定義の定数を正本として使用
+import type { PluginFilterValue, PluginSortValue } from '@fxde/types';
 
 interface PluginToolbarProps {
-  filter:         string;
-  sort:           string;
-  onFilterChange: (value: string) => void;
-  onSortChange:   (value: string) => void;
+  filter:         PluginFilterValue;
+  sort:           PluginSortValue;
+  onFilterChange: (value: PluginFilterValue) => void;
+  onSortChange:   (value: PluginSortValue) => void;
 }
 
-const FILTER_OPTIONS = [
+// 修正4: PLUGIN_FILTER_VALUES と完全一致（signal / connector を追加）
+const FILTER_OPTIONS: Array<{ value: PluginFilterValue; label: string }> = [
   { value: 'all',       label: 'All' },
   { value: 'enabled',   label: 'Enabled' },
   { value: 'disabled',  label: 'Disabled' },
   { value: 'pattern',   label: 'Pattern' },
   { value: 'indicator', label: 'Indicator' },
   { value: 'strategy',  label: 'Strategy' },
-  { value: 'ai',        label: 'AI' },
-  { value: 'overlay',   label: 'Overlay' },
   { value: 'risk',      label: 'Risk' },
-] as const;
+  { value: 'overlay',   label: 'Overlay' },
+  { value: 'signal',    label: 'Signal' },
+  { value: 'ai',        label: 'AI' },
+  { value: 'connector', label: 'Connector' },
+];
 
-const SORT_OPTIONS = [
-  { value: 'name',        label: '名前順' },
-  { value: 'updatedAt',   label: '更新日順' },
-  { value: 'installedAt', label: 'インストール日順' },
-  { value: 'enabled',     label: '有効状態順' },
-  { value: 'recommended', label: '推奨順' },
-] as const;
+// 修正2対応: PLUGIN_SORT_VALUES と完全一致
+const SORT_OPTIONS: Array<{ value: PluginSortValue; label: string }> = [
+  { value: 'name',       label: '名前順' },
+  { value: 'createdAt',  label: '作成日順' },
+  { value: 'pluginType', label: '種別順' },
+  { value: 'version',    label: 'バージョン順' },
+];
 
 export function PluginToolbar({
   filter,
@@ -64,7 +72,7 @@ export function PluginToolbar({
         <label style={s.sortLabel}>Sort</label>
         <select
           value={sort}
-          onChange={(e) => onSortChange(e.target.value)}
+          onChange={(e) => onSortChange(e.target.value as PluginSortValue)}
           style={s.sortSelect}
         >
           {SORT_OPTIONS.map((opt) => (
