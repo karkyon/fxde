@@ -5,23 +5,13 @@
  *   SPEC_v51_part10 §10「PG-07 Chart — 完全設計」（UI 正本）
  *   SPEC_v51_part11 §8「PG-07 と Chart API の対応」（データ正本）
  *
- * セクション構成（SPEC_v51_part10 §10.4 確定 8 セクション）:
- *   1. chart-overview   — ペア・時間足・価格・セッション
- *   2. chart-toolbar    — ペア選択・TF・indicator toggle 等
- *   3. main-chart       — メインチャート本体（SVG ベース）
- *   4. indicator-summary — 指標状態カード群（6枚）
- *   5. trade-overlay-panel — アクティブトレード補助情報
- *   6. prediction-overlay-panel — Prediction overlay（PRO stub）
- *   7. chart-notes      — メモ欄（v5.1 = React state のみ）
- *   8. recent-signals   — 直近シグナル一覧
- *
- * v5.1 実装状況:
- *   完了: 全 8 セクション骨格 UI + API 統合
- *   追加: Navigator / Zoom / Pan / Indicator Overlay / Prediction Overlay 動的化
- *   v5.1 制約: chart-notes = 永続化なし
- *   v6 対象: chart-notes 永続化
- *
- * アクセス権限: 全ロール（prediction-overlay-panel のみ PRO 限定）
+ * 修正履歴 v3:
+ *   - OHLC Header: main-chart SVG 内左上 overlay に正しく配置
+ *   - Crosshair: SVG viewBox 座標変換を svgRef ベースに統一。plot area オフセット考慮。
+ *     candle index = floor ベースに修正。candle center X へスナップ。端クランプ追加。
+ *   - Fullscreen: chartWorkspaceRef で toolbar+chart+navigator を丸ごと包む。
+ *     fullscreen 時は flex-column+flex:1 で SVG が残り高さを100%使用。
+ *     固定 height を fullscreen 時は除去。
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -39,8 +29,10 @@ import { useAuthStore } from '../stores/auth.store';
 import type { Timeframe } from '@fxde/types';
 import type { PatternMarker } from '../lib/api';
 
-// ── Indicator utilities（frontend 計算） ────────────────────────────────────
-// calcSMA
+// ─────────────────────────────────────────────────────────────────────────────
+// Indicator utilities（frontend 計算）
+// ─────────────────────────────────────────────────────────────────────────────
+
 function calcSMA(closes: number[], period: number): (number | null)[] {
   if (period <= 0 || closes.length === 0) return closes.map(() => null);
   const result: (number | null)[] = [];
@@ -53,7 +45,6 @@ function calcSMA(closes: number[], period: number): (number | null)[] {
   return result;
 }
 
-// calcEMA
 function calcEMA(closes: number[], period: number): (number | null)[] {
   if (period <= 0 || closes.length === 0) return closes.map(() => null);
   const result: (number | null)[] = new Array(closes.length).fill(null);
@@ -68,7 +59,6 @@ function calcEMA(closes: number[], period: number): (number | null)[] {
   return result;
 }
 
-// calcBollinger
 interface BollingerPoint { upper: number | null; mid: number | null; lower: number | null; }
 function calcBollinger(closes: number[], period = 20, stddev = 2): BollingerPoint[] {
   if (closes.length === 0) return [];
@@ -83,7 +73,10 @@ function calcBollinger(closes: number[], period = 20, stddev = 2): BollingerPoin
   });
 }
 
-// ── Viewport utilities ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Viewport utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
 const DEFAULT_VISIBLE_COUNT = 80;
 const MIN_VISIBLE_COUNT     = 10;
 
@@ -118,24 +111,139 @@ function zoomOut(range: VisibleRange, total: number): VisibleRange {
   return clampVisibleRange({ start: center - half, end: center - half + newVisible - 1 }, total);
 }
 
+/** pivotFrac(0〜1)を中心にズーム */
+function zoomAroundX(range: VisibleRange, total: number, factor: number, pivotFrac: number): VisibleRange {
+  const visible    = range.end - range.start + 1;
+  const newVisible = Math.min(total, Math.max(MIN_VISIBLE_COUNT, Math.round(visible * factor)));
+  const pivotIdx   = range.start + pivotFrac * (visible - 1);
+  let newStart = Math.round(pivotIdx - pivotFrac * (newVisible - 1));
+  let newEnd   = newStart + newVisible - 1;
+  if (newEnd > total - 1) { newEnd = total - 1; newStart = newEnd - newVisible + 1; }
+  if (newStart < 0)       { newStart = 0; newEnd = newVisible - 1; }
+  return clampVisibleRange({ start: newStart, end: newEnd }, total);
+}
+
 function pan(range: VisibleRange, total: number, delta: number): VisibleRange {
   const visible = range.end - range.start + 1;
   let start = range.start + delta;
-  let end   = range.end   + delta;
+  let end   = range.end + delta;
   if (end   > total - 1) { end = total - 1; start = end - visible + 1; }
   if (start < 0)         { start = 0; end = start + visible - 1; }
   return clampVisibleRange({ start, end }, total);
 }
 
-// ── 定数 ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Format utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+function formatPrice(price: number, symbol: string): string {
+  const isJpy = symbol.toUpperCase().includes('JPY');
+  return isJpy ? price.toFixed(3) : price.toFixed(5);
+}
+
+function formatChartDate(time: string, timeframe: Timeframe): string {
+  const d   = new Date(time);
+  const mm  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd  = String(d.getDate()).padStart(2, '0');
+  const hh  = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  if (['W1', 'D1'].includes(timeframe)) return `${d.getFullYear()}-${mm}-${dd}`;
+  return `${mm}/${dd} ${hh}:${min}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chart geometry（SVG viewBox 座標変換）
+// ─────────────────────────────────────────────────────────────────────────────
+
+// PAD は SVG viewBox 内の padding（固定）
+const CHART_PAD_L = 8;
+const CHART_PAD_R = 60;  // 右軸ラベル用
+const CHART_PAD_T = 32;  // OHLC header 用
+const CHART_PAD_B = 24;
+
+interface ChartGeo {
+  cW:       number;
+  cH:       number;
+  effMin:   number;
+  effMax:   number;
+  effRange: number;
+  slot:     number;
+  bodyW:    number;
+  toY:      (p: number) => number;
+  toX:      (i: number) => number;
+  toPrice:  (svgY: number) => number;
+  /** svgX から candle index（0-based in visible）へ変換。clamp 済み */
+  toIndex:  (svgX: number, n: number) => number;
+}
+
+function buildChartGeo(
+  visibleCandles: RawCandle[],
+  svgW: number,
+  svgH: number,
+): ChartGeo | null {
+  if (visibleCandles.length === 0) return null;
+  const cW = svgW - CHART_PAD_L - CHART_PAD_R;
+  const cH = svgH - CHART_PAD_T  - CHART_PAD_B;
+
+  const maxP   = Math.max(...visibleCandles.map((c) => c.high));
+  const minP   = Math.min(...visibleCandles.map((c) => c.low));
+  const padded = (maxP - minP || 0.0001) * 0.05;
+  const effMax = maxP + padded;
+  const effMin = minP - padded;
+  const effRange = effMax - effMin;
+
+  const n     = visibleCandles.length;
+  const slot  = cW / n;
+  const bodyW = Math.max(1, slot * 0.65);
+
+  // candle center x in SVG viewBox
+  const toX = (i: number) => CHART_PAD_L + i * slot + slot / 2;
+  const toY = (p: number) => CHART_PAD_T + cH - ((p - effMin) / effRange) * cH;
+  const toPrice = (svgY: number) =>
+    effMin + ((CHART_PAD_T + cH - svgY) / cH) * effRange;
+
+  /**
+   * svgX（viewBox 座標）から candle index を求める
+   * - 各 slot の左端 = CHART_PAD_L + i*slot
+   * - floor で属するスロットを確定 → clamp [0, n-1]
+   */
+  const toIndex = (svgX: number, _n: number) => {
+    const raw = Math.floor((svgX - CHART_PAD_L) / slot);
+    return Math.max(0, Math.min(_n - 1, raw));
+  };
+
+  return { cW, cH, effMin, effMax, effRange, slot, bodyW, toY, toX, toPrice, toIndex };
+}
+
+/**
+ * DOM client 座標 → SVG viewBox 座標 変換
+ * getBoundingClientRect() は CSS ピクセルでの表示サイズを返す。
+ * SVG は viewBox で独自座標を持つため、比率で変換する。
+ */
+function clientToSvgCoords(
+  clientX: number,
+  clientY: number,
+  svgEl: SVGSVGElement,
+  viewBoxW: number,
+  viewBoxH: number,
+): { x: number; y: number } {
+  const rect = svgEl.getBoundingClientRect();
+  return {
+    x: ((clientX - rect.left) / rect.width)  * viewBoxW,
+    y: ((clientY - rect.top)  / rect.height) * viewBoxH,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 定数
+// ─────────────────────────────────────────────────────────────────────────────
+
 const SYMBOLS    = ['EURUSD', 'USDJPY', 'GBPUSD', 'AUDUSD'];
 const TIMEFRAMES: Timeframe[] = ['W1', 'D1', 'H4', 'H1', 'M30', 'M15', 'M5'];
 
 type IndicatorToggle = 'MA' | 'RSI' | 'MACD' | 'BB' | 'ATR' | 'Fib' | 'Trendline';
 type OverlayToggle   = 'entry_sl_tp' | 'prediction' | 'trade_markers' | 'pattern_labels';
-
-// MA overlay toggle keys（新規追加分）
-type MAToggle = 'SMA5' | 'SMA20' | 'SMA50' | 'EMA20' | 'EMA200' | 'BB20';
+type MAToggle        = 'SMA5' | 'SMA20' | 'SMA50' | 'EMA20' | 'EMA200' | 'BB20';
 
 const MA_COLORS: Record<MAToggle, string> = {
   SMA5:   '#4D9FFF',
@@ -148,7 +256,6 @@ const MA_COLORS: Record<MAToggle, string> = {
 
 const ROLES_PRO_OR_ABOVE = ['PRO', 'PRO_PLUS', 'ADMIN'] as const;
 
-// ── 色定義（SPEC_v51_part10 §10.14 準拠） ────────────────────────────────────
 const C = {
   bullish:    '#2EC96A',
   bearish:    '#E05252',
@@ -163,50 +270,69 @@ const C = {
   label:      '#94a3b8',
 };
 
-// ── 型 ───────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 型
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface RawCandle {
   time: string; open: number; high: number; low: number; close: number; volume: number;
 }
 
-// ── CandleChart コンポーネント（拡張版） ────────────────────────────────────
+/** Crosshair の状態（すべて SVG viewBox 座標） */
+interface CrosshairState {
+  visible:      boolean;
+  /** candle center x（SVG viewBox 座標）*/
+  snapX:        number;
+  /** raw mouse y（SVG viewBox 座標）*/
+  rawY:         number;
+  /** rawY に対応する価格 */
+  price:        number;
+  /** visible candles 内の index */
+  index:        number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG viewBox の固定サイズ（レスポンシブだが viewBox は固定）
+// ─────────────────────────────────────────────────────────────────────────────
+const SVG_W = 800;
+const SVG_H = 430;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CandleChart コンポーネント
+// ─────────────────────────────────────────────────────────────────────────────
+
 interface CandleChartProps {
-  candles:          RawCandle[];
-  visibleRange:     VisibleRange;
-  width?:           number;
-  height?:          number;
-  maToggles:        Record<MAToggle, boolean>;
-  showPrediction:   boolean;
-  predictionData:   {
+  candles:           RawCandle[];
+  visibleRange:      VisibleRange;
+  symbol:            string;
+  timeframe:         Timeframe;
+  maToggles:         Record<MAToggle, boolean>;
+  showPrediction:    boolean;
+  predictionData:    {
     bullish: number; neutral: number; bearish: number;
     expectedMovePips: number; confidence: string; mainScenario: string;
   } | null;
-  patternMarkers:   PatternMarker[];
-  showPatterns:     boolean;
-  onPanDelta:       (delta: number) => void;
+  patternMarkers:    PatternMarker[];
+  showPatterns:      boolean;
+  onPanDelta:        (delta: number) => void;
+  onWheelZoom:       (factor: number, pivotFrac: number) => void;
+  onCrosshairChange: (state: CrosshairState) => void;
 }
 
 function CandleChart({
-  candles,
-  visibleRange,
-  width  = 800,
-  height = 430,
-  maToggles,
-  showPrediction,
-  predictionData,
-  patternMarkers,
-  showPatterns,
-  onPanDelta,
+  candles, visibleRange, symbol, timeframe,
+  maToggles, showPrediction, predictionData,
+  patternMarkers, showPatterns,
+  onPanDelta, onWheelZoom, onCrosshairChange,
 }: CandleChartProps) {
-  // ドラッグパン用 ref
-  const dragRef = useRef<{ startX: number; lastDelta: number } | null>(null);
+  const dragRef = useRef<{ startX: number; lastSnapIndex: number } | null>(null);
+  const svgRef  = useRef<SVGSVGElement>(null);
 
   const visibleCandles = useMemo(() => {
     if (candles.length === 0) return [];
-    const { start, end } = visibleRange;
-    return candles.slice(start, end + 1);
+    return candles.slice(visibleRange.start, visibleRange.end + 1);
   }, [candles, visibleRange]);
 
-  // indicator 計算（visible candles ではなく全 candles で計算し visible 部分を slice）
   const closes = useMemo(() => candles.map((c) => c.close), [candles]);
 
   const indicatorData = useMemo(() => {
@@ -222,139 +348,157 @@ function CandleChart({
     };
   }, [closes, visibleRange]);
 
-  if (visibleCandles.length === 0) return null;
+  const geo = useMemo(
+    () => buildChartGeo(visibleCandles, SVG_W, SVG_H),
+    [visibleCandles],
+  );
 
-  const PAD_L = 8, PAD_R = 56, PAD_T = 14, PAD_B = 24;
-  const cW = width  - PAD_L - PAD_R;
-  const cH = height - PAD_T - PAD_B;
+  if (!geo || visibleCandles.length === 0) return null;
 
-  const maxP = Math.max(...visibleCandles.map((c) => c.high));
-  const minP = Math.min(...visibleCandles.map((c) => c.low));
+  const { cW, cH, toY, toX, toPrice, toIndex, slot, bodyW } = geo;
 
-  // BB がある場合は BB の上下も price range に含める
-  if (maToggles.BB20 && indicatorData.bb20.length > 0) {
-    const bbUpper = indicatorData.bb20.map((b) => b.upper).filter((v): v is number => v !== null);
-    const bbLower = indicatorData.bb20.map((b) => b.lower).filter((v): v is number => v !== null);
-    if (bbUpper.length > 0) { /* maxP が既に高い */ }
-    if (bbLower.length > 0) { /* minP が既に低い */ }
-    // prediction overlay のために余白 5% 追加
-  }
-  const range  = maxP - minP || 0.0001;
-  const padded = range * 0.05; // 5% 余白
-  const effMax = maxP + padded;
-  const effMin = minP - padded;
-  const effRange = effMax - effMin;
-
-  const toY = (p: number) => PAD_T + cH - ((p - effMin) / effRange) * cH;
-  const slot  = cW / visibleCandles.length;
-  const bodyW = Math.max(1, slot * 0.65);
-  const toX   = (i: number) => PAD_L + i * slot + slot / 2;
-
+  // grid
   const gridLines = Array.from({ length: 6 }, (_, i) => {
-    const price = effMin + (effRange * i) / 5;
+    const price = geo.effMin + (geo.effRange * i) / 5;
     return { y: toY(price), price };
   });
-
   const maxLabels = Math.min(8, visibleCandles.length);
   const labelStep = Math.max(1, Math.floor(visibleCandles.length / maxLabels));
 
-  // polyline points 生成ヘルパー
+  // polyline セグメント生成
   const toPoints = (vals: (number | null)[]) => {
     const segs: string[][] = [];
     let cur: string[] = [];
     vals.forEach((v, i) => {
-      if (v !== null) {
-        cur.push(`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
-      } else {
-        if (cur.length > 1) segs.push(cur);
-        cur = [];
-      }
+      if (v !== null) cur.push(`${toX(i).toFixed(1)},${toY(v).toFixed(1)}`);
+      else { if (cur.length > 1) segs.push(cur); cur = []; }
     });
     if (cur.length > 1) segs.push(cur);
     return segs;
   };
 
-  // prediction overlay 終点計算
-  const predEndX = cW + PAD_L;
-  const predStartX = predEndX - 80;
-  let predBullY: number | null = null;
-  let predNeutY: number | null = null;
-  let predBearY: number | null = null;
+  // current price line
+  const lastClose  = visibleCandles[visibleCandles.length - 1].close;
+  const lastCloseY = toY(lastClose);
+
+  // prediction
+  let predOriginX: number | null = null;
   let predOriginY: number | null = null;
+  const predItems: Array<{ y: number; color: string; opacity: number; label: string }> = [];
   if (showPrediction && predictionData && visibleCandles.length > 0) {
-    const lastClose = visibleCandles[visibleCandles.length - 1].close;
+    predOriginX = toX(visibleCandles.length - 1);
     predOriginY = toY(lastClose);
-    const pipSize = (symbol: string) => symbol.includes('JPY') ? 0.01 : 0.0001;
-    // symbol は props に渡していないので固定 0.0001 で近似
-    const pipValue = 0.0001;
-    const movePips = predictionData.expectedMovePips;
-    predBullY = toY(lastClose + movePips * pipValue * predictionData.bullish);
-    predNeutY = toY(lastClose + movePips * pipValue * predictionData.neutral * 0.1);
-    predBearY = toY(lastClose - movePips * pipValue * predictionData.bearish);
+    const pip   = symbol.toUpperCase().includes('JPY') ? 0.01 : 0.0001;
+    const move  = predictionData.expectedMovePips;
+    predItems.push(
+      { y: toY(lastClose + move * pip * predictionData.bullish),       color: C.bullish, opacity: Math.max(0.3, predictionData.bullish  * 1.5), label: `Bull ${Math.round(predictionData.bullish  * 100)}%` },
+      { y: toY(lastClose + move * pip * predictionData.neutral * 0.1), color: C.neutral, opacity: Math.max(0.3, predictionData.neutral * 1.5), label: `Neut ${Math.round(predictionData.neutral * 100)}%` },
+      { y: toY(lastClose - move * pip * predictionData.bearish),       color: C.bearish, opacity: Math.max(0.3, predictionData.bearish  * 1.5), label: `Bear ${Math.round(predictionData.bearish  * 100)}%` },
+    );
   }
 
-  // ── ドラッグパン ハンドラー ──────────────────────────────────────────────
+  // ── event handlers ────────────────────────────────────────────────────
+
+  /** client 座標 → SVG viewBox 座標 */
+  const toSvg = (clientX: number, clientY: number) =>
+    svgRef.current
+      ? clientToSvgCoords(clientX, clientY, svgRef.current, SVG_W, SVG_H)
+      : { x: 0, y: 0 };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const { x: svgX, y: svgY } = toSvg(e.clientX, e.clientY);
+
+    // plot area 外なら crosshair 非表示
+    if (
+      svgX < CHART_PAD_L || svgX > CHART_PAD_L + cW ||
+      svgY < CHART_PAD_T || svgY > CHART_PAD_T + cH
+    ) {
+      onCrosshairChange({ visible: false, snapX: 0, rawY: 0, price: 0, index: 0 });
+      return;
+    }
+
+    const idx   = toIndex(svgX, visibleCandles.length);   // floor ベース
+    const snapX = toX(idx);                                // candle center にスナップ
+    const price = toPrice(svgY);
+
+    onCrosshairChange({ visible: true, snapX, rawY: svgY, price, index: idx });
+  };
+
+  const handlePointerLeave = () => {
+    onCrosshairChange({ visible: false, snapX: 0, rawY: 0, price: 0, index: 0 });
+  };
+
+  // ドラッグパン（slot ベース delta）
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-    dragRef.current = { startX: e.clientX, lastDelta: 0 };
+    const { x } = toSvg(e.clientX, e.clientY);
+    const idx   = toIndex(x, visibleCandles.length);
+    dragRef.current = { startX: e.clientX, lastSnapIndex: idx };
   };
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!dragRef.current || visibleCandles.length === 0) return;
-    const dx     = e.clientX - dragRef.current.startX;
-    const perPx  = slot > 0 ? 1 / slot : 1;
-    const delta  = -Math.round(dx * perPx);
-    const diff   = delta - dragRef.current.lastDelta;
+    if (!dragRef.current) return;
+    const { x } = toSvg(e.clientX, e.clientY);
+    const curIdx = toIndex(x, visibleCandles.length);
+    const diff   = curIdx - dragRef.current.lastSnapIndex;
     if (diff !== 0) {
-      dragRef.current.lastDelta = delta;
-      onPanDelta(diff);
+      dragRef.current.lastSnapIndex = curIdx;
+      onPanDelta(-diff);
     }
   };
   const handleMouseUp = () => { dragRef.current = null; };
 
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const { x: svgX } = toSvg(e.clientX, e.clientY);
+    const pivotFrac   = Math.max(0, Math.min(1, (svgX - CHART_PAD_L) / cW));
+    const factor      = e.deltaY > 0 ? 1.2 : 0.8;
+    onWheelZoom(factor, pivotFrac);
+  };
+
   return (
     <svg
-      viewBox={`0 0 ${width} ${height}`}
-      style={{ width: '100%', height: '100%', cursor: 'grab' }}
+      ref={svgRef}
+      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+      style={{ width: '100%', height: '100%', display: 'block', cursor: 'crosshair' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      onWheel={handleWheel}
     >
-      {/* グリッドライン */}
+      {/* ── OHLC Header（SVG 内左上 overlay）── */}
+      {/* ChartPage の ohlcCandle は crosshair state に連動して外部から渡されない。
+          ここでは latest visible candle を常時表示。hover は親から crosshairIndex で制御 */}
+
+      {/* ── グリッドライン ── */}
       {gridLines.map(({ y, price }) => (
         <g key={price.toFixed(6)}>
-          <line x1={PAD_L} y1={y} x2={PAD_L + cW} y2={y}
+          <line x1={CHART_PAD_L} y1={y} x2={CHART_PAD_L + cW} y2={y}
             stroke="#2d3748" strokeOpacity={0.6} strokeDasharray="3 3" />
-          <text x={PAD_L + cW + 4} y={y + 3.5}
-            fill="#64748b" fontSize={9} fontFamily="monospace">{price.toFixed(4)}</text>
+          <text x={CHART_PAD_L + cW + 4} y={y + 3.5}
+            fill="#64748b" fontSize={9} fontFamily="monospace">
+            {formatPrice(price, symbol)}
+          </text>
         </g>
       ))}
 
-      {/* ── Bollinger Bands fill（BB20） ── */}
+      {/* ── Bollinger fill ── */}
       {maToggles.BB20 && (() => {
-        const upper: number[] = [];
-        const lower: number[] = [];
-        const xs: number[]   = [];
+        const xs: number[] = [], upper: number[] = [], lower: number[] = [];
         indicatorData.bb20.forEach((b, i) => {
-          if (b.upper !== null && b.lower !== null) {
-            xs.push(i); upper.push(b.upper); lower.push(b.lower);
-          }
+          if (b.upper !== null && b.lower !== null) { xs.push(i); upper.push(b.upper); lower.push(b.lower); }
         });
         if (xs.length < 2) return null;
-        const fwdPts = xs.map((xi, k) => `${toX(xi).toFixed(1)},${toY(upper[k]).toFixed(1)}`).join(' ');
-        const bwdPts = [...xs].reverse().map((xi, k) => {
+        const fwd = xs.map((xi, k) => `${toX(xi).toFixed(1)},${toY(upper[k]).toFixed(1)}`).join(' ');
+        const bwd = [...xs].reverse().map((xi, k) => {
           const li = xs.length - 1 - k;
           return `${toX(xi).toFixed(1)},${toY(lower[li]).toFixed(1)}`;
         }).join(' ');
-        return (
-          <polygon
-            points={`${fwdPts} ${bwdPts}`}
-            fill="rgba(100,116,139,0.08)"
-            stroke="none"
-          />
-        );
+        return <polygon points={`${fwd} ${bwd}`} fill="rgba(100,116,139,0.08)" stroke="none" />;
       })()}
 
-      {/* ── Indicator overlays: MA / EMA ── */}
+      {/* ── MA / EMA overlays ── */}
       {(Object.entries({
         SMA5:   maToggles.SMA5   ? indicatorData.sma5   : null,
         SMA20:  maToggles.SMA20  ? indicatorData.sma20  : null,
@@ -365,41 +509,35 @@ function CandleChart({
         if (!vals) return null;
         const color = MA_COLORS[key as MAToggle];
         return toPoints(vals).map((seg, si) => (
-          <polyline
-            key={`${key}-${si}`}
-            points={seg.join(' ')}
-            fill="none"
-            stroke={color}
-            strokeWidth={1.5}
-            strokeOpacity={0.85}
-          />
+          <polyline key={`${key}-${si}`} points={seg.join(' ')}
+            fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.85} />
         ));
       })}
 
-      {/* ── Bollinger Bands lines ── */}
-      {maToggles.BB20 && (() => {
-        const pairs: Array<{ key: 'upper' | 'mid' | 'lower'; dash?: string }> = [
-          { key: 'upper' },
-          { key: 'mid', dash: '4 2' },
-          { key: 'lower' },
-        ];
-        return pairs.map(({ key, dash }) => {
-          const vals = indicatorData.bb20.map((b) => b[key]);
-          return toPoints(vals).map((seg, si) => (
-            <polyline
-              key={`bb-${key}-${si}`}
-              points={seg.join(' ')}
-              fill="none"
-              stroke={MA_COLORS.BB20}
-              strokeWidth={key === 'mid' ? 1 : 1.5}
-              strokeOpacity={0.7}
-              strokeDasharray={dash}
-            />
-          ));
-        });
-      })()}
+      {/* ── Bollinger lines ── */}
+      {maToggles.BB20 && (
+        [{ key: 'upper' as const }, { key: 'mid' as const, dash: '4 2' }, { key: 'lower' as const }].map(
+          ({ key, dash }) =>
+            toPoints(indicatorData.bb20.map((b) => b[key])).map((seg, si) => (
+              <polyline key={`bb-${key}-${si}`} points={seg.join(' ')}
+                fill="none" stroke={MA_COLORS.BB20}
+                strokeWidth={key === 'mid' ? 1 : 1.5} strokeOpacity={0.7}
+                strokeDasharray={dash} />
+            ))
+        )
+      )}
 
-      {/* ローソク足 */}
+      {/* ── Current Price Line ── */}
+      <line x1={CHART_PAD_L} y1={lastCloseY} x2={CHART_PAD_L + cW} y2={lastCloseY}
+        stroke={C.info} strokeWidth={1} strokeOpacity={0.7} strokeDasharray="6 3" />
+      <rect x={CHART_PAD_L + cW + 2} y={lastCloseY - 8} width={CHART_PAD_R - 4} height={16}
+        fill={C.info} rx={3} />
+      <text x={CHART_PAD_L + cW + 4} y={lastCloseY + 4}
+        fill="#000" fontSize={9} fontFamily="monospace" fontWeight="bold">
+        {formatPrice(lastClose, symbol)}
+      </text>
+
+      {/* ── ローソク足 ── */}
       {visibleCandles.map((c, i) => {
         const isUp  = c.close >= c.open;
         const col   = isUp ? '#2EC96A' : '#E05252';
@@ -415,13 +553,14 @@ function CandleChart({
         );
       })}
 
-      {/* Pattern markers */}
+      {/* ── Pattern markers ── */}
       {showPatterns && patternMarkers.map((pm) => {
         const relIdx = pm.barIndex - visibleRange.start;
         if (relIdx < 0 || relIdx >= visibleCandles.length) return null;
-        const x = toX(relIdx);
-        const y = toY(pm.price) - 12;
-        const color = pm.direction === 'bullish' ? C.bullish : pm.direction === 'bearish' ? C.bearish : C.neutral;
+        const x     = toX(relIdx);
+        const y     = toY(pm.price) - 12;
+        const color = pm.direction === 'bullish' ? C.bullish
+                    : pm.direction === 'bearish'  ? C.bearish : C.neutral;
         return (
           <g key={pm.id}>
             <circle cx={x} cy={y + 6} r={4} fill={color} opacity={0.8} />
@@ -432,60 +571,35 @@ function CandleChart({
         );
       })}
 
-      {/* Prediction overlay */}
-      {showPrediction && predictionData && predOriginY !== null && (
-        (() => {
-          const originX = predStartX;
-          const originY = predOriginY;
-          const items = [
-            { y: predBullY,  color: C.bullish,    opacity: predictionData.bullish,  label: `Bull ${Math.round(predictionData.bullish * 100)}%` },
-            { y: predNeutY,  color: C.neutral,    opacity: predictionData.neutral,  label: `Neut ${Math.round(predictionData.neutral * 100)}%` },
-            { y: predBearY,  color: C.bearish,    opacity: predictionData.bearish,  label: `Bear ${Math.round(predictionData.bearish * 100)}%` },
-          ];
-          return (
-            <g>
-              {/* 予測開始の垂直ライン */}
-              <line x1={originX} y1={PAD_T} x2={originX} y2={PAD_T + cH}
-                stroke={C.prediction} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="4 3" />
-              {items.map(({ y, color, opacity, label }) => {
-                if (y === null) return null;
-                const finalOpacity = Math.max(0.3, Math.min(1, opacity * 1.5));
-                return (
-                  <g key={label}>
-                    <line
-                      x1={originX} y1={originY}
-                      x2={predEndX} y2={y}
-                      stroke={color}
-                      strokeWidth={2}
-                      strokeOpacity={finalOpacity}
-                      strokeDasharray="6 3"
-                    />
-                    <circle cx={predEndX} cy={y} r={3} fill={color} opacity={finalOpacity} />
-                    <text x={predEndX + 2} y={y + 3.5} fill={color} fontSize={8} fontFamily="monospace" opacity={finalOpacity}>
-                      {label}
-                    </text>
-                  </g>
-                );
-              })}
-              {/* mainScenario ラベル */}
-              <text x={originX + 2} y={PAD_T + 10}
-                fill={C.prediction} fontSize={9} fontFamily="monospace" opacity={0.8}>
-                {predictionData.mainScenario} · {predictionData.confidence}
-              </text>
+      {/* ── Prediction overlay ── */}
+      {showPrediction && predOriginX !== null && predOriginY !== null && (
+        <g>
+          <line x1={predOriginX} y1={CHART_PAD_T} x2={predOriginX} y2={CHART_PAD_T + cH}
+            stroke={C.prediction} strokeWidth={1} strokeOpacity={0.3} strokeDasharray="4 3" />
+          {predItems.map(({ y, color, opacity, label }) => (
+            <g key={label}>
+              <line x1={predOriginX!} y1={predOriginY!}
+                x2={CHART_PAD_L + cW} y2={y}
+                stroke={color} strokeWidth={2} strokeOpacity={opacity} strokeDasharray="6 3" />
+              <circle cx={CHART_PAD_L + cW} cy={y} r={3} fill={color} opacity={opacity} />
+              <text x={CHART_PAD_L + cW + 2} y={y + 3.5}
+                fill={color} fontSize={8} fontFamily="monospace" opacity={opacity}>{label}</text>
             </g>
-          );
-        })()
+          ))}
+          <text x={predOriginX + 2} y={CHART_PAD_T + 10}
+            fill={C.prediction} fontSize={9} fontFamily="monospace" opacity={0.8}>
+            {predictionData!.mainScenario} · {predictionData!.confidence}
+          </text>
+        </g>
       )}
 
-      {/* 時刻ラベル */}
+      {/* ── 時刻ラベル（X軸） ── */}
       {visibleCandles.map((c, i) => {
         if (i % labelStep !== 0) return null;
-        const d = new Date(c.time);
-        const label = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
         return (
-          <text key={c.time} x={toX(i)} y={height - 4}
+          <text key={c.time} x={toX(i)} y={SVG_H - 4}
             fill="#64748b" fontSize={8} fontFamily="monospace" textAnchor="middle">
-            {label}
+            {formatChartDate(c.time, timeframe)}
           </text>
         );
       })}
@@ -493,65 +607,173 @@ function CandleChart({
   );
 }
 
-// ── Navigator コンポーネント ─────────────────────────────────────────────────
-interface NavigatorProps {
-  candles:      RawCandle[];
-  visibleRange: VisibleRange;
-  onRangeChange: (r: VisibleRange) => void;
-  width?:       number;
-  height?:      number;
+// ─────────────────────────────────────────────────────────────────────────────
+// CrosshairLayer（pointer-events:none の絶対 overlay SVG）
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CrosshairLayerProps {
+  crosshair:      CrosshairState;
+  visibleCandles: RawCandle[];
+  symbol:         string;
+  timeframe:      Timeframe;
 }
 
-function Navigator({ candles, visibleRange, onRangeChange, width = 800, height = 80 }: NavigatorProps) {
-  const svgRef          = useRef<SVGSVGElement>(null);
-  const dragStateRef    = useRef<null | {
+function CrosshairLayer({ crosshair, visibleCandles, symbol, timeframe }: CrosshairLayerProps) {
+  if (!crosshair.visible || visibleCandles.length === 0) return null;
+
+  const geo = buildChartGeo(visibleCandles, SVG_W, SVG_H);
+  if (!geo) return null;
+  const { cW, cH } = geo;
+
+  const cx       = crosshair.snapX;   // candle center x（viewBox）
+  const cy       = crosshair.rawY;    // raw mouse y（viewBox）
+  const candle   = visibleCandles[crosshair.index];
+  const priceStr = formatPrice(crosshair.price, symbol);
+  const dateStr  = candle ? formatChartDate(candle.time, timeframe) : '';
+
+  // X軸ラベル位置（左右クランプ）
+  const xLabelW = 82;
+  const xLabelX = Math.max(CHART_PAD_L, Math.min(cx - xLabelW / 2, CHART_PAD_L + cW - xLabelW));
+  // Y軸ラベル（上下クランプ）
+  const yClampedY = Math.max(CHART_PAD_T + 8, Math.min(cy, CHART_PAD_T + cH - 8));
+
+  return (
+    <svg
+      viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+      style={{
+        position:      'absolute',
+        inset:         0,
+        width:         '100%',
+        height:        '100%',
+        pointerEvents: 'none',
+        display:       'block',
+      }}
+    >
+      {/* 垂直線（candle center にスナップ） */}
+      <line x1={cx} y1={CHART_PAD_T} x2={cx} y2={CHART_PAD_T + cH}
+        stroke="#94a3b8" strokeWidth={1} strokeOpacity={0.6} strokeDasharray="3 3" />
+      {/* 水平線（raw mouse y） */}
+      <line x1={CHART_PAD_L} y1={cy} x2={CHART_PAD_L + cW} y2={cy}
+        stroke="#94a3b8" strokeWidth={1} strokeOpacity={0.6} strokeDasharray="3 3" />
+      {/* X軸ラベル（日時） */}
+      <rect x={xLabelX} y={SVG_H - CHART_PAD_B} width={xLabelW} height={18}
+        fill="#1e293b" stroke="#475569" strokeWidth={0.5} rx={3} />
+      <text x={xLabelX + xLabelW / 2} y={SVG_H - CHART_PAD_B + 12}
+        fill="#e2e8f0" fontSize={9} fontFamily="monospace" textAnchor="middle">
+        {dateStr}
+      </text>
+      {/* Y軸ラベル（価格） */}
+      <rect x={CHART_PAD_L + cW + 2} y={yClampedY - 9} width={CHART_PAD_R - 4} height={18}
+        fill="#1e293b" stroke="#475569" strokeWidth={0.5} rx={3} />
+      <text x={CHART_PAD_L + cW + 5} y={yClampedY + 4}
+        fill="#e2e8f0" fontSize={9} fontFamily="monospace">
+        {priceStr}
+      </text>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OHLCOverlay（チャートSVG 内 <foreignObject> ではなく、SVG 外 position:absolute div）
+// chart plot area の左上に重ねる。pointer-events:none
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OHLCOverlayProps {
+  candle:    RawCandle | null;
+  symbol:    string;
+  timeframe: Timeframe;
+}
+
+function OHLCOverlay({ candle, symbol, timeframe }: OHLCOverlayProps) {
+  if (!candle) return null;
+  const isUp  = candle.close >= candle.open;
+  const color = isUp ? C.bullish : C.bearish;
+  const fmt   = (v: number) => formatPrice(v, symbol);
+  const pair  = `${symbol.slice(0, 3)}/${symbol.slice(3)}`;
+  return (
+    <div style={{
+      position:      'absolute',
+      top:           4,
+      left:          CHART_PAD_L,
+      display:       'flex',
+      alignItems:    'center',
+      gap:           8,
+      fontSize:      11,
+      fontFamily:    'monospace',
+      pointerEvents: 'none',
+      zIndex:        10,
+      lineHeight:    1,
+    }}>
+      <span style={{ color: C.label, fontWeight: 700 }}>{pair}</span>
+      <span style={{ color: C.muted }}>{timeframe}</span>
+      <span style={{ color: C.muted }}>O</span><span style={{ color }}>{fmt(candle.open)}</span>
+      <span style={{ color: C.muted }}>H</span><span style={{ color: C.bullish }}>{fmt(candle.high)}</span>
+      <span style={{ color: C.muted }}>L</span><span style={{ color: C.bearish }}>{fmt(candle.low)}</span>
+      <span style={{ color: C.muted }}>C</span><span style={{ color, fontWeight: 700 }}>{fmt(candle.close)}</span>
+      <span style={{ color: C.muted, fontSize: 10 }}>
+        {candle ? formatChartDate(candle.time, timeframe) : ''}
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Navigator
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface NavigatorProps {
+  candles:       RawCandle[];
+  visibleRange:  VisibleRange;
+  onRangeChange: (r: VisibleRange) => void;
+}
+
+function Navigator({ candles, visibleRange, onRangeChange }: NavigatorProps) {
+  const svgRef       = useRef<SVGSVGElement>(null);
+  const dragStateRef = useRef<null | {
     type: 'left' | 'right' | 'center';
-    startX: number;
+    startClientX: number;
     initRange: VisibleRange;
   }>(null);
 
   const total = candles.length;
   if (total === 0) return null;
 
-  const PAD_L = 4, PAD_R = 4, PAD_T = 6, PAD_B = 20;
-  const cW = width - PAD_L - PAD_R;
-  const cH = height - PAD_T - PAD_B;
+  // navigator は CSS width:100% / height:80px。viewBox は固定
+  const NAV_W = 800, NAV_H = 80;
+  const NP_L = 4, NP_R = 4, NP_T = 6, NP_B = 20;
+  const nW   = NAV_W - NP_L - NP_R;
+  const nH   = NAV_H - NP_T  - NP_B;
 
-  const toX = (idx: number) => PAD_L + (idx / (total - 1)) * cW;
-
+  const toX  = (idx: number) => NP_L + (idx / Math.max(1, total - 1)) * nW;
   const maxP = Math.max(...candles.map((c) => c.close));
   const minP = Math.min(...candles.map((c) => c.close));
   const rng  = maxP - minP || 0.0001;
-  const toY  = (p: number) => PAD_T + cH - ((p - minP) / rng) * cH;
+  const toY  = (p: number) => NP_T + nH - ((p - minP) / rng) * nH;
+  const pts  = candles.map((c, i) => `${toX(i).toFixed(1)},${toY(c.close).toFixed(1)}`).join(' ');
 
-  // ミニチャート polyline
-  const pts = candles.map((c, i) => `${toX(i).toFixed(1)},${toY(c.close).toFixed(1)}`).join(' ');
-
-  // 選択ハイライト座標
-  const hx1 = toX(visibleRange.start);
-  const hx2 = toX(visibleRange.end);
+  const hx1      = toX(visibleRange.start);
+  const hx2      = toX(visibleRange.end);
   const HANDLE_W = 6;
 
-  const getSvgX = (clientX: number) => {
+  /** client x → navigator SVG viewBox x */
+  const clientToNavX = (clientX: number) => {
     if (!svgRef.current) return 0;
     const rect = svgRef.current.getBoundingClientRect();
-    return ((clientX - rect.left) / rect.width) * width;
+    return ((clientX - rect.left) / rect.width) * NAV_W;
   };
 
   const handleMouseDown = (e: React.MouseEvent, type: 'left' | 'right' | 'center') => {
     e.stopPropagation();
-    dragStateRef.current = { type, startX: e.clientX, initRange: { ...visibleRange } };
+    dragStateRef.current = { type, startClientX: e.clientX, initRange: { ...visibleRange } };
   };
-
   const handleSvgMouseMove = (e: React.MouseEvent) => {
     const ds = dragStateRef.current;
     if (!ds) return;
-    const dx    = getSvgX(e.clientX) - getSvgX(ds.startX);
-    const scale = (total - 1) / cW;
+    const dx    = clientToNavX(e.clientX) - clientToNavX(ds.startClientX);
+    const scale = (total - 1) / nW;
     const delta = Math.round(dx * scale);
-
     if (ds.type === 'center') {
-      const span  = ds.initRange.end - ds.initRange.start;
+      const span   = ds.initRange.end - ds.initRange.start;
       let newStart = ds.initRange.start + delta;
       let newEnd   = ds.initRange.end   + delta;
       if (newEnd >= total)  { newEnd = total - 1; newStart = newEnd - span; }
@@ -565,73 +787,50 @@ function Navigator({ candles, visibleRange, onRangeChange, width = 800, height =
       onRangeChange({ start: ds.initRange.start, end: newEnd });
     }
   };
-
   const handleSvgMouseUp = () => { dragStateRef.current = null; };
 
-  // 時刻ラベル（10本に1本）
   const timeLabelStep = Math.max(1, Math.floor(total / 8));
 
   return (
-    <div style={{ background: '#0c0f18', borderTop: `1px solid ${C.border}`, padding: '0 0 4px' }}>
+    <div style={{ background: '#0a0d14', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${width} ${height}`}
-        style={{ width: '100%', height: height, display: 'block', cursor: 'default' }}
+        viewBox={`0 0 ${NAV_W} ${NAV_H}`}
+        style={{ width: '100%', height: NAV_H, display: 'block' }}
         onMouseMove={handleSvgMouseMove}
         onMouseUp={handleSvgMouseUp}
         onMouseLeave={handleSvgMouseUp}
       >
-        {/* 背景 */}
-        <rect x={0} y={0} width={width} height={height} fill="#0a0d14" />
-
-        {/* 暗幕（左） */}
-        <rect x={PAD_L} y={PAD_T} width={Math.max(0, hx1 - PAD_L)} height={cH}
-          fill="rgba(0,0,0,0.5)" />
-        {/* 暗幕（右） */}
-        <rect x={hx2} y={PAD_T} width={Math.max(0, PAD_L + cW - hx2)} height={cH}
-          fill="rgba(0,0,0,0.5)" />
-
-        {/* ミニチャート（全体ライン） */}
+        {/* 暗幕 左 */}
+        <rect x={NP_L} y={NP_T} width={Math.max(0, hx1 - NP_L)} height={nH} fill="rgba(0,0,0,0.5)" />
+        {/* 暗幕 右 */}
+        <rect x={hx2}  y={NP_T} width={Math.max(0, NP_L + nW - hx2)} height={nH} fill="rgba(0,0,0,0.5)" />
+        {/* ミニライン */}
         <polyline points={pts} fill="none" stroke="#4D9FFF" strokeWidth={1} strokeOpacity={0.5} />
-
-        {/* 選択範囲ハイライト枠 */}
-        <rect x={hx1} y={PAD_T} width={hx2 - hx1} height={cH}
+        {/* ハイライト枠 */}
+        <rect x={hx1} y={NP_T} width={Math.max(0, hx2 - hx1)} height={nH}
           fill="rgba(77,159,255,0.08)" stroke="rgba(77,159,255,0.4)" strokeWidth={1} />
-
-        {/* 中央ドラッグゾーン（透明） */}
-        <rect
-          x={hx1 + HANDLE_W} y={PAD_T}
-          width={Math.max(0, hx2 - hx1 - HANDLE_W * 2)} height={cH}
+        {/* 中央ドラッグ */}
+        <rect x={hx1 + HANDLE_W} y={NP_T}
+          width={Math.max(0, hx2 - hx1 - HANDLE_W * 2)} height={nH}
           fill="transparent" style={{ cursor: 'grab' }}
-          onMouseDown={(e) => handleMouseDown(e, 'center')}
-        />
-
+          onMouseDown={(e) => handleMouseDown(e, 'center')} />
         {/* 左ハンドル */}
-        <rect
-          x={hx1 - HANDLE_W / 2} y={PAD_T}
-          width={HANDLE_W} height={cH}
-          fill="rgba(77,159,255,0.5)" rx={2}
-          style={{ cursor: 'ew-resize' }}
-          onMouseDown={(e) => handleMouseDown(e, 'left')}
-        />
+        <rect x={hx1 - HANDLE_W / 2} y={NP_T} width={HANDLE_W} height={nH}
+          fill="rgba(77,159,255,0.5)" rx={2} style={{ cursor: 'ew-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'left')} />
         {/* 右ハンドル */}
-        <rect
-          x={hx2 - HANDLE_W / 2} y={PAD_T}
-          width={HANDLE_W} height={cH}
-          fill="rgba(77,159,255,0.5)" rx={2}
-          style={{ cursor: 'ew-resize' }}
-          onMouseDown={(e) => handleMouseDown(e, 'right')}
-        />
-
+        <rect x={hx2 - HANDLE_W / 2} y={NP_T} width={HANDLE_W} height={nH}
+          fill="rgba(77,159,255,0.5)" rx={2} style={{ cursor: 'ew-resize' }}
+          onMouseDown={(e) => handleMouseDown(e, 'right')} />
         {/* 時刻ラベル */}
         {candles.map((c, i) => {
           if (i % timeLabelStep !== 0) return null;
           const d = new Date(c.time);
-          const label = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
           return (
-            <text key={i} x={toX(i)} y={height - 4}
+            <text key={i} x={toX(i)} y={NAV_H - 4}
               fill="#64748b" fontSize={8} fontFamily="monospace" textAnchor="middle">
-              {label}
+              {`${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`}
             </text>
           );
         })}
@@ -641,12 +840,15 @@ function Navigator({ candles, visibleRange, onRangeChange, width = 800, height =
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ChartPage
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ChartPage() {
   const user     = useAuthStore((s) => s.user);
   const navigate = useNavigate();
   const isPro    = user != null && (ROLES_PRO_OR_ABOVE as readonly string[]).includes(user.role);
 
-  // toolbar state
+  // ── toolbar state ─────────────────────────────────────────────────────
   const [symbol,     setSymbol]     = useState<string>('EURUSD');
   const [timeframe,  setTimeframe]  = useState<Timeframe>('H1');
   const [activeMode, setActiveMode] = useState<'analysis' | 'trade'>('analysis');
@@ -656,17 +858,45 @@ export default function ChartPage() {
   const [ovToggles, setOvToggles] = useState<Record<OverlayToggle, boolean>>({
     entry_sl_tp: true, prediction: false, trade_markers: false, pattern_labels: true,
   });
-  // MA overlay toggle（新規）
   const [maToggles, setMAToggles] = useState<Record<MAToggle, boolean>>({
     SMA5: false, SMA20: true, SMA50: false, EMA20: false, EMA200: false, BB20: false,
   });
   const [notes, setNotes] = useState({ setup: '', invalidation: '', memo: '' });
 
-  // visible range state
+  // ── visible range ─────────────────────────────────────────────────────
   const [visibleRange, setVisibleRange] = useState<VisibleRange>({ start: 0, end: 0 });
   const rangeInitializedRef = useRef(false);
 
-  // API フック
+  // ── crosshair ─────────────────────────────────────────────────────────
+  const [crosshair, setCrosshair] = useState<CrosshairState>({
+    visible: false, snapX: 0, rawY: 0, price: 0, index: 0,
+  });
+
+  // ── fullscreen ────────────────────────────────────────────────────────
+  /**
+   * fullscreen 対象:
+   *   chartWorkspaceRef = OHLC + toolbar + main plot + navigator
+   *   （sidebar / indicator-summary / side panels は含めない）
+   */
+  const chartWorkspaceRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (!chartWorkspaceRef.current) return;
+    if (!document.fullscreenElement) {
+      chartWorkspaceRef.current.requestFullscreen().catch(() => {/* ignore */});
+    } else {
+      document.exitFullscreen().catch(() => {/* ignore */});
+    }
+  }, []);
+
+  // ── API hooks ─────────────────────────────────────────────────────────
   const meta       = useChartMeta(symbol, timeframe);
   const candles    = useChartCandles(symbol, timeframe);
   const indicators = useChartIndicators(symbol, timeframe);
@@ -675,8 +905,10 @@ export default function ChartPage() {
   const signals    = useSignals({ symbol, limit: 10 } as never);
   const prediction = useChartPredictionOverlay(symbol, timeframe, isPro);
 
-  // candles データが変わったら visible range を再初期化
-  const total = candles.data?.candles.length ?? 0;
+  const total       = candles.data?.candles.length ?? 0;
+  const allCandles  = candles.data?.candles ?? [];
+
+  // candles / symbol / timeframe 変化 → visible range 再初期化
   useEffect(() => {
     if (total > 0) {
       setVisibleRange(initVisibleRange(total));
@@ -684,27 +916,29 @@ export default function ChartPage() {
     }
   }, [total, symbol, timeframe]);
 
-  // zoom / pan ハンドラー
+  // ── zoom / pan handlers ───────────────────────────────────────────────
   const handleZoomIn    = useCallback(() => setVisibleRange((r) => zoomIn(r, total)), [total]);
   const handleZoomOut   = useCallback(() => setVisibleRange((r) => zoomOut(r, total)), [total]);
   const handleZoomReset = useCallback(() => setVisibleRange(initVisibleRange(total)), [total]);
   const handlePanLeft   = useCallback(() => setVisibleRange((r) => pan(r, total, -Math.max(5, Math.floor((r.end - r.start) * 0.2)))), [total]);
-  const handlePanRight  = useCallback(() => setVisibleRange((r) => pan(r, total, Math.max(5, Math.floor((r.end - r.start) * 0.2)))), [total]);
+  const handlePanRight  = useCallback(() => setVisibleRange((r) => pan(r, total,  Math.max(5, Math.floor((r.end - r.start) * 0.2)))), [total]);
   const handlePanDelta  = useCallback((delta: number) => setVisibleRange((r) => pan(r, total, delta)), [total]);
+  const handleWheelZoom = useCallback(
+    (factor: number, pivotFrac: number) => setVisibleRange((r) => zoomAroundX(r, total, factor, pivotFrac)),
+    [total],
+  );
 
-  const toggleInd = (k: IndicatorToggle) =>
-    setIndToggles((p) => ({ ...p, [k]: !p[k] }));
-  const toggleOv  = (k: OverlayToggle) =>
-    setOvToggles((p) => ({ ...p, [k]: !p[k] }));
-  const toggleMA  = (k: MAToggle) =>
-    setMAToggles((p) => ({ ...p, [k]: !p[k] }));
+  // ── toggles ───────────────────────────────────────────────────────────
+  const toggleInd = (k: IndicatorToggle) => setIndToggles((p) => ({ ...p, [k]: !p[k] }));
+  const toggleOv  = (k: OverlayToggle)   => setOvToggles((p) => ({ ...p, [k]: !p[k] }));
+  const toggleMA  = (k: MAToggle)        => setMAToggles((p) => ({ ...p, [k]: !p[k] }));
 
   const trendColor =
     meta.data?.trendBias === 'bullish' ? C.bullish
     : meta.data?.trendBias === 'bearish' ? C.bearish
     : C.neutral;
 
-  // prediction data を CandleChart に渡す形式に整形
+  // prediction data 整形
   const predChartData = useMemo(() => {
     if (!prediction.data) return null;
     return {
@@ -717,7 +951,47 @@ export default function ChartPage() {
     };
   }, [prediction.data]);
 
+  // OHLC 用 candle: hover 中はその candle、それ以外は最新 visible candle
+  const visibleCandles = useMemo(
+    () => allCandles.slice(visibleRange.start, visibleRange.end + 1),
+    [allCandles, visibleRange],
+  );
+  const ohlcCandle: RawCandle | null =
+    crosshair.visible && visibleCandles[crosshair.index]
+      ? visibleCandles[crosshair.index]
+      : visibleCandles.length > 0
+        ? visibleCandles[visibleCandles.length - 1]
+        : null;
+
   const visibleCount = visibleRange.end - visibleRange.start + 1;
+
+  // ── Fullscreen スタイル ───────────────────────────────────────────────
+  // chartWorkspace: fullscreen 時は 100vw × 100vh の flex column
+  const workspaceStyle: React.CSSProperties = isFullscreen
+    ? {
+        position:        'fixed',
+        inset:           0,
+        zIndex:          9999,
+        background:      C.bg,
+        display:         'flex',
+        flexDirection:   'column',
+        width:           '100vw',
+        height:          '100vh',
+        overflow:        'hidden',
+      }
+    : {
+        background:      C.card,
+        borderWidth:     '1px',
+        borderStyle:     'solid',
+        borderColor:     C.border,
+        borderRadius:    10,
+        overflow:        'hidden',
+      };
+
+  // chart plot area: fullscreen 時は flex:1 で残り高さを全部使う
+  const plotAreaStyle: React.CSSProperties = isFullscreen
+    ? { flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }
+    : { height: 480, position: 'relative', overflow: 'hidden' };
 
   return (
     <div style={s.root}>
@@ -735,13 +1009,10 @@ export default function ChartPage() {
           {meta.data && (
             <>
               <span style={{ ...s.price, color: trendColor }}>
-                {meta.data.currentPrice.toFixed(4)}
+                {formatPrice(meta.data.currentPrice, symbol)}
               </span>
               <span style={s.overviewItem}>Spread {meta.data.spread}</span>
-              <span style={{
-                ...s.overviewItem,
-                color: meta.data.marketStatus === 'open' ? C.bullish : C.bearish,
-              }}>
+              <span style={{ ...s.overviewItem, color: meta.data.marketStatus === 'open' ? C.bullish : C.bearish }}>
                 {meta.data.marketStatus === 'open' ? '● Open' : '○ Closed'}
               </span>
               <span style={s.overviewItem}>{meta.data.sessionLabel}</span>
@@ -754,134 +1025,145 @@ export default function ChartPage() {
       </section>
 
       {/* ══════════════════════════════════════════
-          2. chart-toolbar
+          chart workspace（fullscreen 対象 ref）
+          = toolbar + main plot + navigator
           ══════════════════════════════════════════ */}
-      <section style={s.toolbar}>
-        {/* pair selector */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>Pair</span>
-          {SYMBOLS.map((sym) => (
-            <button key={sym}
-              style={{ ...s.toolBtn, ...(symbol === sym ? s.toolBtnActive : {}) }}
-              onClick={() => setSymbol(sym)}>
-              {sym.slice(0, 3)}/{sym.slice(3)}
+      <div ref={chartWorkspaceRef} style={workspaceStyle}>
+
+        {/* ── chart-toolbar ── */}
+        <section style={{
+          ...s.toolbar,
+          ...(isFullscreen ? { borderRadius: 0, margin: 0, flexShrink: 0 } : {}),
+        }}>
+          {/* pair selector */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>Pair</span>
+            {SYMBOLS.map((sym) => (
+              <button key={sym}
+                style={{ ...s.toolBtn, ...(symbol === sym ? s.toolBtnActive : {}) }}
+                onClick={() => setSymbol(sym)}>
+                {sym.slice(0, 3)}/{sym.slice(3)}
+              </button>
+            ))}
+          </div>
+
+          {/* timeframe selector */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>TF</span>
+            {TIMEFRAMES.map((tf) => (
+              <button key={tf}
+                style={{ ...s.toolBtn, ...(timeframe === tf ? s.toolBtnActive : {}) }}
+                onClick={() => setTimeframe(tf)}>
+                {tf}
+              </button>
+            ))}
+          </div>
+
+          {/* mode toggle */}
+          <div style={s.toolbarGroup}>
+            {(['analysis', 'trade'] as const).map((m) => (
+              <button key={m}
+                style={{ ...s.toolBtn, ...(activeMode === m ? s.toolBtnActive : {}) }}
+                onClick={() => setActiveMode(m)}>
+                {m === 'analysis' ? '📊 Analysis' : '⚡ Trade'}
+              </button>
+            ))}
+          </div>
+
+          {/* zoom / pan / fullscreen */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>View</span>
+            <button style={s.toolBtn} onClick={handlePanLeft}   title="Pan Left">◀</button>
+            <button style={s.toolBtn} onClick={handleZoomIn}    title="Zoom In">＋</button>
+            <button style={s.toolBtn} onClick={handleZoomOut}   title="Zoom Out">－</button>
+            <button style={s.toolBtn} onClick={handlePanRight}  title="Pan Right">▶</button>
+            <button style={{ ...s.toolBtn, fontSize: 10 }} onClick={handleZoomReset}>Reset</button>
+            <button
+              style={{ ...s.toolBtn, ...(isFullscreen ? s.toolBtnActive : {}) }}
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Fullscreen (ESC)' : 'Fullscreen'}>
+              {isFullscreen ? '⊠' : '⛶'}
             </button>
-          ))}
-        </div>
+            {total > 0 && (
+              <span style={{ ...s.toolbarLabel, fontFamily: 'monospace', fontSize: 10 }}>
+                {visibleCount}/{total}
+              </span>
+            )}
+          </div>
 
-        {/* timeframe selector */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>TF</span>
-          {TIMEFRAMES.map((tf) => (
-            <button key={tf}
-              style={{ ...s.toolBtn, ...(timeframe === tf ? s.toolBtnActive : {}) }}
-              onClick={() => setTimeframe(tf)}>
-              {tf}
-            </button>
-          ))}
-        </div>
+          {/* indicator toggles */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>Ind</span>
+            {(Object.keys(indToggles) as IndicatorToggle[]).map((k) => (
+              <button key={k}
+                style={{ ...s.toolBtn, ...(indToggles[k] ? s.toolBtnActive : {}) }}
+                onClick={() => toggleInd(k)}>
+                {k}
+              </button>
+            ))}
+          </div>
 
-        {/* mode toggle */}
-        <div style={s.toolbarGroup}>
-          {(['analysis', 'trade'] as const).map((m) => (
-            <button key={m}
-              style={{ ...s.toolBtn, ...(activeMode === m ? s.toolBtnActive : {}) }}
-              onClick={() => setActiveMode(m)}>
-              {m === 'analysis' ? '📊 Analysis' : '⚡ Trade'}
-            </button>
-          ))}
-        </div>
-
-        {/* zoom / pan controls（新規） */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>View</span>
-          <button style={s.toolBtn} onClick={handlePanLeft}   title="Pan Left">◀</button>
-          <button style={s.toolBtn} onClick={handleZoomIn}    title="Zoom In">＋</button>
-          <button style={s.toolBtn} onClick={handleZoomOut}   title="Zoom Out">－</button>
-          <button style={s.toolBtn} onClick={handlePanRight}  title="Pan Right">▶</button>
-          <button style={{ ...s.toolBtn, fontSize: 10 }} onClick={handleZoomReset} title="Reset">Reset</button>
-          {total > 0 && (
-            <span style={{ ...s.toolbarLabel, fontFamily: 'monospace', fontSize: 10 }}>
-              {visibleCount}/{total}
-            </span>
-          )}
-        </div>
-
-        {/* indicator toggles */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>Ind</span>
-          {(Object.keys(indToggles) as IndicatorToggle[]).map((k) => (
-            <button key={k}
-              style={{ ...s.toolBtn, ...(indToggles[k] ? s.toolBtnActive : {}) }}
-              onClick={() => toggleInd(k)}>
-              {k}
-            </button>
-          ))}
-        </div>
-
-        {/* MA overlay toggles（新規） */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>MA</span>
-          {(Object.keys(maToggles) as MAToggle[]).map((k) => (
-            <button key={k}
-              style={{
-                ...s.toolBtn,
-                ...(maToggles[k] ? { ...s.toolBtnActive, color: MA_COLORS[k], borderColor: MA_COLORS[k] + '88' } : {}),
-                fontSize: 10,
-              }}
-              onClick={() => toggleMA(k)}>
-              {k}
-            </button>
-          ))}
-        </div>
-
-        {/* overlay toggles */}
-        <div style={s.toolbarGroup}>
-          <span style={s.toolbarLabel}>Overlay</span>
-          {(Object.keys(ovToggles) as OverlayToggle[]).map((k) => {
-            const isPredKey = k === 'prediction';
-            const disabled  = isPredKey && !isPro;
-            return (
+          {/* MA overlay toggles */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>MA</span>
+            {(Object.keys(maToggles) as MAToggle[]).map((k) => (
               <button key={k}
                 style={{
                   ...s.toolBtn,
-                  ...(ovToggles[k] ? s.toolBtnActive : {}),
-                  ...(disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+                  ...(maToggles[k]
+                    ? { ...s.toolBtnActive, color: MA_COLORS[k], borderColor: MA_COLORS[k] + '88' }
+                    : {}),
+                  fontSize: 10,
                 }}
-                onClick={() => {
-                  if (disabled) { navigate('/plan'); return; }
-                  toggleOv(k);
-                }}>
-                {k === 'entry_sl_tp' ? 'E/SL/TP'
-                  : k === 'prediction' ? `Pred${!isPro ? ' 🔒' : ''}`
-                  : k === 'trade_markers' ? 'Markers'
-                  : 'Patterns'}
+                onClick={() => toggleMA(k)}>
+                {k}
               </button>
-            );
-          })}
-        </div>
-      </section>
+            ))}
+          </div>
 
-      {/* ══════════════════════════════════════════
-          3. main-chart
-          ══════════════════════════════════════════ */}
-      <section style={s.card}>
-        <h2 style={s.cardTitle}>Main Chart</h2>
-        <div style={s.mainChartPlaceholder}>
-          {/* ロード中 */}
+          {/* overlay toggles */}
+          <div style={s.toolbarGroup}>
+            <span style={s.toolbarLabel}>Overlay</span>
+            {(Object.keys(ovToggles) as OverlayToggle[]).map((k) => {
+              const isPredKey = k === 'prediction';
+              const disabled  = isPredKey && !isPro;
+              return (
+                <button key={k}
+                  style={{
+                    ...s.toolBtn,
+                    ...(ovToggles[k] ? s.toolBtnActive : {}),
+                    ...(disabled ? { opacity: 0.4, cursor: 'not-allowed' } : {}),
+                  }}
+                  onClick={() => { if (disabled) { navigate('/plan'); return; } toggleOv(k); }}>
+                  {k === 'entry_sl_tp' ? 'E/SL/TP'
+                    : k === 'prediction'    ? `Pred${!isPro ? ' 🔒' : ''}`
+                    : k === 'trade_markers' ? 'Markers'
+                    : 'Patterns'}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ── main plot area ── */}
+        <div style={plotAreaStyle}>
+          {/* OHLC overlay（position:absolute, chart 内左上） */}
+          <OHLCOverlay candle={ohlcCandle} symbol={symbol} timeframe={timeframe} />
+
+          {/* loading */}
           {candles.isLoading && (
             <div style={s.chartCentered}>
               <span style={{ color: C.muted, fontSize: 13 }}>📡 ローソク足を読み込み中...</span>
             </div>
           )}
-          {/* エラー */}
+          {/* error */}
           {candles.isError && (
             <div style={{ ...s.chartCentered, flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 24 }}>⚠️</span>
               <span style={{ fontSize: 13, color: C.bearish }}>データ取得エラー</span>
             </div>
           )}
-          {/* データなし */}
+          {/* no data */}
           {!candles.isLoading && !candles.isError && total === 0 && (
             <div style={{ ...s.chartCentered, flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 24 }}>📭</span>
@@ -890,60 +1172,70 @@ export default function ChartPage() {
               </span>
             </div>
           )}
-          {/* ローソク足描画（データあり） */}
+
+          {/* chart SVG + crosshair layer */}
           {total > 0 && rangeInitializedRef.current && (
-            <CandleChart
-              candles={candles.data!.candles}
-              visibleRange={visibleRange}
-              width={800}
-              height={430}
-              maToggles={maToggles}
-              showPrediction={ovToggles.prediction && isPro}
-              predictionData={predChartData}
-              patternMarkers={patterns.data?.markers ?? []}
-              showPatterns={ovToggles.pattern_labels}
-              onPanDelta={handlePanDelta}
-            />
+            <>
+              <CandleChart
+                candles={allCandles}
+                visibleRange={visibleRange}
+                symbol={symbol}
+                timeframe={timeframe}
+                maToggles={maToggles}
+                showPrediction={ovToggles.prediction && isPro}
+                predictionData={predChartData}
+                patternMarkers={patterns.data?.markers ?? []}
+                showPatterns={ovToggles.pattern_labels}
+                onPanDelta={handlePanDelta}
+                onWheelZoom={handleWheelZoom}
+                onCrosshairChange={setCrosshair}
+              />
+              <CrosshairLayer
+                crosshair={crosshair}
+                visibleCandles={visibleCandles}
+                symbol={symbol}
+                timeframe={timeframe}
+              />
+            </>
           )}
         </div>
 
-        {/* Navigator */}
+        {/* ── navigator ── */}
         {total > 0 && (
           <Navigator
-            candles={candles.data!.candles}
+            candles={allCandles}
             visibleRange={visibleRange}
             onRangeChange={(r) => setVisibleRange(clampVisibleRange(r, total))}
-            width={800}
-            height={80}
           />
         )}
 
-        <div style={s.lowerPane}>
-          <span style={s.muted}>
-            Candles: {total} bars
-            {visibleRange.start !== 0 || visibleRange.end !== total - 1
-              ? ` — 表示: ${visibleCount} 本`
-              : ''}
-            {candles.data && total > 0 && (
-              <>
-                {' '}— 最終:{' '}
-                {new Date(candles.data.candles[total - 1].time).toLocaleString('ja-JP')}
-              </>
-            )}
-          </span>
-        </div>
-      </section>
+        {/* ── lower info bar（通常時のみ） ── */}
+        {!isFullscreen && (
+          <div style={s.lowerPane}>
+            <span style={s.muted}>
+              Candles: {total} bars
+              {visibleRange.start !== 0 || visibleRange.end !== total - 1
+                ? ` — 表示: ${visibleCount} 本`
+                : ''}
+              {total > 0 && (
+                <>
+                  {' '}— 最終:{' '}
+                  {new Date(allCandles[total - 1].time).toLocaleString('ja-JP')}
+                </>
+              )}
+            </span>
+          </div>
+        )}
+      </div>{/* end chartWorkspace */}
 
       {/* ══════════════════════════════════════════
-          下段 2カラム
+          下段 2カラム（fullscreen 非対象）
           ══════════════════════════════════════════ */}
       <div style={s.bottomGrid}>
         {/* ── 左カラム ── */}
         <div style={s.bottomLeft}>
 
-          {/* ══════════════════════════════════════
-              4. indicator-summary（6カード）
-              ══════════════════════════════════════ */}
+          {/* 4. indicator-summary */}
           <section style={s.card}>
             <h2 style={s.cardTitle}>Indicator Summary</h2>
             {indicators.isLoading && <p style={s.muted}>Loading…</p>}
@@ -951,54 +1243,45 @@ export default function ChartPage() {
               <div style={s.indGrid}>
                 <IndicatorCard id="ma"   label="MA"
                   value={`MA: ${indicators.data.indicators.ma.crossStatus}`}
-                  status={indicators.data.indicators.ma.status as 'bullish' | 'bearish' | 'neutral'} />
+                  status={indicators.data.indicators.ma.status as 'bullish'|'bearish'|'neutral'} />
                 <IndicatorCard id="rsi"  label="RSI"
                   value={`RSI: ${indicators.data.indicators.rsi.value.toFixed(1)} ${indicators.data.indicators.rsi.status}`}
-                  status={indicators.data.indicators.rsi.status as 'bullish' | 'bearish' | 'neutral'} />
+                  status={indicators.data.indicators.rsi.status as 'bullish'|'bearish'|'neutral'} />
                 <IndicatorCard id="macd" label="MACD"
                   value={`MACD: ${indicators.data.indicators.macd.crossStatus}`}
-                  status={indicators.data.indicators.macd.status as 'bullish' | 'bearish' | 'neutral'} />
+                  status={indicators.data.indicators.macd.status as 'bullish'|'bearish'|'neutral'} />
                 <IndicatorCard id="atr"  label="ATR"
                   value={`ATR: ${indicators.data.indicators.atr.status}`}
                   status="neutral" />
                 <IndicatorCard id="bb"   label="BB"
                   value={`BB: ${indicators.data.indicators.bb.position}`}
-                  status={indicators.data.indicators.bb.status as 'bullish' | 'bearish' | 'neutral'} />
+                  status={indicators.data.indicators.bb.status as 'bullish'|'bearish'|'neutral'} />
                 <IndicatorCard id="bias" label="Bias"
                   value={`${indicators.data.indicators.bias.label}`}
-                  status={indicators.data.indicators.bias.status as 'bullish' | 'bearish' | 'neutral'} />
+                  status={indicators.data.indicators.bias.status as 'bullish'|'bearish'|'neutral'} />
               </div>
             )}
           </section>
 
-          {/* ══════════════════════════════════════
-              8. recent-signals
-              ══════════════════════════════════════ */}
+          {/* 8. recent-signals */}
           <section style={{ ...s.card, marginTop: 12 }}>
             <h2 style={s.cardTitle}>Recent Signals</h2>
             {(signals as { data?: { signals?: unknown[] }; isLoading?: boolean }).isLoading && <p style={s.muted}>Loading…</p>}
             {(() => {
               const data = (signals as { data?: { signals?: unknown[] } }).data;
               const sigs = data?.signals;
-              if (!sigs || sigs.length === 0) {
-                return <p style={s.muted}>No signals</p>;
-              }
+              if (!sigs || sigs.length === 0) return <p style={s.muted}>No signals</p>;
               return (
                 <table style={s.signalTable}>
                   <thead>
                     <tr>
-                      <th style={s.th}>Time</th>
-                      <th style={s.th}>Type</th>
-                      <th style={s.th}>Dir</th>
-                      <th style={s.th}>Score</th>
+                      <th style={s.th}>Time</th><th style={s.th}>Type</th>
+                      <th style={s.th}>Dir</th><th style={s.th}>Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(sigs as Array<{
-                      id: string;
-                      triggeredAt: string;
-                      type: string;
-                      direction?: string;
+                      id: string; triggeredAt: string; type: string; direction?: string;
                       snapshot: { scoreTotal: number; trendDirection?: string };
                     }>).map((signal) => {
                       const dir = signal.direction ?? (signal.snapshot.trendDirection === 'UP' ? 'BUY' : 'SELL');
@@ -1019,9 +1302,7 @@ export default function ChartPage() {
             })()}
           </section>
 
-          {/* ══════════════════════════════════════
-              7. chart-notes（v5.1 = React state のみ）
-              ══════════════════════════════════════ */}
+          {/* 7. chart-notes */}
           <section style={{ ...s.card, marginTop: 12 }}>
             <h2 style={s.cardTitle}>Chart Notes <span style={s.stub}>v5.1 メモリのみ</span></h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1048,9 +1329,7 @@ export default function ChartPage() {
         {/* ── 右カラム ── */}
         <div style={s.bottomRight}>
 
-          {/* ══════════════════════════════════════
-              5. trade-overlay-panel
-              ══════════════════════════════════════ */}
+          {/* 5. trade-overlay-panel */}
           <section style={s.card}>
             <h2 style={s.cardTitle}>Trade Overlay</h2>
             {trades.isLoading && <p style={s.muted}>Loading…</p>}
@@ -1065,12 +1344,12 @@ export default function ChartPage() {
                 <TradeRow label="Position"
                   value={trades.data.activeTrade.side}
                   color={trades.data.activeTrade.side === 'BUY' ? C.bullish : C.bearish} />
-                <TradeRow label="Entry"   value={trades.data.activeTrade.entryPrice.toFixed(4)} />
+                <TradeRow label="Entry"   value={formatPrice(trades.data.activeTrade.entryPrice, symbol)} />
                 <TradeRow label="SL"
-                  value={trades.data.activeTrade.stopLoss?.toFixed(4) ?? '—'}
+                  value={trades.data.activeTrade.stopLoss != null ? formatPrice(trades.data.activeTrade.stopLoss, symbol) : '—'}
                   color={C.bearish} />
                 <TradeRow label="TP"
-                  value={trades.data.activeTrade.takeProfit?.toFixed(4) ?? '—'}
+                  value={trades.data.activeTrade.takeProfit != null ? formatPrice(trades.data.activeTrade.takeProfit, symbol) : '—'}
                   color={C.info} />
                 <TradeRow label="R:R"
                   value={trades.data.activeTrade.rrRatio != null ? `${trades.data.activeTrade.rrRatio}` : '—'}
@@ -1090,11 +1369,7 @@ export default function ChartPage() {
             )}
           </section>
 
-          {/* ══════════════════════════════════════
-              6. prediction-overlay-panel
-              FREE | BASIC → ロック状態 UI
-              PRO | PRO_PLUS | ADMIN → dynamic 表示
-              ══════════════════════════════════════ */}
+          {/* 6. prediction-overlay-panel */}
           <section style={{ ...s.card, marginTop: 12 }}>
             <h2 style={s.cardTitle}>
               Prediction Overlay
@@ -1133,10 +1408,8 @@ export default function ChartPage() {
               </div>
             ) : prediction.data ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* シナリオ */}
                 <TradeRow label="Main Scenario" value={prediction.data.mainScenario} color={C.bullish} />
                 <TradeRow label="Alt Scenario"  value={prediction.data.altScenario} />
-                {/* 確率バー */}
                 <div style={{ marginTop: 4 }}>
                   <ProbBar label="Bullish" pct={Math.round(prediction.data.probabilities.bullish * 100)} color={C.bullish} />
                   <ProbBar label="Neutral" pct={Math.round(prediction.data.probabilities.neutral * 100)} color={C.neutral} />
@@ -1145,13 +1418,14 @@ export default function ChartPage() {
                 <TradeRow label="Expected Move" value={`+${prediction.data.expectedMovePips} pips`} color={C.bullish} />
                 <TradeRow label="Forecast"      value={`${prediction.data.forecastHorizonH}h`} />
                 <TradeRow label="Confidence"    value={prediction.data.confidence}
-                  color={prediction.data.confidence === 'high' ? C.bullish : prediction.data.confidence === 'medium' ? C.neutral : C.bearish} />
-                {/* Overlay toggle ショートカット */}
+                  color={prediction.data.confidence === 'high' ? C.bullish
+                       : prediction.data.confidence === 'medium' ? C.neutral : C.bearish} />
                 <button
                   style={{
-                    ...s.toolBtn,
-                    marginTop: 4, width: '100%',
-                    ...(ovToggles.prediction ? { ...s.toolBtnActive, color: C.prediction, borderColor: C.prediction + '88' } : {}),
+                    ...s.toolBtn, marginTop: 4, width: '100%',
+                    ...(ovToggles.prediction
+                      ? { ...s.toolBtnActive, color: C.prediction, borderColor: C.prediction + '88' }
+                      : {}),
                   }}
                   onClick={() => toggleOv('prediction')}>
                   {ovToggles.prediction ? '▼ チャートに表示中' : '▲ チャートに重ねて表示'}
@@ -1162,24 +1436,23 @@ export default function ChartPage() {
               </div>
             ) : null}
           </section>
-
         </div>
       </div>
     </div>
   );
 }
 
-// ── Sub Components ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub components
+// ─────────────────────────────────────────────────────────────────────────────
 
-function IndicatorCard({
-  label, value, status,
-}: {
+function IndicatorCard({ label, value, status }: {
   id: string; label: string; value: string; status: 'bullish' | 'bearish' | 'neutral';
 }) {
   const color = status === 'bullish' ? C.bullish : status === 'bearish' ? C.bearish : C.neutral;
   return (
     <div style={{ ...s.indCard, borderColor: color + '44' }}>
-      <span style={{ ...s.indLabel }}>{label}</span>
+      <span style={s.indLabel}>{label}</span>
       <span style={{ ...s.indValue, color }}>{value}</span>
     </div>
   );
@@ -1208,7 +1481,6 @@ function ProbBar({ label, pct, color }: { label: string; pct: number; color: str
   );
 }
 
-/** ロック UI のぼかしコンテンツ（プレースホルダー） */
 function LockPlaceholderRows() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
@@ -1222,7 +1494,10 @@ function LockPlaceholderRows() {
   );
 }
 
-// ── スタイル定義 ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// スタイル定義
+// ─────────────────────────────────────────────────────────────────────────────
+
 const s: Record<string, React.CSSProperties> = {
   root:          { color: C.text, padding: '0 4px' },
   overview:      { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 },
@@ -1233,18 +1508,32 @@ const s: Record<string, React.CSSProperties> = {
   tfBadge:       { background: '#1e293b', borderRadius: 6, padding: '2px 8px', fontSize: 12, color: C.info },
   price:         { fontSize: 18, fontWeight: 700, fontFamily: 'monospace' },
   overviewItem:  { fontSize: 13, color: C.muted },
-  toolbar:       { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8, padding: '8px 10px', background: C.card, borderRadius: 8, borderWidth: '1px', borderStyle: 'solid', borderColor: C.border },
+  toolbar: {
+    display: 'flex', flexWrap: 'wrap', gap: 8,
+    padding: '8px 10px',
+    background: C.card,
+    borderWidth: '0 0 1px 0', borderStyle: 'solid', borderColor: C.border,
+  },
   toolbarGroup:  { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
   toolbarLabel:  { fontSize: 10, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginRight: 2 },
-  toolBtn:       { background: 'transparent', color: C.muted, borderWidth: '1px', borderStyle: 'solid', borderColor: C.border, borderRadius: 4, padding: '3px 8px', fontSize: 11, cursor: 'pointer', fontFamily: 'monospace' },
+  toolBtn: {
+    background: 'transparent', color: C.muted,
+    borderWidth: '1px', borderStyle: 'solid', borderColor: C.border,
+    borderRadius: 4, padding: '3px 8px', fontSize: 11, cursor: 'pointer', fontFamily: 'monospace',
+  },
   toolBtnActive: { background: '#1e293b', color: C.text, borderColor: C.info },
+  // chart workspace は workspaceStyle / plotAreaStyle でインラインに持つ
+  chartCentered: { position: 'absolute' as const, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  lowerPane: {
+    height: 48, background: '#0c0f18',
+    borderTop: `1px solid ${C.border}`,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
   card:          { background: C.card, borderWidth: '1px', borderStyle: 'solid', borderColor: C.border, borderRadius: 10, padding: 12 },
   cardTitle:     { fontSize: 13, fontWeight: 700, color: C.label, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginTop: 0, marginBottom: 12 },
   muted:         { color: C.muted, fontSize: 13, margin: 0 },
   stub:          { marginLeft: 6, fontSize: 10, color: C.neutral, background: 'rgba(232,184,48,0.1)', borderRadius: 4, padding: '1px 6px', fontWeight: 400, letterSpacing: 0, textTransform: 'none' as const },
-  mainChartPlaceholder: { background: C.bg, border: `1px dashed ${C.border}`, borderRadius: '10px 10px 0 0', height: 480, overflow: 'hidden', position: 'relative' as const },
-  chartCentered: { position: 'absolute' as const, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' },
-  lowerPane:     { height: 48, background: '#0c0f18', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' },
   bottomGrid:    { display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, marginTop: 12 },
   bottomLeft:    {},
   bottomRight:   {},
