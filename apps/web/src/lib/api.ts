@@ -37,6 +37,7 @@ import type {
   PluginSourcePreviewResponse,
   TogglePluginResponse,
   PluginAuditLogListResponse,
+  ChartPluginRuntimeResponse,
 } from '@fxde/types';
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
@@ -531,5 +532,25 @@ export const pluginsApi = {
   auditLogs: (pluginId: string) =>
     api
       .get<PluginAuditLogListResponse>(`/plugins/${pluginId}/audit-logs`)
+      .then((r) => r.data),
+};
+
+// ── Plugin Runtime API ──────────────────────────────────────────────────────
+// 参照: fxde_plugin_runtime_完全設計書 §7「API 契約」
+//
+// RBAC:
+//   chart: 全ロール（認証必須。plugin ごとの可否は backend 側で制御）
+//
+// ⚠️ 既存 /api/v1/chart/* エンドポイントは一切変更しない。
+//    /api/v1/plugins-runtime/* として独立したエンドポイントを追加。
+export const pluginsRuntimeApi = {
+  /**
+   * GET /api/v1/plugins-runtime/chart
+   * chart runtime plugin 実行結果取得
+   * overlays / signals / indicators / pluginStatuses を含む
+   */
+  chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> =>
+    api
+      .get<ChartPluginRuntimeResponse>('/plugins-runtime/chart', { params })
       .then((r) => r.data),
 };

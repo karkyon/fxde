@@ -30,8 +30,9 @@ import { ChartModule }     from './modules/chart/chart.module';
 import { AiSummaryModule } from './ai-summary/ai-summary.module';
 import { ConnectorsModule }  from './modules/connectors/connectors.module';
 import { MarketDataModule }  from './modules/market-data/market-data.module';
-// Plugin System（fxde_plugin_system_完全設計書 §20.3）
 import { PluginsModule }   from './modules/plugins/plugins.module';
+import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
+ 
 
 @Module({
   imports: [
@@ -62,8 +63,8 @@ import { PluginsModule }   from './modules/plugins/plugins.module';
     AiSummaryModule,
     ConnectorsModule,
     MarketDataModule,
-    // Plugin System
     PluginsModule,
+    PluginsRuntimeModule,
   ],
 })
 export class AppModule {}

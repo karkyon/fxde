@@ -1,0 +1,46 @@
+/**
+ * apps/api/src/plugins-runtime/plugins-runtime.module.ts
+ *
+ * Plugin Runtime Module
+ *
+ * 参照仕様:
+ *   fxde_plugin_runtime_完全設計書 §8.1「配置」
+ *   fxde_plugin_runtime_完全設計書 §4「アーキテクチャ方針」
+ *
+ * 依存:
+ *   - PrismaModule: DB アクセス（Resolver が使用）
+ *   - ChartModule:  既存 ChartService 再利用（ExecutionContextBuilder が使用）
+ *   - PluginsModule: 将来拡張用（現 v1 では Prisma 直接アクセス）
+ *
+ * ⚠️ 管理系 PluginsModule の責務は分離する。
+ *    runtime 実行責務はこの module に集約する。
+ */
+
+import { Module }   from '@nestjs/common';
+import { PrismaModule } from '../prisma/prisma.module';
+import { ChartModule }  from '../modules/chart/chart.module';
+
+import { PluginsRuntimeController }         from './plugins-runtime.controller';
+import { PluginsRuntimeService }            from './plugins-runtime.service';
+import { PluginRuntimeCoordinatorService }  from './coordinator/plugin-runtime-coordinator.service';
+import { EnabledPluginsResolverService }    from './resolver/enabled-plugins-resolver.service';
+import { ExecutionContextBuilderService }   from './context/execution-context-builder.service';
+import { PluginExecutorService }            from './executor/plugin-executor.service';
+import { ResultNormalizerService }          from './normalizer/result-normalizer.service';
+
+@Module({
+  imports: [
+    PrismaModule,
+    ChartModule,   // ChartService を再利用（ExecutionContextBuilder 用）
+  ],
+  controllers: [PluginsRuntimeController],
+  providers: [
+    PluginsRuntimeService,
+    PluginRuntimeCoordinatorService,
+    EnabledPluginsResolverService,
+    ExecutionContextBuilderService,
+    PluginExecutorService,
+    ResultNormalizerService,
+  ],
+})
+export class PluginsRuntimeModule {}

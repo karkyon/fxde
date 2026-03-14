@@ -341,7 +341,7 @@ export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
       checksum:        'sha256:placeholder_supply_demand',
       fxdeApiVersion:  '5.1',
       fxdeWebVersion:  '5.1',
-      capabilitiesJson: JSON.stringify(['overlay', 'zone_detection', 'multi_timeframe']),
+      capabilitiesJson: JSON.stringify(['chart_overlay', 'overlay', 'zone_detection', 'multi_timeframe']),
       permissionsJson:  JSON.stringify(['read_candles', 'read_indicators']),
       dependenciesJson: JSON.stringify([]),
       optionalDepsJson: JSON.stringify([]),

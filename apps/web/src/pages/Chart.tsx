@@ -29,6 +29,12 @@ import { useAuthStore } from '../stores/auth.store';
 import type { Timeframe } from '@fxde/types';
 import type { PatternMarker } from '../lib/api';
 
+// 追加: useChartPluginRuntime import
+import { useChartPluginRuntime } from '../hooks/useChartPluginRuntime';
+//
+// 追加: @fxde/types から runtime 型を import
+import type { RuntimeOverlay, RuntimeSignal, RuntimeIndicator } from '@fxde/types';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Indicator utilities（frontend 計算）
 // ─────────────────────────────────────────────────────────────────────────────
@@ -314,6 +320,9 @@ interface CandleChartProps {
   } | null;
   patternMarkers:    PatternMarker[];
   showPatterns:      boolean;
+  runtimeOverlays:   RuntimeOverlay[];
+  runtimeSignals:    RuntimeSignal[];
+  runtimeIndicators: RuntimeIndicator[];
   onPanDelta:        (delta: number) => void;
   onWheelZoom:       (factor: number, pivotFrac: number) => void;
   onCrosshairChange: (state: CrosshairState) => void;
@@ -323,6 +332,8 @@ function CandleChart({
   candles, visibleRange, symbol, timeframe,
   maToggles, showPrediction, predictionData,
   patternMarkers, showPatterns,
+  runtimeOverlays,
+  runtimeSignals,
   onPanDelta, onWheelZoom, onCrosshairChange,
 }: CandleChartProps) {
   const dragRef = useRef<{ startX: number; lastSnapIndex: number } | null>(null);
@@ -467,10 +478,6 @@ function CandleChart({
       onPointerLeave={handlePointerLeave}
       onWheel={handleWheel}
     >
-      {/* ── OHLC Header（SVG 内左上 overlay）── */}
-      {/* ChartPage の ohlcCandle は crosshair state に連動して外部から渡されない。
-          ここでは latest visible candle を常時表示。hover は親から crosshairIndex で制御 */}
-
       {/* ── グリッドライン ── */}
       {gridLines.map(({ y, price }) => (
         <g key={price.toFixed(6)}>
@@ -482,7 +489,7 @@ function CandleChart({
           </text>
         </g>
       ))}
-
+ 
       {/* ── Bollinger fill ── */}
       {maToggles.BB20 && (() => {
         const xs: number[] = [], upper: number[] = [], lower: number[] = [];
@@ -497,7 +504,7 @@ function CandleChart({
         }).join(' ');
         return <polygon points={`${fwd} ${bwd}`} fill="rgba(100,116,139,0.08)" stroke="none" />;
       })()}
-
+ 
       {/* ── MA / EMA overlays ── */}
       {(Object.entries({
         SMA5:   maToggles.SMA5   ? indicatorData.sma5   : null,
@@ -513,7 +520,7 @@ function CandleChart({
             fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={0.85} />
         ));
       })}
-
+ 
       {/* ── Bollinger lines ── */}
       {maToggles.BB20 && (
         [{ key: 'upper' as const }, { key: 'mid' as const, dash: '4 2' }, { key: 'lower' as const }].map(
@@ -526,7 +533,7 @@ function CandleChart({
             ))
         )
       )}
-
+ 
       {/* ── Current Price Line ── */}
       <line x1={CHART_PAD_L} y1={lastCloseY} x2={CHART_PAD_L + cW} y2={lastCloseY}
         stroke={C.info} strokeWidth={1} strokeOpacity={0.7} strokeDasharray="6 3" />
@@ -536,7 +543,7 @@ function CandleChart({
         fill="#000" fontSize={9} fontFamily="monospace" fontWeight="bold">
         {formatPrice(lastClose, symbol)}
       </text>
-
+ 
       {/* ── ローソク足 ── */}
       {visibleCandles.map((c, i) => {
         const isUp  = c.close >= c.open;
@@ -552,7 +559,7 @@ function CandleChart({
           </g>
         );
       })}
-
+ 
       {/* ── Pattern markers ── */}
       {showPatterns && patternMarkers.map((pm) => {
         const relIdx = pm.barIndex - visibleRange.start;
@@ -570,7 +577,72 @@ function CandleChart({
           </g>
         );
       })}
-
+ 
+      {/* ── Plugin Runtime Zone Overlay ── */}
+      {runtimeOverlays.map((overlay) => {
+        if (!overlay.visible) return null;
+        if (overlay.kind === 'zone') {
+          const g = overlay.geometry as {
+            zoneType: 'supply' | 'demand';
+            upper:    number;
+            lower:    number;
+            fromTime: string | null;
+          };
+          const upperY = toY(g.upper);
+          const lowerY = toY(g.lower);
+          const zoneH  = Math.max(1, lowerY - upperY);
+          let startX = CHART_PAD_L;
+          if (g.fromTime) {
+            const fromIdx = visibleCandles.findIndex((c) => c.time >= g.fromTime!);
+            if (fromIdx >= 0) startX = toX(fromIdx);
+          }
+          const isSupply    = g.zoneType === 'supply';
+          const fillColor   = overlay.style?.fillColor ?? (isSupply ? 'rgba(224,82,82,0.12)' : 'rgba(46,201,106,0.12)');
+          const strokeColor = overlay.style?.color     ?? (isSupply ? '#E05252' : '#2EC96A');
+          const opacity     = overlay.style?.opacity   ?? 0.35;
+          return (
+            <g key={overlay.id}>
+              <rect
+                x={startX} y={upperY}
+                width={Math.max(0, CHART_PAD_L + cW - startX)} height={zoneH}
+                fill={fillColor} stroke={strokeColor}
+                strokeWidth={0.8} strokeOpacity={Math.min(1, opacity * 2)} fillOpacity={opacity}
+              />
+              <text x={startX + 4} y={upperY + 10}
+                fill={strokeColor} fontSize={8} fontFamily="monospace" opacity={0.9}>
+                {overlay.label}
+              </text>
+            </g>
+          );
+        }
+        return null;
+      })}
+ 
+      {/* ── Plugin Runtime Signal Markers ── */}
+      {runtimeSignals.map((signal) => {
+        if (!signal.price || !signal.timestamp) return null;
+        const sigIdx = visibleCandles.findIndex((c) => c.time >= (signal.timestamp ?? ''));
+        if (sigIdx < 0) return null;
+        const sigX  = toX(sigIdx);
+        const sigY  = toY(signal.price);
+        const color = signal.direction === 'BUY'  ? '#2EC96A'
+                    : signal.direction === 'SELL' ? '#E05252'
+                    : '#E8B830';
+        const isBuy = signal.direction === 'BUY';
+        return (
+          <g key={signal.id}>
+            <text x={sigX} y={isBuy ? sigY + 14 : sigY - 6}
+              fill={color} fontSize={10} fontFamily="monospace" textAnchor="middle" opacity={0.9}>
+              {isBuy ? '▲' : signal.direction === 'SELL' ? '▼' : '●'}
+            </text>
+            <text x={sigX} y={isBuy ? sigY + 24 : sigY - 16}
+              fill={color} fontSize={7} fontFamily="monospace" textAnchor="middle" opacity={0.75}>
+              {signal.label.slice(0, 8)}
+            </text>
+          </g>
+        );
+      })}
+ 
       {/* ── Prediction overlay ── */}
       {showPrediction && predOriginX !== null && predOriginY !== null && (
         <g>
@@ -592,7 +664,7 @@ function CandleChart({
           </text>
         </g>
       )}
-
+ 
       {/* ── 時刻ラベル（X軸） ── */}
       {visibleCandles.map((c, i) => {
         if (i % labelStep !== 0) return null;
@@ -904,6 +976,7 @@ export default function ChartPage() {
   const patterns   = useChartPatternMarkers(symbol, timeframe);
   const signals    = useSignals({ symbol, limit: 10 } as never);
   const prediction = useChartPredictionOverlay(symbol, timeframe, isPro);
+  const pluginRuntime = useChartPluginRuntime(symbol, timeframe);
 
   const total       = candles.data?.candles.length ?? 0;
   const allCandles  = candles.data?.candles ?? [];
@@ -1189,6 +1262,9 @@ export default function ChartPage() {
                 onPanDelta={handlePanDelta}
                 onWheelZoom={handleWheelZoom}
                 onCrosshairChange={setCrosshair}
+                runtimeOverlays={pluginRuntime.data?.overlays ?? []}
+                runtimeSignals={pluginRuntime.data?.signals ?? []}
+                runtimeIndicators={pluginRuntime.data?.indicators ?? []}
               />
               <CrosshairLayer
                 crosshair={crosshair}
@@ -1227,6 +1303,9 @@ export default function ChartPage() {
           </div>
         )}
       </div>{/* end chartWorkspace */}
+
+      {/* Plugin Runtime ステータスバー */}
+      <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
 
       {/* ══════════════════════════════════════════
           下段 2カラム（fullscreen 非対象）
@@ -1490,6 +1569,80 @@ function LockPlaceholderRows() {
           <span style={{ color: C.text }}>████</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+export function PluginRuntimeStatusBar({
+  statuses,
+}: {
+  statuses: import('@fxde/types').RuntimePluginStatus[];
+}) {
+  if (statuses.length === 0) return null;
+  return (
+    <div
+      style={{
+        display:         'flex',
+        gap:             8,
+        flexWrap:        'wrap',
+        padding:         '4px 12px',
+        backgroundColor: '#0f172a',
+        borderTop:       '1px solid #1e293b',
+        alignItems:      'center',
+      }}
+    >
+      <span
+        style={{
+          fontSize:   9,
+          color:      '#475569',
+          fontFamily: 'monospace',
+          marginRight: 4,
+        }}
+      >
+        PLUGINS:
+      </span>
+      {statuses.map((s) => {
+        const dotColor =
+          s.status === 'SUCCEEDED' ? '#2EC96A'
+          : s.status === 'FAILED'  ? '#E05252'
+          : s.status === 'TIMEOUT' ? '#E8B830'
+          : '#475569';
+        return (
+          <div
+            key={s.pluginId}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            title={s.errorMessage ?? s.status}
+          >
+            <span
+              style={{
+                width:           6,
+                height:          6,
+                borderRadius:    '50%',
+                backgroundColor: dotColor,
+                display:         'inline-block',
+                flexShrink:      0,
+              }}
+            />
+            <span
+              style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}
+            >
+              {s.displayName}
+            </span>
+            {s.status !== 'SUCCEEDED' && (
+              <span
+                style={{ fontSize: 9, color: dotColor, fontFamily: 'monospace' }}
+              >
+                [{s.status}]
+              </span>
+            )}
+            <span
+              style={{ fontSize: 8, color: '#475569', fontFamily: 'monospace' }}
+            >
+              {s.durationMs}ms
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
