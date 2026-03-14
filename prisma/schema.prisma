@@ -98,6 +98,35 @@ enum ImportanceLevel {
 }
 
 // ============================================================
+// Plugin System Enums
+// ============================================================
+
+enum PluginType {
+  pattern
+  indicator
+  strategy
+  risk
+  overlay
+  signal
+  ai
+  connector
+}
+
+enum PluginStatus {
+  enabled
+  disabled
+  error
+  incompatible
+  missing_dependency
+  update_available
+}
+
+enum PluginInstallScope {
+  system
+  user
+}
+
+// ============================================================
 // 認証 / ユーザー
 // ============================================================
 
@@ -551,4 +580,87 @@ model ChartSnapshot {
   @@index([userId, symbol, capturedAt(sort: Desc)])
   @@index([userId, capturedAt(sort: Desc)])
   @@map("chart_snapshots")
+}
+
+// ============================================================
+// Plugin System Models
+// ============================================================
+
+/// プラグイン定義情報（manifest の正本）
+model PluginManifest {
+  id               String             @id @default(cuid())
+  slug             String             @unique @db.VarChar(191)
+  displayName      String             @map("display_name") @db.VarChar(191)
+  version          String             @db.VarChar(64)
+  descriptionShort String             @map("description_short") @db.VarChar(300)
+  descriptionLong  String             @map("description_long") @db.Text
+  pluginType       PluginType         @map("plugin_type")
+  authorName       String             @map("author_name") @db.VarChar(191)
+  sourceLabel      String             @map("source_label") @db.VarChar(191)
+  homepageUrl      String?            @map("homepage_url") @db.VarChar(500)
+  docsUrl          String?            @map("docs_url") @db.VarChar(500)
+  coverImageUrl    String?            @map("cover_image_url") @db.VarChar(500)
+  iconUrl          String?            @map("icon_url") @db.VarChar(500)
+  readmeMarkdown   String?            @map("readme_markdown") @db.Text
+  sourcePreview    String?            @map("source_preview") @db.Text
+  entryFile        String             @map("entry_file") @db.VarChar(500)
+  checksum         String             @db.VarChar(191)
+  fxdeApiVersion   String             @map("fxde_api_version") @db.VarChar(64)
+  fxdeWebVersion   String             @map("fxde_web_version") @db.VarChar(64)
+  // JSONB 配列フィールド（string[]）
+  capabilitiesJson Json               @map("capabilities_json")
+  permissionsJson  Json               @map("permissions_json")
+  dependenciesJson Json               @map("dependencies_json")
+  optionalDepsJson Json               @map("optional_deps_json")
+  tagsJson         Json               @map("tags_json")
+  isCore           Boolean            @default(false) @map("is_core")
+  isSigned         Boolean            @default(false) @map("is_signed")
+  installScope     PluginInstallScope @default(system) @map("install_scope")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt      @map("updated_at")
+
+  // relations
+  installedPlugins InstalledPlugin[]
+  auditLogs        PluginAuditLog[]
+
+  @@index([pluginType])
+  @@index([isCore])
+  @@map("plugin_manifests")
+}
+
+/// 実際に利用中のプラグイン状態
+model InstalledPlugin {
+  id                 String       @id @default(cuid())
+  pluginManifestId   String       @unique @map("plugin_manifest_id")
+  installedByUserId  String?      @map("installed_by_user_id")
+  isEnabled          Boolean      @default(false) @map("is_enabled")
+  status             PluginStatus @default(disabled)
+  errorMessage       String?      @map("error_message") @db.Text
+  configLocked       Boolean      @default(true) @map("config_locked")
+  installedAt        DateTime     @default(now()) @map("installed_at")
+  enableUpdatedAt    DateTime     @default(now()) @map("enable_updated_at")
+  lastHealthCheckAt  DateTime?    @map("last_health_check_at")
+  lastExecutedAt     DateTime?    @map("last_executed_at")
+
+  pluginManifest PluginManifest @relation(fields: [pluginManifestId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([isEnabled])
+  @@map("installed_plugins")
+}
+
+/// plugin enable / disable 等の監査ログ
+model PluginAuditLog {
+  id               String   @id @default(cuid())
+  pluginManifestId String   @map("plugin_manifest_id")
+  actorUserId      String?  @map("actor_user_id")
+  action           String   @db.VarChar(64)
+  beforeStateJson  Json     @map("before_state_json")
+  afterStateJson   Json     @map("after_state_json")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  pluginManifest PluginManifest @relation(fields: [pluginManifestId], references: [id], onDelete: Cascade)
+
+  @@index([pluginManifestId, createdAt])
+  @@map("plugin_audit_logs")
 }

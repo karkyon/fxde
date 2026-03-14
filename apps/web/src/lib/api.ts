@@ -31,6 +31,12 @@ import type {
   TradeSummaryResponse,
   CorrelationMatrix,
   TradeReviewResponse,
+  // Plugin System（fxde_plugin_system_完全設計書 §20.5）
+  PluginListResponse,
+  PluginDetailResponse,
+  PluginSourcePreviewResponse,
+  TogglePluginResponse,
+  PluginAuditLogListResponse,
 } from '@fxde/types';
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
@@ -464,4 +470,66 @@ export const aiSummaryApi = {
    */
   getLatest: (params: { symbol: string; timeframe: string }): Promise<AiSummaryResponse> =>
     api.get<AiSummaryResponse>('/ai-summary/latest', { params }).then((r) => r.data),
+};
+
+// ── Plugins API ─────────────────────────────────────────────────────────────
+// 参照: fxde_plugin_system_完全設計書 §7 API 設計
+//
+// RBAC:
+//   list / detail / sourcePreview / auditLogs: ログイン済み全ロール
+//   enable / disable:                          ADMIN のみ（API 側で制御）
+export const pluginsApi = {
+  /**
+   * GET /api/v1/plugins
+   * プラグイン一覧取得
+   */
+  list: (params?: { filter?: string; sort?: string }) =>
+    api
+      .get<PluginListResponse>('/plugins', { params })
+      .then((r) => r.data),
+ 
+  /**
+   * GET /api/v1/plugins/:pluginId
+   * プラグイン詳細取得
+   */
+  detail: (pluginId: string) =>
+    api
+      .get<PluginDetailResponse>(`/plugins/${pluginId}`)
+      .then((r) => r.data),
+ 
+  /**
+   * GET /api/v1/plugins/:pluginId/source-preview
+   * ソースプレビュー取得（readOnly: true 固定）
+   */
+  sourcePreview: (pluginId: string) =>
+    api
+      .get<PluginSourcePreviewResponse>(`/plugins/${pluginId}/source-preview`)
+      .then((r) => r.data),
+ 
+  /**
+   * POST /api/v1/plugins/:pluginId/enable
+   * プラグイン有効化（ADMIN のみ）
+   */
+  enable: (pluginId: string) =>
+    api
+      .post<TogglePluginResponse>(`/plugins/${pluginId}/enable`)
+      .then((r) => r.data),
+ 
+  /**
+   * POST /api/v1/plugins/:pluginId/disable
+   * プラグイン無効化（ADMIN のみ）
+   */
+  disable: (pluginId: string) =>
+    api
+      .post<TogglePluginResponse>(`/plugins/${pluginId}/disable`)
+      .then((r) => r.data),
+ 
+  /**
+   * GET /api/v1/plugins/:pluginId/audit-logs
+   * 監査ログ取得
+   */
+  auditLogs: (pluginId: string) =>
+    api
+      .get<PluginAuditLogListResponse>(`/plugins/${pluginId}/audit-logs`)
+      .then((r) => r.data),
 };

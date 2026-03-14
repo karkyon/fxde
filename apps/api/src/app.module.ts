@@ -27,9 +27,11 @@ import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SignalsModule }    from './modules/signals/signals.module';
 import { PredictionsModule } from './modules/predictions/predictions.module';
 import { ChartModule }     from './modules/chart/chart.module';
-import { AiSummaryModule } from './ai-summary/ai-summary.module';// 追加 import 2行
+import { AiSummaryModule } from './ai-summary/ai-summary.module';
 import { ConnectorsModule }  from './modules/connectors/connectors.module';
 import { MarketDataModule }  from './modules/market-data/market-data.module';
+// Plugin System（fxde_plugin_system_完全設計書 §20.3）
+import { PluginsModule }   from './modules/plugins/plugins.module';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { MarketDataModule }  from './modules/market-data/market-data.module';
     AiSummaryModule,
     ConnectorsModule,
     MarketDataModule,
+    // Plugin System
+    PluginsModule,
   ],
 })
 export class AppModule {}

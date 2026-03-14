@@ -7,7 +7,7 @@
  * 実行: tsx prisma/seed.ts
  */
 
-import { PrismaClient, UserRole, UserStatus, Preset, Timeframe } from '@prisma/client'
+import { PrismaClient, UserRole, UserStatus, Preset, Timeframe, PluginType, PluginStatus, PluginInstallScope, } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -304,6 +304,162 @@ async function main() {
   }
   console.log(`✅ EconomicEvent サンプル: ${events.length} 件`)
 
+  
+  // ─── Plugin System シード ───────────────────────────────────
+  console.log('\n🔌 Plugin System シード開始...')
+ 
+  const pluginManifests = [
+    {
+      id:              'plg_supply_demand_pro',
+      slug:            'supply-demand-zones-pro',
+      displayName:     'Supply Demand Zones PRO',
+      version:         '1.0.0',
+      descriptionShort: '需給ゾーンを可視化する分析プラグイン',
+      descriptionLong:  '高精度な需給ゾーンの自動検出・表示プラグイン。複数タイムフレームの需給バランスを分析し、エントリーポイントの絞り込みを支援します。',
+      pluginType:      'indicator' as PluginType,
+      authorName:      'msnk',
+      sourceLabel:     'Local Signed Plugin',
+      coverImageUrl:   null,
+      sourcePreview:   `/**
+ * Supply Demand Zones PRO — manifest excerpt
+ * @version 1.0.0
+ * @author msnk
+ */
+export const manifest = {
+  id:         'plg_supply_demand_pro',
+  pluginType: 'indicator',
+  capabilities: ['overlay', 'zone_detection'],
+  fxdeApiVersion: '5.1',
+};
+ 
+export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
+  const { candles, timeframe } = ctx;
+  // demand zone detection logic...
+  return { zones: [], overlays: [] };
+}`,
+      entryFile:       'dist/index.js',
+      checksum:        'sha256:placeholder_supply_demand',
+      fxdeApiVersion:  '5.1',
+      fxdeWebVersion:  '5.1',
+      capabilitiesJson: JSON.stringify(['overlay', 'zone_detection', 'multi_timeframe']),
+      permissionsJson:  JSON.stringify(['read_candles', 'read_indicators']),
+      dependenciesJson: JSON.stringify([]),
+      optionalDepsJson: JSON.stringify([]),
+      tagsJson:         JSON.stringify(['zones', 'supply-demand', 'chart', 'indicator']),
+      isCore:           false,
+      isSigned:         true,
+      installScope:     'system' as PluginInstallScope,
+    },
+    {
+      id:              'plg_trend_bias_analyzer',
+      slug:            'trend-bias-analyzer',
+      displayName:     'Trend Bias Analyzer',
+      version:         '1.2.0',
+      descriptionShort: 'マルチタイムフレームのトレンドバイアスを分析',
+      descriptionLong:  'H4・D1・W1 のトレンド方向を統合して、現在の相場バイアスを判定するプラグイン。MTF 整合スコアと組み合わせてエントリー判断を強化します。',
+      pluginType:      'strategy' as PluginType,
+      authorName:      'msnk',
+      sourceLabel:     'Local Signed Plugin',
+      coverImageUrl:   null,
+      sourcePreview:   `/**
+ * Trend Bias Analyzer — manifest excerpt
+ * @version 1.2.0
+ */
+export const manifest = {
+  id:         'plg_trend_bias_analyzer',
+  pluginType: 'strategy',
+  capabilities: ['bias_detection', 'mtf_analysis'],
+  fxdeApiVersion: '5.1',
+};
+ 
+export async function execute(ctx: FxdeContext): Promise<BiasResult> {
+  const { snapshots } = ctx;
+  // multi-timeframe bias analysis...
+  return { bias: 'bullish', strength: 0.78, contributing: [] };
+}`,
+      entryFile:       'dist/index.js',
+      checksum:        'sha256:placeholder_trend_bias',
+      fxdeApiVersion:  '5.1',
+      fxdeWebVersion:  '5.1',
+      capabilitiesJson: JSON.stringify(['bias_detection', 'mtf_analysis', 'score_boost']),
+      permissionsJson:  JSON.stringify(['read_snapshots', 'read_indicators']),
+      dependenciesJson: JSON.stringify([]),
+      optionalDepsJson: JSON.stringify([]),
+      tagsJson:         JSON.stringify(['trend', 'bias', 'mtf', 'strategy']),
+      isCore:           false,
+      isSigned:         true,
+      installScope:     'system' as PluginInstallScope,
+    },
+    {
+      id:              'plg_session_overlay',
+      slug:            'session-overlay-pack',
+      displayName:     'Session Overlay Pack',
+      version:         '0.9.1',
+      descriptionShort: '主要セッション時間帯をチャート上にオーバーレイ表示',
+      descriptionLong:  '東京・ロンドン・ニューヨーク各セッションの開始・終了時刻をチャート上に視覚的に表示するオーバーレイプラグイン。セッションオーバーラップの高ボラティリティ時間帯も強調表示します。',
+      pluginType:      'overlay' as PluginType,
+      authorName:      'msnk',
+      sourceLabel:     'Local Plugin',
+      coverImageUrl:   null,
+      sourcePreview:   `/**
+ * Session Overlay Pack — manifest excerpt
+ * @version 0.9.1
+ */
+export const manifest = {
+  id:         'plg_session_overlay',
+  pluginType: 'overlay',
+  capabilities: ['session_highlight', 'overlap_detection'],
+  fxdeApiVersion: '5.1',
+};
+ 
+export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
+  const { currentTime, timeframe } = ctx;
+  // session boundary calculation...
+  return { bands: [], labels: [] };
+}`,
+      entryFile:       'dist/index.js',
+      checksum:        'sha256:placeholder_session_overlay',
+      fxdeApiVersion:  '5.1',
+      fxdeWebVersion:  '5.1',
+      capabilitiesJson: JSON.stringify(['session_highlight', 'overlap_detection']),
+      permissionsJson:  JSON.stringify(['read_candles']),
+      dependenciesJson: JSON.stringify([]),
+      optionalDepsJson: JSON.stringify([]),
+      tagsJson:         JSON.stringify(['session', 'overlay', 'london', 'newyork', 'tokyo']),
+      isCore:           false,
+      isSigned:         false,
+      installScope:     'system' as PluginInstallScope,
+    },
+  ]
+ 
+  for (const manifest of pluginManifests) {
+    // PluginManifest upsert
+    const pm = await prisma.pluginManifest.upsert({
+      where:  { id: manifest.id },
+      update: manifest,
+      create: manifest,
+    })
+    console.log(`✅ PluginManifest: ${pm.displayName} (${pm.id})`)
+ 
+    // InstalledPlugin upsert（1 manifest に 1 installed state）
+    // Supply Demand PRO → enabled / その他 → disabled
+    const isEnabled = manifest.id === 'plg_supply_demand_pro'
+    const status    = isEnabled ? 'enabled' : 'disabled'
+ 
+    await prisma.installedPlugin.upsert({
+      where:  { pluginManifestId: pm.id },
+      update: { isEnabled, status: status as PluginStatus },
+      create: {
+        pluginManifestId: pm.id,
+        isEnabled,
+        status:           status as PluginStatus,
+        configLocked:     true,
+      },
+    })
+    console.log(`  → InstalledPlugin: ${isEnabled ? '✅ enabled' : '⚫ disabled'}`)
+  }
+ 
+  console.log('🔌 Plugin System シード完了: 3 件')
   console.log('')
   console.log('🎉 Phase2 Seed 完了!')
   console.log('   Users    : 3 (admin, demo-pro, demo-free)')

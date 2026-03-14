@@ -13,6 +13,8 @@
  */
 
 import { useState } from 'react';
+import { PluginManager }   from '../components/strategy/plugins/PluginManager';
+import { useAuthStore }    from '../stores/auth.store';
 
 // ── 型定義（SPEC_v51_part5 §4.2）────────────────────────────────────────────
 interface PatternCard {
@@ -283,6 +285,9 @@ export default function StrategyPage() {
   const [patternTab, setPatternTab]   = useState<'formation' | 'candlestick'>('formation');
   const [selectedPattern, setSelectedPattern] = useState<PatternCard | null>(null);
   const [ruleTab, setRuleTab]         = useState<'entry' | 'exit' | 'fib'>('entry');
+  // plugins タブ用メインタブ state（fxde_plugin_system_完全設計書 §1.2）
+  const [activeMainTab, setActiveMainTab] = useState<'strategy' | 'plugins'>('strategy');
+  const user = useAuthStore((s) => s.user);
 
   const filteredPatterns = PATTERNS.filter((p) => p.category === patternTab);
 
@@ -290,153 +295,182 @@ export default function StrategyPage() {
     <div style={s.root}>
       <h1 style={s.pageTitle}>📐 ストラテジー</h1>
 
-      {/* ══════════════════════════════════════
-          上段: 手法カード一覧
-          ══════════════════════════════════════ */}
-      <section style={s.section}>
-        <h2 style={s.sectionTitle}>手法一覧</h2>
-        <div style={s.strategyGrid}>
-          {STRATEGIES.map((st) => (
-            <div key={st.id} style={{ ...s.strategyCard, opacity: st.active ? 1 : 0.5 }}>
-              <div style={s.strategyHeader}>
-                <span style={s.strategyName}>{st.name}</span>
-                <span style={{
-                  ...s.activeBadge,
-                  background: st.active ? 'rgba(46,201,106,0.15)' : 'rgba(148,163,184,0.1)',
-                  color:      st.active ? '#2ec96a' : '#64748b',
-                }}>
-                  {st.active ? '有効' : '無効'}
-                </span>
+      {/* ── メインタブ（strategy / plugins）fxde_plugin_system_完全設計書 §1.2  */}
+      <div style={s.mainTabRow}>
+        {([
+          { id: 'strategy' as const, label: '📐 ストラテジー' },
+          { id: 'plugins'  as const, label: '🧩 Plugins'      },
+        ]).map(({ id, label }) => (
+          <button
+            key={id}
+            style={{
+              ...s.mainTabBtn,
+              ...(activeMainTab === id ? s.mainTabBtnActive : {}),
+            }}
+            onClick={() => setActiveMainTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── plugins タブ  */}
+      {activeMainTab === 'plugins' && (
+        <PluginManager currentUserRole={user?.role} />
+      )}
+
+      {/* ── strategy タブ（既存コンテンツ）*/}
+      {activeMainTab === 'strategy' && (<>
+
+        {/* ══════════════════════════════════════
+            上段: 手法カード一覧
+            ══════════════════════════════════════ */}
+        <section style={s.section}>
+          <h2 style={s.sectionTitle}>手法一覧</h2>
+          <div style={s.strategyGrid}>
+            {STRATEGIES.map((st) => (
+              <div key={st.id} style={{ ...s.strategyCard, opacity: st.active ? 1 : 0.5 }}>
+                <div style={s.strategyHeader}>
+                  <span style={s.strategyName}>{st.name}</span>
+                  <span style={{
+                    ...s.activeBadge,
+                    background: st.active ? 'rgba(46,201,106,0.15)' : 'rgba(148,163,184,0.1)',
+                    color:      st.active ? '#2ec96a' : '#64748b',
+                  }}>
+                    {st.active ? '有効' : '無効'}
+                  </span>
+                </div>
+                <p style={s.strategyDesc}>{st.description}</p>
+                <div style={s.strategyMeta}>
+                  <span style={s.metaItem}>スコア閾値: <b>{st.scoreMin}</b></span>
+                  <span style={s.metaItem}>リスク: <b>{st.riskPct}%</b></span>
+                </div>
+                <div style={s.tagRow}>
+                  {st.tags.map((t) => (
+                    <span key={t} style={s.tag}>{t}</span>
+                  ))}
+                </div>
               </div>
-              <p style={s.strategyDesc}>{st.description}</p>
-              <div style={s.strategyMeta}>
-                <span style={s.metaItem}>スコア閾値: <b>{st.scoreMin}</b></span>
-                <span style={s.metaItem}>リスク: <b>{st.riskPct}%</b></span>
+            ))}
+          </div>
+        </section>
+
+        {/* ══════════════════════════════════════
+            中段: パターン定義一覧
+            ══════════════════════════════════════ */}
+        <section style={s.section}>
+          <h2 style={s.sectionTitle}>パターン定義</h2>
+
+          {/* タブ */}
+          <div style={s.tabRow}>
+            {(['formation', 'candlestick'] as const).map((tab) => (
+              <button
+                key={tab}
+                style={{ ...s.tabBtn, ...(patternTab === tab ? s.tabBtnActive : {}) }}
+                onClick={() => { setPatternTab(tab); setSelectedPattern(null); }}
+              >
+                {tab === 'formation' ? '📊 フォーメーション' : '🕯 ローソク足'}
+              </button>
+            ))}
+          </div>
+
+          {/* パターングリッド */}
+          <div style={s.patternGrid}>
+            {filteredPatterns.map((p) => (
+              <PatternCardItem
+                key={p.name}
+                pattern={p}
+                selected={selectedPattern?.name === p.name}
+                onClick={() => setSelectedPattern(selectedPattern?.name === p.name ? null : p)}
+              />
+            ))}
+          </div>
+
+          {/* 詳細パネル */}
+          {selectedPattern && (
+            <PatternDetail pattern={selectedPattern} onClose={() => setSelectedPattern(null)} />
+          )}
+        </section>
+
+        {/* ══════════════════════════════════════
+            下段: Entry / Exit ルール + フィボナッチ
+            ══════════════════════════════════════ */}
+        <section style={s.section}>
+          <h2 style={s.sectionTitle}>Entry / Exit ルール &amp; フィボナッチ</h2>
+
+          <div style={s.tabRow}>
+            {([
+              { id: 'entry', label: '📥 Entry ルール' },
+              { id: 'exit',  label: '📤 Exit ルール'  },
+              { id: 'fib',   label: '🌀 フィボナッチ'  },
+            ] as const).map(({ id, label }) => (
+              <button
+                key={id}
+                style={{ ...s.tabBtn, ...(ruleTab === id ? s.tabBtnActive : {}) }}
+                onClick={() => setRuleTab(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div style={s.card}>
+            {ruleTab === 'entry' && (
+              <table style={s.ruleTable}>
+                <tbody>
+                  {ENTRY_RULES.map((r) => (
+                    <tr key={r.id}>
+                      <td style={s.ruleLabel}>{r.label}</td>
+                      <td style={s.ruleValue}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {ruleTab === 'exit' && (
+              <table style={s.ruleTable}>
+                <tbody>
+                  {EXIT_RULES.map((r) => (
+                    <tr key={r.id}>
+                      <td style={s.ruleLabel}>{r.label}</td>
+                      <td style={s.ruleValue}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {ruleTab === 'fib' && (
+              <div>
+                <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 12 }}>
+                  直近スイング高値 → 安値（BUY 押し目）または 安値 → 高値（SELL 戻り）を基準として測定。
+                </p>
+                {/* SVG フィボナッチチャート */}
+                <svg viewBox="0 0 500 200" style={{ width: '100%', maxWidth: 500, marginBottom: 16 }}>
+                  {FIB_LEVELS.map((fib, i) => {
+                    const y = 10 + i * 26;
+                    const pct = parseFloat(fib.level) / 100;
+                    const barW = (1 - pct) * 340;
+                    return (
+                      <g key={fib.level}>
+                        <line x1="80" y1={y + 8} x2="420" y2={y + 8} stroke="#1e2130" strokeWidth={1} />
+                        <rect x="80" y={y} width={barW} height={16} fill={fib.color} opacity={0.15} rx={2} />
+                        <text x="75" y={y + 12} fill={fib.color} fontSize={11} textAnchor="end">{fib.level}</text>
+                        <text x="425" y={y + 12} fill="#64748b" fontSize={10}>{fib.note}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+                <p style={{ color: '#475569', fontSize: 11 }}>
+                  ※ 61.8% と 38.2% が主要エントリーゾーン。スコア 75 点以上と組み合わせると精度向上。
+                </p>
               </div>
-              <div style={s.tagRow}>
-                {st.tags.map((t) => (
-                  <span key={t} style={s.tag}>{t}</span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════
-          中段: パターン定義一覧
-          ══════════════════════════════════════ */}
-      <section style={s.section}>
-        <h2 style={s.sectionTitle}>パターン定義</h2>
-
-        {/* タブ */}
-        <div style={s.tabRow}>
-          {(['formation', 'candlestick'] as const).map((tab) => (
-            <button
-              key={tab}
-              style={{ ...s.tabBtn, ...(patternTab === tab ? s.tabBtnActive : {}) }}
-              onClick={() => { setPatternTab(tab); setSelectedPattern(null); }}
-            >
-              {tab === 'formation' ? '📊 フォーメーション' : '🕯 ローソク足'}
-            </button>
-          ))}
-        </div>
-
-        {/* パターングリッド */}
-        <div style={s.patternGrid}>
-          {filteredPatterns.map((p) => (
-            <PatternCardItem
-              key={p.name}
-              pattern={p}
-              selected={selectedPattern?.name === p.name}
-              onClick={() => setSelectedPattern(selectedPattern?.name === p.name ? null : p)}
-            />
-          ))}
-        </div>
-
-        {/* 詳細パネル */}
-        {selectedPattern && (
-          <PatternDetail pattern={selectedPattern} onClose={() => setSelectedPattern(null)} />
-        )}
-      </section>
-
-      {/* ══════════════════════════════════════
-          下段: Entry / Exit ルール + フィボナッチ
-          ══════════════════════════════════════ */}
-      <section style={s.section}>
-        <h2 style={s.sectionTitle}>Entry / Exit ルール &amp; フィボナッチ</h2>
-
-        <div style={s.tabRow}>
-          {([
-            { id: 'entry', label: '📥 Entry ルール' },
-            { id: 'exit',  label: '📤 Exit ルール'  },
-            { id: 'fib',   label: '🌀 フィボナッチ'  },
-          ] as const).map(({ id, label }) => (
-            <button
-              key={id}
-              style={{ ...s.tabBtn, ...(ruleTab === id ? s.tabBtnActive : {}) }}
-              onClick={() => setRuleTab(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div style={s.card}>
-          {ruleTab === 'entry' && (
-            <table style={s.ruleTable}>
-              <tbody>
-                {ENTRY_RULES.map((r) => (
-                  <tr key={r.id}>
-                    <td style={s.ruleLabel}>{r.label}</td>
-                    <td style={s.ruleValue}>{r.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {ruleTab === 'exit' && (
-            <table style={s.ruleTable}>
-              <tbody>
-                {EXIT_RULES.map((r) => (
-                  <tr key={r.id}>
-                    <td style={s.ruleLabel}>{r.label}</td>
-                    <td style={s.ruleValue}>{r.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {ruleTab === 'fib' && (
-            <div>
-              <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 12 }}>
-                直近スイング高値 → 安値（BUY 押し目）または 安値 → 高値（SELL 戻り）を基準として測定。
-              </p>
-              {/* SVG フィボナッチチャート */}
-              <svg viewBox="0 0 500 200" style={{ width: '100%', maxWidth: 500, marginBottom: 16 }}>
-                {FIB_LEVELS.map((fib, i) => {
-                  const y = 10 + i * 26;
-                  const pct = parseFloat(fib.level) / 100;
-                  const barW = (1 - pct) * 340;
-                  return (
-                    <g key={fib.level}>
-                      <line x1="80" y1={y + 8} x2="420" y2={y + 8} stroke="#1e2130" strokeWidth={1} />
-                      <rect x="80" y={y} width={barW} height={16} fill={fib.color} opacity={0.15} rx={2} />
-                      <text x="75" y={y + 12} fill={fib.color} fontSize={11} textAnchor="end">{fib.level}</text>
-                      <text x="425" y={y + 12} fill="#64748b" fontSize={10}>{fib.note}</text>
-                    </g>
-                  );
-                })}
-              </svg>
-              <p style={{ color: '#475569', fontSize: 11 }}>
-                ※ 61.8% と 38.2% が主要エントリーゾーン。スコア 75 点以上と組み合わせると精度向上。
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+            )}
+          </div>
+        </section>
+        
+      </>)}
     </div>
   );
 }
@@ -553,6 +587,10 @@ function PatternDetail({ pattern, onClose }: { pattern: PatternCard; onClose: ()
 const s: Record<string, React.CSSProperties> = {
   root:           { color: '#e2e8f0', padding: '0 4px' },
   pageTitle:      { fontSize: 20, fontWeight: 700, color: '#e2e8f0', marginBottom: 16 },
+  // Plugin System メインタブ（fxde_plugin_system_完全設計書 §1.2）
+  mainTabRow:       { display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 12 },
+  mainTabBtn:       { background: 'transparent', border: 'none', borderRadius: 6, color: '#64748b', fontSize: 13, fontWeight: 500, padding: '6px 14px', cursor: 'pointer' },
+  mainTabBtnActive: { background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', fontWeight: 700 },
   section:        { marginBottom: 24 },
   sectionTitle:   { fontSize: 13, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 12 },
 
