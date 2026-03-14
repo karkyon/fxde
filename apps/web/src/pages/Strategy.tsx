@@ -286,7 +286,8 @@ export default function StrategyPage() {
   const [selectedPattern, setSelectedPattern] = useState<PatternCard | null>(null);
   const [ruleTab, setRuleTab]         = useState<'entry' | 'exit' | 'fib'>('entry');
   // plugins タブ用メインタブ state（fxde_plugin_system_完全設計書 §1.2）
-  const [activeMainTab, setActiveMainTab] = useState<'overview' | 'patterns' | 'plugins'>('overview');
+  // [修正] 'backtest' を追加: 'overview' | 'patterns' | 'backtest' | 'plugins'
+  const [activeMainTab, setActiveMainTab] = useState<'overview' | 'patterns' | 'backtest' | 'plugins'>('overview');
   const user = useAuthStore((s) => s.user);
 
   const filteredPatterns = PATTERNS.filter((p) => p.category === patternTab);
@@ -295,11 +296,13 @@ export default function StrategyPage() {
     <div style={s.root}>
       <h1 style={s.pageTitle}>📐 ストラテジー</h1>
 
-      {/* ── メインタブ（strategy / plugins）fxde_plugin_system_完全設計書 §1.2  */}
+      {/* ── メインタブ（overview / patterns / backtest / plugins）fxde_plugin_system_完全設計書 §1.2  */}
+      {/* [修正] backtest タブを overview・patterns の後、plugins の前に追加 */}
       <div style={s.mainTabRow}>
         {([
          { id: 'overview'  as const, label: '📐 Overview'  },
          { id: 'patterns'  as const, label: '🔍 Patterns'  },
+         { id: 'backtest'  as const, label: '📊 Backtest'  },
          { id: 'plugins'   as const, label: '🧩 Plugins'   },
        ]).map(({ id, label }) => (
           <button
@@ -318,6 +321,12 @@ export default function StrategyPage() {
       {/* ── plugins タブ  */}
       {activeMainTab === 'plugins' && (
         <PluginManager currentUserRole={user?.role} />
+      )}
+
+      {/* ── backtest タブ（v6 プレースホルダー）*/}
+      {/* [修正] backtest タブ選択時に BacktestPlaceholder を表示 */}
+      {activeMainTab === 'backtest' && (
+        <BacktestPlaceholder />
       )}
 
       {/* ── strategy タブ（既存コンテンツ）*/}
