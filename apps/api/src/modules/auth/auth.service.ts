@@ -216,13 +216,20 @@ export class AuthService {
   }
 
   /**
-   * Cookie secure ポリシー:
-   *   仕様 SPEC_v51_part4 §4.5 —「本番環境は HTTPS 必須、
-   *   v5 開発環境は localhost のみ HTTP 許可」
-   *   → NODE_ENV=development の場合のみ secure=false
+   * RT Cookie の secure フラグ判定
+   *
+   * 仕様: SPEC_v51_part4 §4.5「本番環境は HTTPS 必須。
+   *       v5 開発環境は localhost のみ HTTP 許可」
+   *
+   * ポリシー（一箇所で一元管理）:
+   *   NODE_ENV=development → secure=false（localhost HTTP 開発許可）
+   *   NODE_ENV=production  → secure=true（HTTPS 必須）
+   *
+   * ⚠️ setRtCookie / clearRtCookie の両方がこの getter を参照する。
+   *    cookie の secure 設定をここ以外で記述してはならない。
    */
   private get isSecureCookie(): boolean {
-    return this.config.get('NODE_ENV') !== 'development';
+    return this.config.get<string>('NODE_ENV') !== 'development';
   }
 
   private setRtCookie(res: Response, token: string): void {

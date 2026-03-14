@@ -113,4 +113,21 @@ export class PluginsController {
   getAuditLogs(@Param() params: PluginIdParamDto) {
     return this.pluginsService.getAuditLogs(params.pluginId);
   }
+  
+  /**
+   * GET /api/v1/plugins/:pluginId/health
+   * プラグインヘルス取得（ログイン済み全ロール）
+   *
+   * MVP 最小限実装:
+   *   InstalledPlugin の既存フィールド（status / errorMessage / lastHealthCheckAt
+   *   / lastExecutedAt）から health status を判定して返す。
+   *   監視基盤・Job queue・cron は追加しない。
+   *
+   * 参照仕様: fxde_plugin_system_完全設計書 §7 Plugin health endpoint
+   */
+  @Get(':pluginId/health')
+  @HttpCode(HttpStatus.OK)
+  getPluginHealth(@Param() params: PluginIdParamDto) {
+    return this.pluginsService.getPluginHealth(params.pluginId);
+  }
 }

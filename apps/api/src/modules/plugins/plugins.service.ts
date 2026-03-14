@@ -330,6 +330,65 @@ export class PluginsService {
     };
   }
 
+  
+  // ────────────────────────────────────────────────────────────
+  // GET /api/v1/plugins/:pluginId/health
+  // 参照仕様: fxde_plugin_system_完全設計書 §7
+  // MVP: InstalledPlugin の既存フィールドから status を判定する
+  // 大掛かりな監視システムは作らない（タスクC 注意事項準拠）
+  // ────────────────────────────────────────────────────────────
+  
+  async getPluginHealth(pluginId: string): Promise<{
+    pluginId:          string;
+    status:            'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+    lastHealthCheckAt: string | null;
+    lastExecutedAt:    string | null;
+    errorMessage:      string | null;
+  }> {
+    const row = await this.prisma.pluginManifest.findUnique({
+      where:   { id: pluginId },
+      include: { installedPlugins: true },
+    });
+  
+    if (!row) throw new NotFoundException('Plugin not found');
+  
+    const installed = row.installedPlugins[0];
+  
+    if (!installed) {
+      return {
+        pluginId,
+        status:            'unknown',
+        lastHealthCheckAt: null,
+        lastExecutedAt:    null,
+        errorMessage:      null,
+      };
+    }
+  
+    // status 判定ロジック（MVP: DB の既存フィールドのみ使用）
+    //   healthy:  isEnabled=true かつ status='enabled' かつ errorMessage なし
+    //   degraded: isEnabled=true だが errorMessage あり
+    //   unhealthy: status='error' または status='incompatible' または 'missing_dependency'
+    //   unknown: 上記以外
+    let health: 'healthy' | 'degraded' | 'unhealthy' | 'unknown';
+    if (installed.status === 'error' || installed.status === 'incompatible' || installed.status === 'missing_dependency') {
+      health = 'unhealthy';
+    } else if (installed.isEnabled && !installed.errorMessage) {
+      health = 'healthy';
+    } else if (installed.isEnabled && installed.errorMessage) {
+      health = 'degraded';
+    } else {
+      health = 'unknown';
+    }
+  
+    return {
+      pluginId,
+      status:            health,
+      lastHealthCheckAt: installed.lastHealthCheckAt?.toISOString() ?? null,
+      lastExecutedAt:    installed.lastExecutedAt?.toISOString() ?? null,
+      errorMessage:      installed.errorMessage ?? null,
+    };
+  }
+
   // ────────────────────────────────────────────────────────────
   // Internal: sort orderBy 生成
   // 修正2: displayName 固定 → クエリパラメータ対応

@@ -584,6 +584,44 @@ function PatternDetail({ pattern, onClose }: { pattern: PatternCard; onClose: ()
   );
 }
 
+// ── BacktestPlaceholder ─────────────────────────────────────────────────────
+function BacktestPlaceholder() {
+  return (
+    <section style={{ marginBottom: 24 }}>
+      <div style={{
+        background:    'rgba(255,255,255,0.03)',
+        border:        '1px dashed rgba(255,255,255,0.12)',
+        borderRadius:  12,
+        padding:       40,
+        textAlign:     'center' as const,
+        display:       'flex',
+        flexDirection: 'column' as const,
+        alignItems:    'center',
+        gap:           12,
+      }}>
+        <span style={{ fontSize: 32 }}>📊</span>
+        <h2 style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0', margin: 0 }}>
+          Backtest Panel
+        </h2>
+        <p style={{ fontSize: 13, color: '#64748b', margin: 0, maxWidth: 400 }}>
+          バックテスト機能は v6 で実装予定です。
+          <br />
+          ストラテジーの過去パフォーマンス検証・ウォークフォワード分析が利用可能になります。
+        </p>
+        <span style={{
+          fontSize: 11, color: '#E8B830',
+          background: 'rgba(232,184,48,0.1)',
+          borderRadius: 4, padding: '3px 10px',
+        }}>
+          v6 実装予定
+        </span>
+      </div>
+    </section>
+  );
+}
+ 
+export { BacktestPlaceholder };
+
 // ── スタイル ──────────────────────────────────────────────────────────────────
 const s: Record<string, React.CSSProperties> = {
   root:           { color: '#e2e8f0', padding: '0 4px' },

@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 
+
 // ──────────────────────────────────────────────────────────────────────────
 // Enum Schemas
 // ──────────────────────────────────────────────────────────────────────────
@@ -154,6 +155,26 @@ export const PluginAuditLogListResponseSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 
+
+// ── Plugin Health Response Schema ─────────────────────────────────────────
+// 参照仕様: fxde_plugin_system_完全設計書 §7「GET /api/v1/plugins/:pluginId/health」
+// MVP 最小限: InstalledPlugin の既存フィールドから取得可能な値のみ使用
+ 
+export const PluginHealthStatusSchema = z.enum([
+  'healthy',    // isEnabled=true かつ status='enabled' かつ errorMessage なし
+  'degraded',   // isEnabled=true だが errorMessage あり
+  'unhealthy',  // status='error'
+  'unknown',    // InstalledPlugin が存在しない場合
+]);
+ 
+export const PluginHealthResponseSchema = z.object({
+  pluginId:          z.string(),
+  status:            PluginHealthStatusSchema,
+  lastHealthCheckAt: z.string().nullable(),
+  lastExecutedAt:    z.string().nullable(),
+  errorMessage:      z.string().nullable(),
+});
+ 
 // ──────────────────────────────────────────────────────────────────────────
 // API Request Schemas（NestJS createZodDto() の正本）
 // ──────────────────────────────────────────────────────────────────────────
@@ -215,3 +236,5 @@ export type PluginSourcePreviewResponse = z.infer<typeof PluginSourcePreviewResp
 export type TogglePluginResponse   = z.infer<typeof TogglePluginResponseSchema>;
 export type PluginAuditLog         = z.infer<typeof PluginAuditLogSchema>;
 export type PluginAuditLogListResponse = z.infer<typeof PluginAuditLogListResponseSchema>;
+export type PluginHealthStatus   = z.infer<typeof PluginHealthStatusSchema>;
+export type PluginHealthResponse = z.infer<typeof PluginHealthResponseSchema>;
