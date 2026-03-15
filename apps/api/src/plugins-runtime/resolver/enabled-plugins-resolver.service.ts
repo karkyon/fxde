@@ -37,21 +37,12 @@ export class EnabledPluginsResolverService {
    * @param timeframe 時間足（将来拡張: plugin ごとに timeframe フィルタ可能）
    */
   async resolve(symbol: string, timeframe: string): Promise<ResolvedPlugin[]> {
-    // 有効化済みプラグインを DB から取得
     const rows = await this.prisma.pluginManifest.findMany({
       where: {
         installedPlugins: {
-          some: {
-            isEnabled: true,
-          },
-        },
-        // incompatible / missing_dependency は除外
-        NOT: {
-          installedPlugins: {
-            some: {
-              status: { in: ['incompatible', 'missing_dependency'] },
-            },
-          },
+          some: { isEnabled: true },
+          // none を使う（NOT { some } より明確でSQLが安定）
+          none: { status: { in: ['incompatible', 'missing_dependency'] } },
         },
       },
       include: {
