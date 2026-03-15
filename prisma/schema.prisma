@@ -748,3 +748,20 @@ model PluginAdaptiveDecision {
   @@index([pluginKey, decidedAt(sort: Desc)])
   @@map("plugin_adaptive_decisions")
 }
+
+/// Plugin の条件別集計スコア（v1 skeleton: aggregation は未実装）
+/// 完全設計書 §ConditionStats に基づく骨格定義。
+/// 集計処理は v2 で追加予定。
+model PluginConditionStats {
+  id           String   @id @default(uuid())
+  pluginKey    String   @map("plugin_key")
+  conditionKey String   @map("condition_key")  // 例: "session:london" / "symbol:USDJPY" / "trend:bullish"
+  sampleCount  Int      @default(0) @map("sample_count")
+  winRate      Float    @default(0) @map("win_rate")
+  avgReturn    Float    @default(0) @map("avg_return")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([pluginKey, conditionKey])
+  @@index([pluginKey])
+  @@map("plugin_condition_stats")
+}

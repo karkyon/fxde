@@ -13,35 +13,46 @@
  *   - capability 未定義プラグインは v1 では runtime 対象外
  *   - sortOrder は id 辞書順（v1 簡易実装）
  *
- * タスクE: capability 命名差（chart.overlay vs chart_overlay）を
- *   normalizeCapability() で吸収する。DB の既存値は変更しない。
+ * 修正（Task A）:
+ *   - AdaptiveRankingService.getSuppressedPluginKeys() を resolve() 冒頭で呼び出す。
+ *   - action が 'suppress' または 'auto_stop' な pluginKey は実行対象から除外する。
+ *   - PluginAdaptiveDecision が存在しない場合は空セット（全 plugin 実行許可）。
  */
 
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService }          from '../../prisma/prisma.service';
+import { AdaptiveRankingService } from '../../modules/plugins-ranking/service/adaptive-ranking.service';
 import { CHART_RUNTIME_CAPABILITIES } from '@fxde/types';
-import { normalizeCapabilities } from '../capability-alias.util';
-import type { ResolvedPlugin } from '../types/resolved-plugin';
+import { normalizeCapabilities }      from '../capability-alias.util';
+import type { ResolvedPlugin }        from '../types/resolved-plugin';
 
 /** plugin ごとのデフォルト timeout ms */
 const DEFAULT_TIMEOUT_MS = 2000;
 
 @Injectable()
 export class EnabledPluginsResolverService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(EnabledPluginsResolverService.name);
+
+  constructor(
+    private readonly prisma:          PrismaService,
+    private readonly adaptiveRanking: AdaptiveRankingService,  // 追加
+  ) {}
 
   /**
    * chart runtime 実行対象のプラグインを解決する。
    *
-   * @param symbol    通貨ペア（将来拡張: plugin ごとに symbol 対応フィルタ可能）
-   * @param timeframe 時間足（将来拡張: plugin ごとに timeframe フィルタ可能）
+   * @param symbol    通貨ペア
+   * @param timeframe 時間足
    */
   async resolve(symbol: string, timeframe: string): Promise<ResolvedPlugin[]> {
+    // 追加: suppressed / auto_stop な pluginKey を事前取得
+    // PluginAdaptiveDecision が空の場合は空 Set（全 plugin 実行許可）
+    const suppressedKeys = await this.adaptiveRanking.getSuppressedPluginKeys();
+
     const rows = await this.prisma.pluginManifest.findMany({
       where: {
         installedPlugins: {
           some: { isEnabled: true },
-          // none を使う（NOT { some } より明確でSQLが安定）
           none: { status: { in: ['incompatible', 'missing_dependency'] } },
         },
       },
@@ -62,15 +73,20 @@ export class EnabledPluginsResolverService {
     const resolved: ResolvedPlugin[] = [];
 
     for (const [index, row] of rows.entries()) {
-      // capabilitiesJson を string[] として取得
+      // 追加: ranking で suppress / auto_stop と判定された plugin をスキップ
+      if (suppressedKeys.has(row.slug)) {
+        this.logger.debug(
+          `[EnabledPluginsResolver] plugin "${row.slug}" is suppressed by ranking, skip`,
+        );
+        continue;
+      }
+
       const rawCapabilities: string[] = Array.isArray(row.capabilitiesJson)
         ? (row.capabilitiesJson as string[])
         : [];
 
-      // タスクE: ドット/アンダースコア両系統を正規化して比較
       const normalizedCapabilities = normalizeCapabilities(rawCapabilities);
 
-      // chart runtime capability チェック（正規化後の値で判定）
       const hasChartCapability = normalizedCapabilities.some((c) =>
         chartCapabilities.includes(c),
       );
@@ -81,14 +97,12 @@ export class EnabledPluginsResolverService {
         pluginId:     row.id,
         pluginKey:    row.slug,
         displayName:  row.displayName,
-        // 正規化済み capabilities を使用（downstream で一貫した形式が使える）
         capabilities: normalizedCapabilities,
         timeoutMs:    DEFAULT_TIMEOUT_MS,
         sortOrder:    index,
       });
     }
 
-    // sortOrder 昇順で返す（v1 は DB 取得順）
     return resolved.sort((a, b) => a.sortOrder - b.sortOrder);
   }
 }

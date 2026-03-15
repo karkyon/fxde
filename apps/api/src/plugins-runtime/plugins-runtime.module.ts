@@ -7,18 +7,15 @@
  *   fxde_plugin_runtime_完全設計書 §8.1「配置」
  *   fxde_plugin_runtime_完全設計書 §4「アーキテクチャ方針」
  *
- * 依存:
- *   - PrismaModule: DB アクセス（Resolver が使用）
- *   - ChartModule:  既存 ChartService 再利用（ExecutionContextBuilder が使用）
- *   - PluginsModule: 将来拡張用（現 v1 では Prisma 直接アクセス）
- *
- * ⚠️ 管理系 PluginsModule の責務は分離する。
- *    runtime 実行責務はこの module に集約する。
+ * 修正: PluginsRankingModule を imports に追加。
+ *       EnabledPluginsResolverService が AdaptiveRankingService を DI できるようにする。
+ *       循環依存なし（ranking は Prisma のみ依存）。
  */
 
 import { Module }   from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
-import { ChartModule }  from '../modules/chart/chart.module';
+import { PrismaModule }         from '../prisma/prisma.module';
+import { ChartModule }          from '../modules/chart/chart.module';
+import { PluginsRankingModule } from '../modules/plugins-ranking/plugins-ranking.module';
 
 import { PluginsRuntimeController }         from './plugins-runtime.controller';
 import { PluginsRuntimeService }            from './plugins-runtime.service';
@@ -34,6 +31,7 @@ import { PluginEventCaptureService }        from './event/plugin-event-capture.s
   imports: [
     PrismaModule,
     ChartModule,
+    PluginsRankingModule,  // 追加: AdaptiveRankingService を resolver に DI するために必要
   ],
   controllers: [PluginsRuntimeController],
   providers: [

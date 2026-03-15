@@ -34,6 +34,7 @@ import SettingsPage from './pages/Settings';
 import PlanPage     from './pages/Plan';
 import ChartPage    from './pages/Chart';
 import NotFoundPage from './pages/NotFound';
+import ReliabilityLabPage from './pages/ReliabilityLab';
 
 // PRO | PRO_PLUS | ADMIN のみ（遅延ロード）
 const PredictionPage = lazy(() => import('./pages/Prediction'));
@@ -105,6 +106,7 @@ const router = createBrowserRouter([
       { path: '/chart',       element: <ChartPage /> },
       { path: '/settings',    element: <SettingsPage /> },
       { path: '/plan',        element: <PlanPage /> },
+      { path: '/research/plugins', element: <ReliabilityLabPage /> },
       // PRO | PRO_PLUS | ADMIN のみ
       {
         element: <ProGuard />,

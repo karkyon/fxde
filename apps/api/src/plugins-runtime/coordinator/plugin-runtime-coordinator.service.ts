@@ -20,14 +20,17 @@
  *   - 並列実行なし（同一プロセス内逐次実行）
  *   - 全 plugin 失敗でもレスポンス構造を維持する
  *   - coordinator 自体が組み立て不能な場合は例外（→ 5xx）
+ *
+ * 修正（Task E）:
+ *   SUCCEEDED ブロックに captureOverlayEvents() / captureIndicatorEvents() を追加。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { EnabledPluginsResolverService } from '../resolver/enabled-plugins-resolver.service';
+import { EnabledPluginsResolverService }  from '../resolver/enabled-plugins-resolver.service';
 import { ExecutionContextBuilderService } from '../context/execution-context-builder.service';
-import { PluginExecutorService } from '../executor/plugin-executor.service';
-import { ResultNormalizerService } from '../normalizer/result-normalizer.service';
-import { PluginEventCaptureService } from '../event/plugin-event-capture.service';
+import { PluginExecutorService }          from '../executor/plugin-executor.service';
+import { ResultNormalizerService }        from '../normalizer/result-normalizer.service';
+import { PluginEventCaptureService }      from '../event/plugin-event-capture.service';
 import type { UserRole } from '@fxde/types';
 import type {
   ChartPluginRuntimeResponse,
@@ -42,10 +45,10 @@ export class PluginRuntimeCoordinatorService {
   private readonly logger = new Logger(PluginRuntimeCoordinatorService.name);
 
   constructor(
-    private readonly resolver:    EnabledPluginsResolverService,
-    private readonly ctxBuilder:  ExecutionContextBuilderService,
-    private readonly executor:    PluginExecutorService,
-    private readonly normalizer:  ResultNormalizerService,
+    private readonly resolver:     EnabledPluginsResolverService,
+    private readonly ctxBuilder:   ExecutionContextBuilderService,
+    private readonly executor:     PluginExecutorService,
+    private readonly normalizer:   ResultNormalizerService,
     private readonly eventCapture: PluginEventCaptureService,
   ) {}
 
@@ -69,7 +72,6 @@ export class PluginRuntimeCoordinatorService {
       `for ${symbol}/${timeframe}`,
     );
 
-    // [DEBUG] 解決された plugin 一覧の詳細
     this.logger.debug('[PluginRuntimeCoordinator] resolved plugins', {
       count:   resolvedPlugins.length,
       plugins: resolvedPlugins.map((p) => ({
@@ -81,9 +83,7 @@ export class PluginRuntimeCoordinatorService {
       })),
     });
 
-    // 実行対象なしの場合は空レスポンスを返す
     if (resolvedPlugins.length === 0) {
-      // [DEBUG] 0件の場合を明示
       this.logger.debug('[PluginRuntimeCoordinator] no plugins resolved → returning empty response');
       return {
         symbol,
@@ -105,13 +105,12 @@ export class PluginRuntimeCoordinatorService {
     });
 
     // 3. 各 plugin を逐次実行
-    const allOverlays:    RuntimeOverlay[]     = [];
-    const allSignals:     RuntimeSignal[]      = [];
-    const allIndicators:  RuntimeIndicator[]   = [];
+    const allOverlays:    RuntimeOverlay[]      = [];
+    const allSignals:     RuntimeSignal[]       = [];
+    const allIndicators:  RuntimeIndicator[]    = [];
     const pluginStatuses: RuntimePluginStatus[] = [];
 
     for (const plugin of resolvedPlugins) {
-      // [DEBUG] plugin 実行開始
       this.logger.debug('[PluginRuntimeCoordinator] executing plugin', {
         pluginKey: plugin.pluginKey,
         pluginId:  plugin.pluginId,
@@ -119,14 +118,13 @@ export class PluginRuntimeCoordinatorService {
 
       const result = await this.executor.execute(plugin, context);
 
-      // [DEBUG] plugin 実行結果
       this.logger.debug('[PluginRuntimeCoordinator] plugin result', {
-        pluginKey:    plugin.pluginKey,
-        status:       result.status,
-        rawOverlays:  result.status === 'SUCCEEDED' ? (result.raw?.overlays?.length  ?? 0) : 0,
-        rawSignals:   result.status === 'SUCCEEDED' ? (result.raw?.signals?.length   ?? 0) : 0,
-        rawIndicators:result.status === 'SUCCEEDED' ? (result.raw?.indicators?.length ?? 0) : 0,
-        durationMs:   result.durationMs,
+        pluginKey:     plugin.pluginKey,
+        status:        result.status,
+        rawOverlays:   result.status === 'SUCCEEDED' ? (result.raw?.overlays?.length   ?? 0) : 0,
+        rawSignals:    result.status === 'SUCCEEDED' ? (result.raw?.signals?.length    ?? 0) : 0,
+        rawIndicators: result.status === 'SUCCEEDED' ? (result.raw?.indicators?.length ?? 0) : 0,
+        durationMs:    result.durationMs,
         ...(result.status === 'FAILED'  && { errorMessage: result.errorMessage }),
         ...(result.status === 'SKIPPED' && { reason: (result as { reason?: string }).reason }),
       });
@@ -148,12 +146,28 @@ export class PluginRuntimeCoordinatorService {
         });
 
         // Event capture（try/catch isolated — runtime 結果に影響しない）
+        // signal
         void this.eventCapture.captureSignalEvents(
           plugin.pluginKey,
           symbol,
           timeframe,
           normalized.signals,
         );
+        // 追加（Task E）: overlay
+        void this.eventCapture.captureOverlayEvents(
+          plugin.pluginKey,
+          symbol,
+          timeframe,
+          normalized.overlays,
+        );
+        // 追加（Task E）: indicator
+        void this.eventCapture.captureIndicatorEvents(
+          plugin.pluginKey,
+          symbol,
+          timeframe,
+          normalized.indicators,
+        );
+
       } else if (result.status === 'FAILED') {
         pluginStatuses.push({
           pluginId:     plugin.pluginId,
@@ -188,11 +202,10 @@ export class PluginRuntimeCoordinatorService {
       }
     }
 
-    // [DEBUG] 最終集約結果
     this.logger.debug('[PluginRuntimeCoordinator] aggregated result', {
-      overlays:      allOverlays.length,
-      signals:       allSignals.length,
-      indicators:    allIndicators.length,
+      overlays:       allOverlays.length,
+      signals:        allSignals.length,
+      indicators:     allIndicators.length,
       pluginStatuses: pluginStatuses.map((s) => ({
         pluginKey: s.pluginKey,
         status:    s.status,

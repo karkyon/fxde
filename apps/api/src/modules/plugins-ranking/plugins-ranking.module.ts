@@ -3,6 +3,9 @@
  *
  * Adaptive Plugin Ranking Engine モジュール。
  * 既存 plugins-runtime は変更せず、横に積む設計。
+ *
+ * 修正: AdaptiveRankingService を exports に追加。
+ *       PluginsRuntimeModule が getSuppressedPluginKeys() を利用できるようにする。
  */
 
 import { Module }       from '@nestjs/common';
@@ -30,5 +33,7 @@ import { ReliabilityRecomputeJob }       from './jobs/reliability-recompute.job'
     PluginEventEvaluationService,
     ReliabilityRecomputeJob,
   ],
+  // 修正: runtime から getSuppressedPluginKeys() を使えるよう export
+  exports: [AdaptiveRankingService],
 })
 export class PluginsRankingModule {}

@@ -4,6 +4,9 @@
  * GET /api/v1/plugins/reliability
  * GET /api/v1/plugins/adaptive-ranking
  * GET /api/v1/plugins/adaptive-ranking/stop-candidates
+ *
+ * 修正: getReliability() で service['prisma'] に直接アクセスしていた責務違反を修正。
+ *       ReliabilityScoringService.findAll() 経由に変更。
  */
 
 import {
@@ -39,12 +42,10 @@ export class PluginsRankingController {
   async getReliability(@Query() query: GetPluginRankingQueryDto) {
     this.logger.debug('[PluginsRankingController] GET /plugins/reliability', query);
 
-    const rows = await this.reliabilityService['prisma'].pluginReliability.findMany({
-      where: {
-        ...(query.symbol    ? { symbol: query.symbol }       : {}),
-        ...(query.timeframe ? { timeframe: query.timeframe } : {}),
-      },
-      orderBy: { reliabilityScore: 'desc' },
+    // 修正: service['prisma'] 直接アクセス禁止 → findAll() 経由
+    const rows = await this.reliabilityService.findAll({
+      symbol:    query.symbol,
+      timeframe: query.timeframe,
     });
 
     return rows.map((r) => ({

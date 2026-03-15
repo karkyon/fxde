@@ -53,7 +53,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.trim() ||
   `${window.location.protocol}//${window.location.hostname}:3011`;
 
-const api: AxiosInstance = axios.create({
+export const api: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },

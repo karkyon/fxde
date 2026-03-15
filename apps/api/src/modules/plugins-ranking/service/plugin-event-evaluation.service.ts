@@ -4,12 +4,32 @@
  * 未評価の PluginEvent に対して MarketCandle を参照し
  * PluginEventResult を保存する。
  * v1: signal event を対象。offset = 1, 3, 5, 10, 20 candle。
+ *
+ * 修正: timeframe as 'H4' 固定キャストを削除。
+ *       mapTimeframeToPrismaEnum() で String → Prisma Timeframe enum に安全変換。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma, Timeframe }  from '@prisma/client';
 import { PrismaService }      from '../../../prisma/prisma.service';
 
 const EVAL_OFFSETS = [1, 3, 5, 10, 20] as const;
+
+/** Prisma Timeframe enum の有効値セット */
+const VALID_TIMEFRAMES: ReadonlySet<string> = new Set<Timeframe>([
+  'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'H8', 'D1', 'W1', 'MN',
+]);
+
+/**
+ * PluginEvent.timeframe (string) を Prisma Timeframe enum に変換する。
+ * 不正値の場合は null を返す（評価スキップ）。
+ */
+function mapTimeframeToPrismaEnum(value: string): Timeframe | null {
+  if (VALID_TIMEFRAMES.has(value)) {
+    return value as Timeframe;
+  }
+  return null;
+}
 
 @Injectable()
 export class PluginEventEvaluationService {
@@ -22,7 +42,6 @@ export class PluginEventEvaluationService {
    * バッチ上限 100 件。
    */
   async evaluatePending(): Promise<number> {
-    // 未評価 event を取得
     const events = await this.prisma.pluginEvent.findMany({
       where: {
         eventType: 'signal',
@@ -65,18 +84,26 @@ export class PluginEventEvaluationService {
   }): Promise<void> {
     if (!event.price || !event.direction || event.direction === 'NEUTRAL') return;
 
-    // emittedAt 以降のローソク足を offset 最大値 + 1 本取得
+    // 修正: 固定キャスト as 'H4' を削除 → 安全な Enum 変換
+    const timeframe = mapTimeframeToPrismaEnum(event.timeframe);
+    if (timeframe === null) {
+      this.logger.warn(
+        `[EventEvaluation] unknown timeframe "${event.timeframe}" for event ${event.id}, skip`,
+      );
+      return;
+    }
+
     const candles = await this.prisma.marketCandle.findMany({
       where: {
         symbol:    event.symbol,
-        timeframe: event.timeframe as 'H4',  // Prisma enum
+        timeframe,                          // Timeframe enum（型安全）
         time:      { gte: event.emittedAt },
       },
       orderBy: { time: 'asc' },
       take:    Math.max(...EVAL_OFFSETS) + 1,
     });
 
-    if (candles.length < 2) return;  // データ不足
+    if (candles.length < 2) return;
 
     const entryPrice = event.price;
     const direction  = event.direction as 'BUY' | 'SELL';
@@ -102,37 +129,35 @@ export class PluginEventEvaluationService {
 
       const returnPct = priceChange / entryPrice;
 
-      // MFE / MAE: offset までの区間での最大/最小
-      const rangeCandles = candles.slice(0, offset + 1);
-      let mfe = 0;
-      let mae = 0;
+      // MFE / MAE: offset 範囲内の high/low から計算
+      const window = candles.slice(1, offset + 1);
+      const highs  = window.map((c) => Number(c.high));
+      const lows   = window.map((c) => Number(c.low));
 
-      for (const c of rangeCandles) {
-        const high = Number(c.high);
-        const low  = Number(c.low);
-        const favExcursion = direction === 'BUY'
-          ? (high - entryPrice) / entryPrice
-          : (entryPrice - low)  / entryPrice;
-        const advExcursion = direction === 'BUY'
-          ? (entryPrice - low)  / entryPrice
-          : (high - entryPrice) / entryPrice;
+      const mfe = direction === 'BUY'
+        ? Math.max(...highs) - entryPrice
+        : entryPrice - Math.min(...lows);
 
-        if (favExcursion > mfe) mfe = favExcursion;
-        if (advExcursion > mae) mae = advExcursion;
-      }
+      const mae = direction === 'BUY'
+        ? entryPrice - Math.min(...lows)
+        : Math.max(...highs) - entryPrice;
 
       resultData.push({
         eventId:      event.id,
         candleOffset: offset,
         priceChange,
         returnPct,
-        mfe,
-        mae,
+        mfe:  Math.max(0, mfe),
+        mae:  Math.max(0, mae),
       });
     }
 
-    if (resultData.length > 0) {
-      await this.prisma.pluginEventResult.createMany({ data: resultData });
-    }
+    if (resultData.length === 0) return;
+
+    await this.prisma.pluginEventResult.createMany({ data: resultData });
+
+    this.logger.debug(
+      `[EventEvaluation] saved ${resultData.length} result(s) for event ${event.id}`,
+    );
   }
 }

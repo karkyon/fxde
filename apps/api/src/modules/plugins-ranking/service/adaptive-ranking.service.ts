@@ -2,6 +2,10 @@
  * apps/api/src/modules/plugins-ranking/service/adaptive-ranking.service.ts
  *
  * PluginReliability を読み込み、PluginAdaptiveDecision を生成・保存する。
+ *
+ * 追加: getSuppressedPluginKeys()
+ *       EnabledPluginsResolverService が runtime 実行前に suppressed / auto_stop
+ *       な pluginKey セットを取得するための軽量クエリ。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -72,7 +76,7 @@ export class AdaptiveRankingService {
     });
 
     // pluginKey ごとに最新1件に絞り込み
-    const seen  = new Set<string>();
+    const seen   = new Set<string>();
     const latest = all.filter((d) => {
       if (seen.has(d.pluginKey)) return false;
       seen.add(d.pluginKey);
@@ -127,6 +131,41 @@ export class AdaptiveRankingService {
         decidedAt:        (decision?.decidedAt ?? rel.updatedAt).toISOString(),
       };
     });
+  }
+
+  /**
+   * runtime resolver 専用: suppressed / auto_stop な pluginKey のセットを返す。
+   * EnabledPluginsResolverService が resolve() 冒頭で呼び出す。
+   * PluginAdaptiveDecision が存在しない場合は空セット（= 全 plugin 実行許可）。
+   */
+  async getSuppressedPluginKeys(): Promise<Set<string>> {
+    // pluginKey ごとの最新 decision を取得
+    const all = await this.prisma.pluginAdaptiveDecision.findMany({
+      orderBy: { decidedAt: 'desc' },
+      select:  { pluginKey: true, action: true },
+    });
+
+    const latestActionMap = new Map<string, string>();
+    for (const d of all) {
+      if (!latestActionMap.has(d.pluginKey)) {
+        latestActionMap.set(d.pluginKey, d.action);
+      }
+    }
+
+    const suppressed = new Set<string>();
+    for (const [key, action] of latestActionMap.entries()) {
+      if (action === 'suppress' || action === 'auto_stop') {
+        suppressed.add(key);
+      }
+    }
+
+    if (suppressed.size > 0) {
+      this.logger.debug(
+        `[AdaptiveRanking] suppressed plugins: ${[...suppressed].join(', ')}`,
+      );
+    }
+
+    return suppressed;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────
