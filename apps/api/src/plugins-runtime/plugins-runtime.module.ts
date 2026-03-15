@@ -22,6 +22,7 @@ import { ChartModule }  from '../modules/chart/chart.module';
 
 import { PluginsRuntimeController }         from './plugins-runtime.controller';
 import { PluginsRuntimeService }            from './plugins-runtime.service';
+import { PluginsRuntimeAnalysisService }    from './plugins-runtime-analysis.service';
 import { PluginRuntimeCoordinatorService }  from './coordinator/plugin-runtime-coordinator.service';
 import { EnabledPluginsResolverService }    from './resolver/enabled-plugins-resolver.service';
 import { ExecutionContextBuilderService }   from './context/execution-context-builder.service';
@@ -36,6 +37,7 @@ import { ResultNormalizerService }          from './normalizer/result-normalizer
   controllers: [PluginsRuntimeController],
   providers: [
     PluginsRuntimeService,
+    PluginsRuntimeAnalysisService,
     PluginRuntimeCoordinatorService,
     EnabledPluginsResolverService,
     ExecutionContextBuilderService,

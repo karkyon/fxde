@@ -8,7 +8,8 @@
  *   fxde_plugin_runtime_完全設計書 §7.3「認証/権限」
  *
  * エンドポイント:
- *   GET /api/v1/plugins-runtime/chart   全ロール（認証必須）
+ *   GET /api/v1/plugins-runtime/chart    全ロール（認証必須）
+ *   GET /api/v1/plugins-runtime/analysis 全ロール（認証必須）[Phase4追加]
  */
 
 import {
@@ -20,7 +21,8 @@ import {
   HttpStatus,
   Logger,            // [DEBUG] 追加
 } from '@nestjs/common';
-import { PluginsRuntimeService } from './plugins-runtime.service';
+import { PluginsRuntimeService }         from './plugins-runtime.service';
+import { PluginsRuntimeAnalysisService } from './plugins-runtime-analysis.service';
 import { GetChartPluginRuntimeQueryDto } from './dto/get-chart-plugin-runtime.query.dto';
 import { JwtAuthGuard }   from '../common/guards/jwt-auth.guard';
 import { CurrentUser }    from '../common/decorators/current-user.decorator';
@@ -33,7 +35,10 @@ export class PluginsRuntimeController {
   // [DEBUG] logger 追加
   private readonly logger = new Logger(PluginsRuntimeController.name);
 
-  constructor(private readonly runtimeService: PluginsRuntimeService) {}
+  constructor(
+    private readonly runtimeService:         PluginsRuntimeService,
+    private readonly runtimeAnalysisService: PluginsRuntimeAnalysisService,
+  ) {}
 
   /**
    * GET /api/v1/plugins-runtime/chart
@@ -67,9 +72,51 @@ export class PluginsRuntimeController {
 
     // [DEBUG] service 戻り値サマリー
     this.logger.debug('[PluginsRuntimeController] result summary', {
-      overlays:      result.overlays.length,
-      signals:       result.signals.length,
-      indicators:    result.indicators.length,
+      overlays:       result.overlays.length,
+      signals:        result.signals.length,
+      indicators:     result.indicators.length,
+      pluginStatuses: result.pluginStatuses.length,
+    });
+
+    return result;
+  }
+
+  /**
+   * GET /api/v1/plugins-runtime/analysis
+   * [Phase4] Analysis Runtime エンドポイント
+   */
+  @Get('analysis')
+  @HttpCode(HttpStatus.OK)
+  async getAnalysisRuntime(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: GetChartPluginRuntimeQueryDto,
+  ) {
+    // [DEBUG] controller 到達確認
+    this.logger.debug('[PluginsRuntimeController] analysis request received');
+    // [DEBUG] query パラメータ
+    this.logger.debug('[PluginsRuntimeController] analysis query', {
+      symbol:    query.symbol,
+      timeframe: query.timeframe,
+    });
+    // [DEBUG] 認証済みユーザー情報
+    this.logger.debug('[PluginsRuntimeController] analysis user', {
+      userId: user.sub,
+      email:  user.email,
+      role:   user.role,
+    });
+
+    const result = await this.runtimeAnalysisService.getAnalysisRuntime({
+      userId:    user.sub,
+      role:      user.role as UserRole,
+      symbol:    query.symbol,
+      timeframe: query.timeframe,
+    });
+
+    // [DEBUG] service 戻り値サマリー
+    this.logger.debug('[PluginsRuntimeController] analysis result summary', {
+      overlays:       result.overlays.length,
+      signals:        result.signals.length,
+      indicators:     result.indicators.length,
       pluginStatuses: result.pluginStatuses.length,
     });
 
