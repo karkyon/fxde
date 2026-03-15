@@ -10,6 +10,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { aiSummaryApi } from '../lib/api';
+import type { AiSummaryResponse } from '../lib/api';
 
 export const aiSummaryKeys = {
   all:    ()                          => ['ai-summary'] as const,
@@ -19,14 +20,37 @@ export const aiSummaryKeys = {
 /**
  * useLatestAiSummary
  * GET /api/v1/ai-summary/latest
- * キャッシュ済みの最新サマリーを取得。404 はエラーなし（初回未生成）。
+ * キャッシュ済みの最新サマリーを取得。
+ * 404（まだ生成されていない）は null を返す（エラーとして扱わない）。
  */
-export function useLatestAiSummary(symbol: string, timeframe: string, enabled = true) {
-  return useQuery({
+export function useLatestAiSummary(
+  symbol: string,
+  timeframe: string,
+  enabled = true,
+) {
+  return useQuery<AiSummaryResponse | null>({
     queryKey: aiSummaryKeys.latest(symbol, timeframe),
-    queryFn:  () => aiSummaryApi.getLatest({ symbol, timeframe }),
+    queryFn:  async () => {
+      try {
+        return await aiSummaryApi.getLatest({ symbol, timeframe });
+      } catch (error: unknown) {
+        // 404 = まだ生成されていない → null を返す（エラーではない）
+        const status = (
+          error !== null &&
+          typeof error === 'object' &&
+          'response' in error
+        )
+          ? (error as { response?: { status?: number } }).response?.status
+          : undefined;
+
+        if (status === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
     enabled:  !!symbol && !!timeframe && enabled,
-    retry:    false,   // 404 はリトライしない
+    retry:    false,
   });
 }
 

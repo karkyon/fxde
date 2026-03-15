@@ -381,7 +381,7 @@ export async function execute(ctx: FxdeContext): Promise<BiasResult> {
       checksum:        'sha256:placeholder_trend_bias',
       fxdeApiVersion:  '5.1',
       fxdeWebVersion:  '5.1',
-      capabilitiesJson: ['bias_detection', 'mtf_analysis', 'score_boost'],
+      capabilitiesJson: ['chart_signal', 'bias_detection', 'mtf_analysis', 'score_boost'],
       permissionsJson:  ['read_snapshots', 'read_indicators'],
       dependenciesJson: [],
       optionalDepsJson: [],
@@ -421,7 +421,7 @@ export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
       checksum:        'sha256:placeholder_session_overlay',
       fxdeApiVersion:  '5.1',
       fxdeWebVersion:  '5.1',
-      capabilitiesJson: ['session_highlight', 'overlap_detection'],
+      capabilitiesJson: ['chart_overlay', 'session_highlight', 'overlap_detection'],
       permissionsJson:  ['read_candles'],
       dependenciesJson: [],
       optionalDepsJson: [],
@@ -443,7 +443,7 @@ export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
  
     // InstalledPlugin upsert（1 manifest に 1 installed state）
     // Supply Demand PRO → enabled / その他 → disabled
-    const isEnabled = manifest.id === 'plg_supply_demand_pro'
+    const isEnabled = true
     const status    = isEnabled ? 'enabled' : 'disabled'
  
     await prisma.installedPlugin.upsert({
