@@ -549,8 +549,35 @@ export const pluginsRuntimeApi = {
    * chart runtime plugin 実行結果取得
    * overlays / signals / indicators / pluginStatuses を含む
    */
-  chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> =>
-    api
-      .get<ChartPluginRuntimeResponse>('/plugins-runtime/chart', { params })
-      .then((r) => r.data),
+  chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> => {
+    const url = '/plugins-runtime/chart';
+    // [DEBUG] リクエスト直前ログ（URL / method / Authorization 有無）
+    console.log('[pluginsRuntimeApi] request', {
+      url,
+      method:        'GET',
+      params,
+      hasAuthHeader: Boolean(getAccessToken()),
+    });
+    return api
+      .get<ChartPluginRuntimeResponse>(url, { params })
+      .then((r) => {
+        // [DEBUG] ステータスコード・生レスポンス本文
+        console.log('[pluginsRuntimeApi] response status', r.status);
+        console.log('[pluginsRuntimeApi] response body',   r.data);
+        return r.data;
+      })
+      .catch((err: unknown) => {
+        // [DEBUG] エラー詳細
+        const axiosErr = err as {
+          response?: { status?: number; data?: unknown };
+          message?:  string;
+        };
+        console.error('[pluginsRuntimeApi] error', {
+          status:  axiosErr?.response?.status,
+          data:    axiosErr?.response?.data,
+          message: axiosErr?.message,
+        });
+        throw err;
+      });
+  },
 };

@@ -9,17 +9,6 @@
  *
  * エンドポイント:
  *   GET /api/v1/plugins-runtime/chart   全ロール（認証必須）
- *
- * 権限:
- *   - 認証必須（JwtAuthGuard）
- *   - Chart ページ自体は全ロールアクセス可
- *   - plugin ごとの公開可否は Resolver / plugin 定義で制御
- *   - v1 MVP の Supply Demand Zones PRO は全ロール可（isEnabled=true であれば返す）
- *
- * 注意:
- *   - @Controller('plugins-runtime') → /api/v1/plugins-runtime/* となる
- *     （AppModule の setGlobalPrefix('api/v1') 適用済みのため）
- *   - 既存 /api/v1/chart/* エンドポイントは一切変更しない
  */
 
 import {
@@ -29,6 +18,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,            // [DEBUG] 追加
 } from '@nestjs/common';
 import { PluginsRuntimeService } from './plugins-runtime.service';
 import { GetChartPluginRuntimeQueryDto } from './dto/get-chart-plugin-runtime.query.dto';
@@ -38,19 +28,15 @@ import type { JwtPayload } from '../common/decorators/current-user.decorator';
 import type { UserRole } from '@fxde/types';
 
 @Controller('plugins-runtime')
-@UseGuards(JwtAuthGuard)  // 全エンドポイントで JWT 必須
+@UseGuards(JwtAuthGuard)
 export class PluginsRuntimeController {
+  // [DEBUG] logger 追加
+  private readonly logger = new Logger(PluginsRuntimeController.name);
+
   constructor(private readonly runtimeService: PluginsRuntimeService) {}
 
   /**
    * GET /api/v1/plugins-runtime/chart
-   *
-   * 有効化された plugin の chart runtime 結果を返す。
-   * overlay / signal / indicator / pluginStatuses を含む。
-   *
-   * 個別 plugin 失敗時は pluginStatuses[].status = 'FAILED' / 'TIMEOUT' で表現し、
-   * API 全体は 200 を返す。
-   * coordinator 自体が組み立て不能な場合のみ 5xx。
    */
   @Get('chart')
   @HttpCode(HttpStatus.OK)
@@ -58,11 +44,35 @@ export class PluginsRuntimeController {
     @CurrentUser() user: JwtPayload,
     @Query() query: GetChartPluginRuntimeQueryDto,
   ) {
-    return this.runtimeService.getChartRuntime({
+    // [DEBUG] controller 到達確認
+    this.logger.debug('[PluginsRuntimeController] request received');
+    // [DEBUG] query パラメータ
+    this.logger.debug('[PluginsRuntimeController] query', {
+      symbol:    query.symbol,
+      timeframe: query.timeframe,
+    });
+    // [DEBUG] 認証済みユーザー情報
+    this.logger.debug('[PluginsRuntimeController] user', {
+      userId: user.sub,
+      email:  user.email,
+      role:   user.role,
+    });
+
+    const result = await this.runtimeService.getChartRuntime({
       userId:    user.sub,
       role:      user.role as UserRole,
       symbol:    query.symbol,
       timeframe: query.timeframe,
     });
+
+    // [DEBUG] service 戻り値サマリー
+    this.logger.debug('[PluginsRuntimeController] result summary', {
+      overlays:      result.overlays.length,
+      signals:       result.signals.length,
+      indicators:    result.indicators.length,
+      pluginStatuses: result.pluginStatuses.length,
+    });
+
+    return result;
   }
 }

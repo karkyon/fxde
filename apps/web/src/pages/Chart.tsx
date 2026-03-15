@@ -334,6 +334,7 @@ function CandleChart({
   patternMarkers, showPatterns,
   runtimeOverlays,
   runtimeSignals,
+  runtimeIndicators,
   onPanDelta, onWheelZoom, onCrosshairChange,
 }: CandleChartProps) {
   const dragRef = useRef<{ startX: number; lastSnapIndex: number } | null>(null);
@@ -642,7 +643,52 @@ function CandleChart({
           </g>
         );
       })}
- 
+      
+      {/* ── Plugin Runtime Indicators ── */}
+      {runtimeIndicators.length > 0 && (
+        <g>
+          {runtimeIndicators.map((ind, i) => {
+            const statusColor =
+              ind.status === 'bullish' ? '#2EC96A'
+              : ind.status === 'bearish' ? '#E05252'
+              : ind.status === 'info'    ? '#60a5fa'
+              : '#94a3b8';
+            const rowH  = 13;
+            const baseY = CHART_PAD_T + cH - 6 - i * rowH;
+            const rawVal = ind.value;
+            const valStr =
+              typeof rawVal === 'number'
+                ? Number.isInteger(rawVal) ? String(rawVal) : rawVal.toFixed(2)
+                : String(rawVal ?? '—');
+            const label = `${ind.label}: ${valStr}`;
+            const boxW  = Math.min(label.length * 5.5 + 8, 140);
+            return (
+              <g key={ind.id}>
+                <rect
+                  x={CHART_PAD_L + cW - boxW - 2}
+                  y={baseY - 10}
+                  width={boxW}
+                  height={12}
+                  fill="rgba(0,0,0,0.5)"
+                  rx={2}
+                />
+                <text
+                  x={CHART_PAD_L + cW - 4}
+                  y={baseY}
+                  fill={statusColor}
+                  fontSize={8}
+                  fontFamily="monospace"
+                  textAnchor="end"
+                  opacity={0.9}
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+      )}
+
       {/* ── Prediction overlay ── */}
       {showPrediction && predOriginX !== null && predOriginY !== null && (
         <g>
@@ -981,6 +1027,34 @@ export default function ChartPage() {
   const total       = candles.data?.candles.length ?? 0;
   const allCandles  = candles.data?.candles ?? [];
 
+  // [DEBUG] pluginRuntime 状態変化ログ（symbol/timeframe変化・loading完了・エラー時に出力）
+  useEffect(() => {
+    console.log('[Chart] render', {
+      symbol,
+      timeframe,
+      pluginRuntimeLoading:  pluginRuntime.isLoading,
+      pluginRuntimeError:    pluginRuntime.error,
+      overlays:              pluginRuntime.data?.overlays?.length      ?? 0,
+      signals:               pluginRuntime.data?.signals?.length       ?? 0,
+      indicators:            pluginRuntime.data?.indicators?.length    ?? 0,
+      pluginStatuses:        pluginRuntime.data?.pluginStatuses?.length ?? 0,
+    });
+  }, [
+    symbol,
+    timeframe,
+    pluginRuntime.isLoading,
+    pluginRuntime.error,
+    pluginRuntime.data,
+  ]);
+
+  // [DEBUG] Chart アンマウント時（cleanup）ログ
+  useEffect(() => {
+    return () => {
+      console.log('[Chart] unmount / cleanup', { symbol, timeframe });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
   // candles / symbol / timeframe 変化 → visible range 再初期化
   useEffect(() => {
     if (total > 0) {

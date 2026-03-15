@@ -67,15 +67,29 @@ export class PluginRuntimeCoordinatorService {
       `for ${symbol}/${timeframe}`,
     );
 
+    // [DEBUG] 解決された plugin 一覧の詳細
+    this.logger.debug('[PluginRuntimeCoordinator] resolved plugins', {
+      count:   resolvedPlugins.length,
+      plugins: resolvedPlugins.map((p) => ({
+        pluginId:     p.pluginId,
+        pluginKey:    p.pluginKey,
+        capabilities: p.capabilities,
+        timeoutMs:    p.timeoutMs,
+        sortOrder:    p.sortOrder,
+      })),
+    });
+
     // 実行対象なしの場合は空レスポンスを返す
     if (resolvedPlugins.length === 0) {
+      // [DEBUG] 0件の場合を明示
+      this.logger.debug('[PluginRuntimeCoordinator] no plugins resolved → returning empty response');
       return {
         symbol,
         timeframe,
         generatedAt,
-        overlays:      [],
-        signals:       [],
-        indicators:    [],
+        overlays:       [],
+        signals:        [],
+        indicators:     [],
         pluginStatuses: [],
       };
     }
@@ -89,13 +103,31 @@ export class PluginRuntimeCoordinatorService {
     });
 
     // 3. 各 plugin を逐次実行
-    const allOverlays:       RuntimeOverlay[]      = [];
-    const allSignals:        RuntimeSignal[]        = [];
-    const allIndicators:     RuntimeIndicator[]     = [];
-    const pluginStatuses:    RuntimePluginStatus[]  = [];
+    const allOverlays:    RuntimeOverlay[]     = [];
+    const allSignals:     RuntimeSignal[]      = [];
+    const allIndicators:  RuntimeIndicator[]   = [];
+    const pluginStatuses: RuntimePluginStatus[] = [];
 
     for (const plugin of resolvedPlugins) {
+      // [DEBUG] plugin 実行開始
+      this.logger.debug('[PluginRuntimeCoordinator] executing plugin', {
+        pluginKey: plugin.pluginKey,
+        pluginId:  plugin.pluginId,
+      });
+
       const result = await this.executor.execute(plugin, context);
+
+      // [DEBUG] plugin 実行結果
+      this.logger.debug('[PluginRuntimeCoordinator] plugin result', {
+        pluginKey:    plugin.pluginKey,
+        status:       result.status,
+        rawOverlays:  result.status === 'SUCCEEDED' ? (result.raw?.overlays?.length  ?? 0) : 0,
+        rawSignals:   result.status === 'SUCCEEDED' ? (result.raw?.signals?.length   ?? 0) : 0,
+        rawIndicators:result.status === 'SUCCEEDED' ? (result.raw?.indicators?.length ?? 0) : 0,
+        durationMs:   result.durationMs,
+        ...(result.status === 'FAILED'  && { errorMessage: result.errorMessage }),
+        ...(result.status === 'SKIPPED' && { reason: (result as { reason?: string }).reason }),
+      });
 
       if (result.status === 'SUCCEEDED') {
         const normalized = this.normalizer.normalize(plugin.pluginKey, result.raw);
@@ -145,6 +177,17 @@ export class PluginRuntimeCoordinatorService {
         });
       }
     }
+
+    // [DEBUG] 最終集約結果
+    this.logger.debug('[PluginRuntimeCoordinator] aggregated result', {
+      overlays:      allOverlays.length,
+      signals:       allSignals.length,
+      indicators:    allIndicators.length,
+      pluginStatuses: pluginStatuses.map((s) => ({
+        pluginKey: s.pluginKey,
+        status:    s.status,
+      })),
+    });
 
     return {
       symbol,

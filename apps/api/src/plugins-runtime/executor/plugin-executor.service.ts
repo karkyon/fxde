@@ -50,6 +50,13 @@ export class PluginExecutorService {
   ): Promise<PluginExecutionResult> {
     const adapter = PLUGIN_ADAPTERS[plugin.pluginKey];
 
+    // [DEBUG] adapter 検索結果
+    this.logger.debug('[PluginExecutor] execute start', {
+      pluginKey:  plugin.pluginKey,
+      timeoutMs:  plugin.timeoutMs,
+      hasAdapter: Boolean(adapter),
+    });
+
     if (!adapter) {
       this.logger.warn(
         `Plugin adapter not found: ${plugin.pluginKey} → SKIPPED`,
@@ -70,22 +77,37 @@ export class PluginExecutorService {
         `Plugin ${plugin.pluginKey} SUCCEEDED in ${durationMs}ms`,
       );
 
+      // [DEBUG] 成功時の raw output 件数
+      this.logger.debug('[PluginExecutor] execute success', {
+        pluginKey:    plugin.pluginKey,
+        durationMs,
+        overlays:     raw?.overlays?.length    ?? 0,
+        signals:      raw?.signals?.length     ?? 0,
+        indicators:   raw?.indicators?.length  ?? 0,
+      });
+
       return { status: 'SUCCEEDED', raw, durationMs };
     } catch (err: unknown) {
       const durationMs = Date.now() - startAt;
 
       if (err instanceof TimeoutError) {
-        this.logger.warn(
-          `Plugin ${plugin.pluginKey} TIMEOUT (>${plugin.timeoutMs}ms)`,
-        );
+        // [DEBUG] timeout
+        this.logger.warn('[PluginExecutor] execute timeout', {
+          pluginKey:  plugin.pluginKey,
+          durationMs,
+          timeoutMs:  plugin.timeoutMs,
+        });
         return { status: 'TIMEOUT', durationMs };
       }
 
       const message =
         err instanceof Error ? err.message : String(err);
-      this.logger.error(
-        `Plugin ${plugin.pluginKey} FAILED: ${message}`,
-      );
+      // [DEBUG] 失敗
+      this.logger.error('[PluginExecutor] execute failed', {
+        pluginKey:    plugin.pluginKey,
+        durationMs,
+        errorMessage: message,
+      });
       return { status: 'FAILED', errorMessage: message, durationMs };
     }
   }
