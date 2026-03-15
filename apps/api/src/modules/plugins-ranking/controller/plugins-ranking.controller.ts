@@ -1,0 +1,90 @@
+/**
+ * apps/api/src/modules/plugins-ranking/controller/plugins-ranking.controller.ts
+ *
+ * GET /api/v1/plugins/reliability
+ * GET /api/v1/plugins/adaptive-ranking
+ * GET /api/v1/plugins/adaptive-ranking/stop-candidates
+ */
+
+import {
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { ReliabilityScoringService } from '../service/reliability-scoring.service';
+import { AdaptiveRankingService }    from '../service/adaptive-ranking.service';
+import { GetPluginRankingQueryDto }  from '../dto/get-plugin-ranking.query.dto';
+import { JwtAuthGuard }              from '../../../common/guards/jwt-auth.guard';
+
+@Controller('plugins')
+@UseGuards(JwtAuthGuard)
+export class PluginsRankingController {
+  private readonly logger = new Logger(PluginsRankingController.name);
+
+  constructor(
+    private readonly reliabilityService: ReliabilityScoringService,
+    private readonly rankingService:     AdaptiveRankingService,
+  ) {}
+
+  /**
+   * GET /api/v1/plugins/reliability
+   * 全 plugin の信頼度スコア一覧
+   */
+  @Get('reliability')
+  @HttpCode(HttpStatus.OK)
+  async getReliability(@Query() query: GetPluginRankingQueryDto) {
+    this.logger.debug('[PluginsRankingController] GET /plugins/reliability', query);
+
+    const rows = await this.reliabilityService['prisma'].pluginReliability.findMany({
+      where: {
+        ...(query.symbol    ? { symbol: query.symbol }       : {}),
+        ...(query.timeframe ? { timeframe: query.timeframe } : {}),
+      },
+      orderBy: { reliabilityScore: 'desc' },
+    });
+
+    return rows.map((r) => ({
+      id:               r.id,
+      pluginKey:        r.pluginKey,
+      symbol:           r.symbol,
+      timeframe:        r.timeframe,
+      sampleSize:       r.sampleSize,
+      winRate:          r.winRate,
+      expectancy:       r.expectancy,
+      avgReturn:        r.avgReturn,
+      avgMfe:           r.avgMfe,
+      avgMae:           r.avgMae,
+      reliabilityScore: r.reliabilityScore,
+      stabilityScore:   r.stabilityScore,
+      confidenceScore:  r.confidenceScore,
+      state:            r.state,
+      updatedAt:        r.updatedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * GET /api/v1/plugins/adaptive-ranking
+   * Plugin ランキング一覧（最新 decision）
+   */
+  @Get('adaptive-ranking')
+  @HttpCode(HttpStatus.OK)
+  async getAdaptiveRanking(@Query() query: GetPluginRankingQueryDto) {
+    this.logger.debug('[PluginsRankingController] GET /plugins/adaptive-ranking', query);
+    return this.rankingService.getRanking(query);
+  }
+
+  /**
+   * GET /api/v1/plugins/adaptive-ranking/stop-candidates
+   * 停止候補 plugin 一覧
+   */
+  @Get('adaptive-ranking/stop-candidates')
+  @HttpCode(HttpStatus.OK)
+  async getStopCandidates() {
+    this.logger.debug('[PluginsRankingController] GET /plugins/adaptive-ranking/stop-candidates');
+    return this.rankingService.getStopCandidates();
+  }
+}

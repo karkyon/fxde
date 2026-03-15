@@ -28,11 +28,12 @@ import { EnabledPluginsResolverService }    from './resolver/enabled-plugins-res
 import { ExecutionContextBuilderService }   from './context/execution-context-builder.service';
 import { PluginExecutorService }            from './executor/plugin-executor.service';
 import { ResultNormalizerService }          from './normalizer/result-normalizer.service';
+import { PluginEventCaptureService }        from './event/plugin-event-capture.service';
 
 @Module({
   imports: [
     PrismaModule,
-    ChartModule,   // ChartService を再利用（ExecutionContextBuilder 用）
+    ChartModule,
   ],
   controllers: [PluginsRuntimeController],
   providers: [
@@ -43,6 +44,10 @@ import { ResultNormalizerService }          from './normalizer/result-normalizer
     ExecutionContextBuilderService,
     PluginExecutorService,
     ResultNormalizerService,
+    PluginEventCaptureService,
+  ],
+  exports: [
+    PluginEventCaptureService,
   ],
 })
 export class PluginsRuntimeModule {}

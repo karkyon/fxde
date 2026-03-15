@@ -17,13 +17,15 @@ import type { Timeframe } from '@fxde/types';
 
 // ── キュー名定数（SPEC_v51_part4 §5.1 正本）────────────────────────────────
 export const QUEUE_NAMES = {
-  PRICE_SYNC:          'price-sync',
-  SNAPSHOT_CAPTURE:    'snapshot-capture',
-  NEWS_SYNC:           'news-sync',
-  CALENDAR_SYNC:       'calendar-sync',
-  PREDICTION_DISPATCH: 'prediction-dispatch',
-  AI_SUMMARY_SYNC:     'ai-summary-sync',
-  CLEANUP:             'cleanup',
+  PRICE_SYNC:                   'price-sync',
+  SNAPSHOT_CAPTURE:             'snapshot-capture',
+  NEWS_SYNC:                    'news-sync',
+  CALENDAR_SYNC:                'calendar-sync',
+  PREDICTION_DISPATCH:          'prediction-dispatch',
+  AI_SUMMARY_SYNC:              'ai-summary-sync',
+  CLEANUP:                      'cleanup',
+  PLUGIN_EVENT_EVALUATE:        'plugin-event-evaluate',
+  PLUGIN_RELIABILITY_RECOMPUTE: 'plugin-reliability-recompute',
 } as const;
 
 export type QueueName = typeof QUEUE_NAMES[keyof typeof QUEUE_NAMES];
@@ -53,4 +55,12 @@ export type AiSummarySyncJobData = {
 
 export type CleanupJobData = {
   target: 'sessions' | 'signals' | 'all';
+};
+
+export type PluginReliabilityRecomputeJobData = {
+  pluginKey?: string;  // undefined = 全 plugin 対象
+};
+
+export type PluginEventEvaluateJobData = {
+  eventId: string;
 };

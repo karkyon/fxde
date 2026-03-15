@@ -27,6 +27,7 @@ import { EnabledPluginsResolverService } from '../resolver/enabled-plugins-resol
 import { ExecutionContextBuilderService } from '../context/execution-context-builder.service';
 import { PluginExecutorService } from '../executor/plugin-executor.service';
 import { ResultNormalizerService } from '../normalizer/result-normalizer.service';
+import { PluginEventCaptureService } from '../event/plugin-event-capture.service';
 import type { UserRole } from '@fxde/types';
 import type {
   ChartPluginRuntimeResponse,
@@ -45,6 +46,7 @@ export class PluginRuntimeCoordinatorService {
     private readonly ctxBuilder:  ExecutionContextBuilderService,
     private readonly executor:    PluginExecutorService,
     private readonly normalizer:  ResultNormalizerService,
+    private readonly eventCapture: PluginEventCaptureService,
   ) {}
 
   /**
@@ -144,6 +146,14 @@ export class PluginRuntimeCoordinatorService {
           errorMessage: null,
           capabilities: plugin.capabilities,
         });
+
+        // Event capture（try/catch isolated — runtime 結果に影響しない）
+        void this.eventCapture.captureSignalEvents(
+          plugin.pluginKey,
+          symbol,
+          timeframe,
+          normalized.signals,
+        );
       } else if (result.status === 'FAILED') {
         pluginStatuses.push({
           pluginId:     plugin.pluginId,

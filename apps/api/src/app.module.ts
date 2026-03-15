@@ -2,10 +2,17 @@
  * apps/api/src/app.module.ts
  *
  * 変更内容:
- *   [predictions] PredictionsModule を import 追加
- *   [BullMQ]      BullMQModule.forRoot を追加
- *                 PredictionsModule が BullMQModule.forFeature を使うために必要。
- *                 既存モジュールで BullMQ を使うものがあれば共通 forRoot として機能する。
+ *   [predictions]      PredictionsModule を import 追加
+ *   [BullMQ]           BullMQModule.forRoot を追加
+ *                      PredictionsModule が BullMQModule.forFeature を使うために必要。
+ *                      既存モジュールで BullMQ を使うものがあれば共通 forRoot として機能する。
+ *   [plugins-ranking]  PluginsRankingModule を import 追加
+ *                      Adaptive Plugin Ranking Engine モジュール。
+ *                      既存 PluginsRuntimeModule は変更せず横に積む設計。
+ *                      ⚠️ PluginsModule より前に登録すること。
+ *                      理由: PluginsController の GET /plugins/:pluginId が
+ *                      静的ルート /plugins/reliability 等を先取りするのを防ぐため。
+ *                      NestJS/Express はルート登録順が先勝ち。
  *
  * 参照仕様:
  *   SPEC_v51_part3 §10「Predictions API」
@@ -16,7 +23,7 @@
 import { Module }          from '@nestjs/common';
 import { ConfigModule }    from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { BullModule  }    from '@nestjs/bullmq';
+import { BullModule }      from '@nestjs/bullmq';
 import { PrismaModule }    from './prisma/prisma.module';
 import { AuthModule }      from './modules/auth/auth.module';
 import { UsersModule }     from './modules/users/users.module';
@@ -24,15 +31,15 @@ import { SettingsModule }  from './modules/settings/settings.module';
 import { SymbolsModule }   from './modules/symbols/symbols.module';
 import { TradesModule }    from './modules/trades/trades.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
-import { SignalsModule }    from './modules/signals/signals.module';
-import { PredictionsModule } from './modules/predictions/predictions.module';
-import { ChartModule }     from './modules/chart/chart.module';
-import { AiSummaryModule } from './ai-summary/ai-summary.module';
-import { ConnectorsModule }  from './modules/connectors/connectors.module';
-import { MarketDataModule }  from './modules/market-data/market-data.module';
-import { PluginsModule }   from './modules/plugins/plugins.module';
+import { SignalsModule }   from './modules/signals/signals.module';
+import { PredictionsModule }  from './modules/predictions/predictions.module';
+import { ChartModule }        from './modules/chart/chart.module';
+import { AiSummaryModule }    from './ai-summary/ai-summary.module';
+import { ConnectorsModule }   from './modules/connectors/connectors.module';
+import { MarketDataModule }   from './modules/market-data/market-data.module';
+import { PluginsRankingModule } from './modules/plugins-ranking/plugins-ranking.module';  // PluginsModule より前
+import { PluginsModule }      from './modules/plugins/plugins.module';
 import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
- 
 
 @Module({
   imports: [
@@ -63,6 +70,7 @@ import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
     AiSummaryModule,
     ConnectorsModule,
     MarketDataModule,
+    PluginsRankingModule,   // ⚠️ PluginsModule より前（静的ルート先勝ち確保）
     PluginsModule,
     PluginsRuntimeModule,
   ],

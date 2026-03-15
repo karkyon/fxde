@@ -12,3 +12,5 @@ export * from './chart.schema';
 export * from './plugin.schema';
 // Plugin Runtime（fxde_plugin_runtime_完全設計書 §6/§7）
 export * from './plugin-runtime.schema';
+// Adaptive Plugin Ranking Engine
+export * from './plugin-ranking.schema';
