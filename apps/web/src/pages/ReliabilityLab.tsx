@@ -6,6 +6,10 @@
  *
  * 仕様: fxde_pg_level_screen_spec_plugin_reliability_lab.md §5
  *
+ * Phase9 追加実装:
+ *   - Score Distribution histogram（9.2）
+ *   - Stop Candidates 専用セクション（9.3）
+ *
  * v1 実装範囲:
  *   - Plugin Comparison Table（信頼度スコア一覧）
  *   - KPI Summary Cards（4枚）
@@ -16,18 +20,20 @@
  * データソース:
  *   GET /api/v1/plugins/reliability
  *   GET /api/v1/plugins/adaptive-ranking
+ *   GET /api/v1/plugins/adaptive-ranking/stop-candidates
  */
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pluginsRankingApi } from '../lib/api';
-import type { PluginReliabilityItem, PluginRankingItem } from '@fxde/types';
+import type { PluginReliabilityItem, PluginRankingItem, PluginStopCandidateItem } from '@fxde/types';
 
 // ── Query Keys ───────────────────────────────────────────────────────────────
 
 const labKeys = {
-  reliability: (f?: object) => ['plugins', 'reliability', f] as const,
-  ranking:     (f?: object) => ['plugins', 'ranking', f]     as const,
+  reliability:    (f?: object) => ['plugins', 'reliability', f]     as const,
+  ranking:        (f?: object) => ['plugins', 'ranking', f]         as const,
+  stopCandidates: ()           => ['plugins', 'stop-candidates']    as const,
 };
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -70,6 +76,90 @@ function KpiCard({ label, value, sub }: { label: string; value: string | number;
   );
 }
 
+// ── Score Distribution Histogram ─────────────────────────────────────────────
+
+const SCORE_BINS = [
+  { label: '0.0–0.2', min: 0.0, max: 0.2, color: '#E05252' },
+  { label: '0.2–0.4', min: 0.2, max: 0.4, color: '#E05252' },
+  { label: '0.4–0.6', min: 0.4, max: 0.6, color: '#E8B830' },
+  { label: '0.6–0.8', min: 0.6, max: 0.8, color: '#2EC96A' },
+  { label: '0.8–1.0', min: 0.8, max: 1.0, color: '#2EC96A' },
+];
+
+function ScoreDistribution({ rows }: { rows: PluginReliabilityItem[] }) {
+  if (rows.length === 0) return null;
+
+  const bins = SCORE_BINS.map((b) => ({
+    ...b,
+    count: rows.filter((r) => r.reliabilityScore >= b.min && r.reliabilityScore < b.max).length,
+  }));
+  // 0.8–1.0 の上限は 1.0 を含める
+  bins[bins.length - 1].count = rows.filter(
+    (r) => r.reliabilityScore >= 0.8 && r.reliabilityScore <= 1.0,
+  ).length;
+
+  const maxCount = Math.max(...bins.map((b) => b.count), 1);
+
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-slate-300 mb-4">Score Distribution</h3>
+      <div className="flex items-end gap-2 h-24">
+        {bins.map((b) => {
+          const pct = (b.count / maxCount) * 100;
+          return (
+            <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
+              <span className="text-[10px] text-slate-400">{b.count}</span>
+              <div className="w-full rounded-t" style={{ height: `${Math.max(pct, 4)}%`, backgroundColor: b.color, opacity: 0.8 }} />
+              <span className="text-[9px] text-slate-500 text-center">{b.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Stop Candidates Section ───────────────────────────────────────────────────
+
+function StopCandidatesSection({ items }: { items: PluginStopCandidateItem[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-slate-800 border border-slate-700 rounded-lg p-4">
+        <h3 className="text-sm font-semibold text-slate-300 mb-2">⚠️ Stop Candidates</h3>
+        <p className="text-xs text-slate-500">No stop candidates currently.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800 border border-red-900/40 rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-red-400 mb-3">
+        ⚠️ Stop Candidates ({items.length})
+      </h3>
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item.pluginKey}
+            className="flex items-center justify-between bg-red-900/20 border border-red-900/30 rounded px-3 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm text-slate-200">{item.pluginKey}</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-900/40 text-red-400 border border-red-700/50">
+                {item.state}
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-slate-400">
+              <span>score: <span className="text-red-400 font-bold">{item.reliabilityScore.toFixed(3)}</span></span>
+              <span>n={item.sampleSize}</span>
+              <span>action: <span className="font-mono text-orange-400">{item.action}</span></span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ReliabilityLab() {
@@ -95,6 +185,13 @@ export default function ReliabilityLab() {
     useQuery<PluginRankingItem[]>({
       queryKey: labKeys.ranking(filter),
       queryFn:  () => pluginsRankingApi.getRanking(filter),
+      retry:    false,
+    });
+
+  const { data: stopCandidates = [] } =
+    useQuery<PluginStopCandidateItem[]>({
+      queryKey: labKeys.stopCandidates(),
+      queryFn:  () => pluginsRankingApi.getStopCandidates(),
       retry:    false,
     });
 
@@ -270,6 +367,14 @@ export default function ReliabilityLab() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Phase9: Score Distribution + Stop Candidates ── */}
+      {reliabilityRows.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+          <ScoreDistribution rows={reliabilityRows} />
+          <StopCandidatesSection items={stopCandidates} />
         </div>
       )}
 
