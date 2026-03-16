@@ -1581,9 +1581,6 @@ export default function ChartPage() {
       {/* Plugin Runtime ステータスバー */}
       <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
 
-      {/* Plugin Runtime ステータスバー */}
-      <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
-
       {/* ── Plugin Visibility Panel ─────────────────────────────────────── */}
       {(pluginRuntime.data?.pluginStatuses ?? []).length > 0 && (
         <div style={{

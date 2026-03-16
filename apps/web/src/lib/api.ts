@@ -41,6 +41,7 @@ import type {
   PluginReliabilityItem,
   PluginRankingItem,
   PluginStopCandidateItem,
+  PluginRankingHistoryItem,
 } from '@fxde/types';
 // ── Trades 集計系レスポンス型 ──────────────────────────────────────────────
 // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4
@@ -72,6 +73,16 @@ export interface ScoreBandStats {
 export interface PaginationParams {
   page?: number;
   limit?: number;
+}
+
+export interface ConditionBreakdownRow {
+  key: string; sampleSize: number; winRate: number; avgReturn: number;
+}
+
+export interface PluginConditionBreakdown {
+  pluginKey: string;
+  byPattern: ConditionBreakdownRow[]; bySymbolTf: ConditionBreakdownRow[]; byDirection: ConditionBreakdownRow[];
+  totalEvaluated: number;
 }
 
 // ── Axios インスタンス ──────────────────────────────────────────────────────
@@ -604,6 +615,7 @@ export const pluginsRuntimeApi = {
   chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> =>
     api.get<ChartPluginRuntimeResponse>('/plugins-runtime/chart', { params }).then((r) => r.data),
 };
+
 export const pluginsRankingApi = {
   /**
    * GET /api/v1/plugins/reliability
@@ -620,8 +632,14 @@ export const pluginsRankingApi = {
   /**
    * GET /api/v1/plugins/adaptive-ranking/history/:pluginKey
    */
-  getHistory: (pluginKey: string): Promise<PluginRankingItem[]> =>
-    api.get<PluginRankingItem[]>(`/plugins/adaptive-ranking/history/${pluginKey}`).then((r) => r.data),
+  getHistory: (pluginKey: string): Promise<PluginRankingHistoryItem[]> =>
+    api.get<PluginRankingHistoryItem[]>(`/plugins/adaptive-ranking/history/${pluginKey}`).then((r) => r.data),
+
+  /**
+   * GET /api/v1/plugins/reliability/breakdown/:pluginKey
+   */
+  getConditionBreakdown: (pluginKey: string): Promise<PluginConditionBreakdown> =>
+    api.get<PluginConditionBreakdown>(`/plugins/reliability/breakdown/${pluginKey}`).then((r) => r.data),
 
   /**
    * GET /api/v1/plugins/adaptive-ranking/stop-candidates

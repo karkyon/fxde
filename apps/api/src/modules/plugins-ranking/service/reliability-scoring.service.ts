@@ -2,10 +2,30 @@
  * apps/api/src/modules/plugins-ranking/service/reliability-scoring.service.ts
  *
  * PluginEventResult を集計して PluginReliability を upsert する。
+ *
+ * 追加: getConditionBreakdown(pluginKey)
+ *       patternType / symbol+timeframe / direction 別の条件別統計を返す。
+ *       既存スコア算出ロジックは一切変更しない。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService }      from '../../../prisma/prisma.service';
+
+// ── 条件別 breakdown の行型 ──────────────────────────────────────────────
+export interface ConditionBreakdownRow {
+  key:        string;
+  sampleSize: number;
+  winRate:    number;
+  avgReturn:  number;
+}
+
+export interface PluginConditionBreakdown {
+  pluginKey:    string;
+  byPattern:    ConditionBreakdownRow[];
+  bySymbolTf:   ConditionBreakdownRow[];
+  byDirection:  ConditionBreakdownRow[];
+  totalEvaluated: number;
+}
 
 @Injectable()
 export class ReliabilityScoringService {
@@ -17,7 +37,6 @@ export class ReliabilityScoringService {
    * 全 plugin（または指定 pluginKey）の PluginReliability を再計算して保存する。
    */
   async recompute(pluginKey?: string): Promise<void> {
-    // 対象 pluginKey 一覧を取得
     const pluginKeys = pluginKey
       ? [pluginKey]
       : await this._distinctPluginKeys();
@@ -30,7 +49,6 @@ export class ReliabilityScoringService {
   // ── 内部: 1 plugin の集計 ───────────────────────────────────────────────
 
   private async _recomputeOne(pluginKey: string): Promise<void> {
-    // 当該 plugin の全 PluginEventResult を取得（returnPct が主指標）
     const results = await this.prisma.pluginEventResult.findMany({
       where:  { event: { pluginKey } },
       select: { returnPct: true, mfe: true, mae: true },
@@ -51,17 +69,15 @@ export class ReliabilityScoringService {
     const winRate  = winCount / sampleSize;
 
     const avgReturn       = this._avg(returnPcts);
-    const expectancy      = avgReturn;  // v1: avg(returnPct)
+    const expectancy      = avgReturn;
     const avgMfe          = this._avg(mfes);
     const avgMae          = this._avg(maes);
     const stabilityScore  = this._stabilityScore(returnPcts);
     const confidenceScore = this._confidenceScore(sampleSize);
 
-    // 正規化（v1: tanh で -1〜1 を 0〜1 に変換）
     const expectancyNorm = this._normalizeTanh(expectancy);
     const avgReturnNorm  = this._normalizeTanh(avgReturn);
 
-    // 無効シグナル率（v1: MAE が MFE を大幅に上回るケース）
     const invalidCount      = results.filter((r) => r.mae > r.mfe * 2).length;
     const invalidSignalRate = invalidCount / sampleSize;
     const penaltyFactor     = invalidSignalRate > 0.4 ? 0.6 : 1.0;
@@ -77,10 +93,8 @@ export class ReliabilityScoringService {
 
     const state = this._determineState(reliabilityScore, sampleSize);
 
-    // upsert（pluginKey 単位。v1 は symbol/timeframe 集約なし）
     await this.prisma.pluginReliability.upsert({
       where: {
-        // ユニーク制約がないので、findFirst → create/update パターン
         id: await this._findOrDefaultId(pluginKey),
       },
       update: {
@@ -119,10 +133,6 @@ export class ReliabilityScoringService {
 
   // ── 公開 API ─────────────────────────────────────────────────────────────
 
-  /**
-   * Controller から呼び出す PluginReliability 一覧取得。
-   * symbol / timeframe でフィルタ可能。
-   */
   async findAll(filter?: { symbol?: string; timeframe?: string }) {
     return this.prisma.pluginReliability.findMany({
       where: {
@@ -133,7 +143,83 @@ export class ReliabilityScoringService {
     });
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
+  /**
+   * 条件別 breakdown を返す。
+   * - patternType 別（metadata.patternType）
+   * - symbol/timeframe 別
+   * - direction 別
+   *
+   * 既存スコア算出ロジックを一切変更しない。
+   * PluginEvent.results の candleOffset=1 を primary metric とする。
+   */
+  async getConditionBreakdown(pluginKey: string): Promise<PluginConditionBreakdown> {
+    // signal event + 最初の PluginEventResult（offset=1）を取得
+    const events = await this.prisma.pluginEvent.findMany({
+      where: { pluginKey, eventType: 'signal' },
+      select: {
+        id:        true,
+        symbol:    true,
+        timeframe: true,
+        direction: true,
+        metadata:  true,
+        results: {
+          select:  { returnPct: true, candleOffset: true },
+          orderBy: { candleOffset: 'asc' },
+          take: 1,
+        },
+      },
+    });
+
+    // metadata から patternType を抽出し、returnPct を付与
+    const rows = events
+      .map((e) => {
+        const meta        = e.metadata as Record<string, unknown> | null;
+        const patternType = (meta?.['patternType'] as string) ?? 'unknown';
+        const returnPct   = e.results[0]?.returnPct ?? null;
+        return {
+          symbol:      e.symbol,
+          timeframe:   e.timeframe,
+          direction:   e.direction ?? 'NEUTRAL',
+          patternType,
+          returnPct,
+        };
+      })
+      .filter((r): r is typeof r & { returnPct: number } => r.returnPct !== null);
+
+    const byPattern   = this._groupAndCalc(rows, (r) => r.patternType);
+    const bySymbolTf  = this._groupAndCalc(rows, (r) => `${r.symbol}/${r.timeframe}`);
+    const byDirection = this._groupAndCalc(rows, (r) => r.direction);
+
+    return {
+      pluginKey,
+      byPattern,
+      bySymbolTf,
+      byDirection,
+      totalEvaluated: rows.length,
+    };
+  }
+
+  // ── 内部ヘルパー ─────────────────────────────────────────────────────────
+
+  private _groupAndCalc<T extends { returnPct: number }>(
+    items:  T[],
+    keyFn:  (item: T) => string,
+  ): ConditionBreakdownRow[] {
+    const groups = new Map<string, number[]>();
+    for (const item of items) {
+      const key = keyFn(item);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(item.returnPct);
+    }
+    return [...groups.entries()]
+      .map(([key, returns]) => ({
+        key,
+        sampleSize: returns.length,
+        winRate:    returns.filter((r) => r > 0).length / returns.length,
+        avgReturn:  this._avg(returns),
+      }))
+      .sort((a, b) => b.sampleSize - a.sampleSize);
+  }
 
   private async _findOrDefaultId(pluginKey: string): Promise<string> {
     const existing = await this.prisma.pluginReliability.findFirst({
@@ -175,14 +261,12 @@ export class ReliabilityScoringService {
     return 0.35;
   }
 
-  /** tanh で任意の実数を 0〜1 に正規化 */
   private _normalizeTanh(value: number): number {
-    // tanh(value) ∈ (-1, 1) → (0, 1)
     return (Math.tanh(value) + 1) / 2;
   }
 
   private _determineState(score: number, sampleSize: number): string {
-    if (score < 0.30 && sampleSize >= 100) return 'stop_candidate';  // auto_stop 条件
+    if (score < 0.30 && sampleSize >= 100) return 'stop_candidate';
     if (score < 0.40) return 'stop_candidate';
     if (score < 0.55) return 'suppressed';
     if (score < 0.70) return 'demoted';

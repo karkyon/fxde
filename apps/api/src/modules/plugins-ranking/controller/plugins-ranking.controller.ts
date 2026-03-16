@@ -2,14 +2,11 @@
  * apps/api/src/modules/plugins-ranking/controller/plugins-ranking.controller.ts
  *
  * GET  /api/v1/plugins/reliability
+ * GET  /api/v1/plugins/reliability/breakdown/:pluginKey  ← 追加
  * GET  /api/v1/plugins/adaptive-ranking
  * GET  /api/v1/plugins/adaptive-ranking/stop-candidates
  * GET  /api/v1/plugins/adaptive-ranking/history/:pluginKey
  * POST /api/v1/plugins/recompute
- *
- * 修正: getReliability() で service['prisma'] に直接アクセスしていた責務違反を修正。
- *       ReliabilityScoringService.findAll() 経由に変更。
- * 追加: POST /plugins/recompute — 手動リコンピュートジョブをキューに投入。
  */
 
 import {
@@ -52,7 +49,6 @@ export class PluginsRankingController {
   async getReliability(@Query() query: GetPluginRankingQueryDto) {
     this.logger.debug('[PluginsRankingController] GET /plugins/reliability', query);
 
-    // 修正: service['prisma'] 直接アクセス禁止 → findAll() 経由
     const rows = await this.reliabilityService.findAll({
       symbol:    query.symbol,
       timeframe: query.timeframe,
@@ -75,6 +71,21 @@ export class PluginsRankingController {
       state:            r.state,
       updatedAt:        r.updatedAt.toISOString(),
     }));
+  }
+
+  /**
+   * GET /api/v1/plugins/reliability/breakdown/:pluginKey
+   * 条件別 breakdown（patternType / symbol+timeframe / direction）
+   *
+   * Task3: 過去データに対してどのパターン・条件で勝ったか負けたかを確認する。
+   */
+  @Get('reliability/breakdown/:pluginKey')
+  @HttpCode(HttpStatus.OK)
+  async getConditionBreakdown(@Param('pluginKey') pluginKey: string) {
+    this.logger.debug(
+      `[PluginsRankingController] GET /plugins/reliability/breakdown/${pluginKey}`,
+    );
+    return this.reliabilityService.getConditionBreakdown(pluginKey);
   }
 
   /**
@@ -101,7 +112,7 @@ export class PluginsRankingController {
 
   /**
    * GET /api/v1/plugins/adaptive-ranking/history/:pluginKey
-   * pluginKey の AdaptiveDecision 履歴（trend chart 用・降順50件→昇順返却）
+   * pluginKey の AdaptiveDecision 履歴（trend chart 用）
    */
   @Get('adaptive-ranking/history/:pluginKey')
   @HttpCode(HttpStatus.OK)
@@ -115,7 +126,6 @@ export class PluginsRankingController {
   /**
    * POST /api/v1/plugins/recompute
    * 手動でリコンピュートジョブをキューに投入する。
-   * ReliabilityLab UI の Recompute ボタンから呼び出される。
    */
   @Post('recompute')
   @HttpCode(HttpStatus.ACCEPTED)
