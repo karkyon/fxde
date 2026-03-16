@@ -32,6 +32,12 @@ export interface PluginExecutionContext {
   /** market_candles から取得したローソク足データ */
   candles?: Candle[];
 
+  /**
+   * 上位足ローソク足データ（higherTrend 算出用）
+   * HTF_MAP で決まる上位足のcandles。取得失敗時は undefined。
+   */
+  higherCandles?: Candle[];
+
   /** indicator_cache から取得したインジケーターデータ */
   indicators?: Record<string, unknown> | null;
 

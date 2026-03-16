@@ -14,6 +14,7 @@ export async function executeAutoChartPatternEngine(
   const candles   = ctx.candles ?? [];
   const symbol    = ctx.symbol    ?? '';
   const timeframe = ctx.timeframe ?? '';
+  const higherCandles = ctx.higherCandles;
 
   if (candles.length < 30) {
     return { overlays: [], signals: [], indicators: [] };
@@ -41,6 +42,7 @@ export async function executeAutoChartPatternEngine(
       detectedIndex,
       patternType,
       direction,
+      higherTimeframeCandles: higherCandles,
     });
 
     return {

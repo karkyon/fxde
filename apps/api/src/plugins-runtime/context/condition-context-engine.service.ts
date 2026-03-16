@@ -37,13 +37,14 @@ export interface BuildConditionContextInput {
   detectedIndex: number
   patternType:  string
   direction?:   string
+  higherTimeframeCandles?: Candle[]
 }
 
 @Injectable()
 export class ConditionContextEngineService {
 
   build(input: BuildConditionContextInput): PatternEventContext {
-    const { symbol, timeframe, candles, detectedIndex, patternType, direction } = input;
+    const { symbol, timeframe, candles, detectedIndex, patternType, direction, higherTimeframeCandles } = input;
     const slice = candles.slice(0, detectedIndex + 1);
     const detectedAt = candles[detectedIndex]?.time ?? new Date().toISOString();
 
@@ -51,7 +52,7 @@ export class ConditionContextEngineService {
       time:       this._buildTime(detectedAt),
       market:     this._buildMarket(symbol),
       timeframe:  { current: timeframe, higher: HTF_MAP[timeframe] ?? null },
-      trend:      this._buildTrend(slice),
+      trend:      this._buildTrend(slice, higherTimeframeCandles),
       volatility: this._buildVolatility(slice),
       structure:  this._buildStructure(slice),
       pattern: {
@@ -96,10 +97,12 @@ export class ConditionContextEngineService {
 
   // ── Trend（EMA20/50 + slope）────────────────────────────────────────────
 
-  private _buildTrend(candles: Candle[]): PatternEventContext['trend'] {
+  private _buildTrend(candles: Candle[], higherCandles?: Candle[]): PatternEventContext['trend'] {
     const currentTrend = this._calcTrend(candles, 20, 50);
-    // v1: 上位足データなしのため current と同じを fallback
-    const higherTrend: TrendDirection = 'unknown';
+    // 上位足 candles が渡された場合は実値算出。なければ unknown。
+    const higherTrend: TrendDirection = (higherCandles && higherCandles.length >= 50)
+      ? this._calcTrend(higherCandles, 20, 50)
+      : 'unknown';
     const trendAlignment = this._calcAlignment(currentTrend, higherTrend);
     return { currentTrend, higherTrend, trendAlignment };
   }
