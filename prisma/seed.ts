@@ -482,7 +482,7 @@ export async function execute(ctx: FxdeContext): Promise<PatternResult> {
     console.log(`✅ PluginManifest: ${pm.displayName} (${pm.id})`)
  
     // InstalledPlugin upsert（1 manifest に 1 installed state）
-    // Supply Demand PRO → enabled / その他 → disabled
+    // 開発・デモ環境用: 全プラグインを enabled で初期化
     const isEnabled = true
     const status    = isEnabled ? 'enabled' : 'disabled'
  
@@ -499,7 +499,7 @@ export async function execute(ctx: FxdeContext): Promise<PatternResult> {
     console.log(`  → InstalledPlugin: ${isEnabled ? '✅ enabled' : '⚫ disabled'}`)
   }
  
-  console.log('🔌 Plugin System シード完了: 3 件')
+  console.log(`🔌 Plugin System シード完了: ${pluginManifests.length} 件`)
   console.log('')
   console.log('🎉 Phase2 Seed 完了!')
   console.log('   Users    : 3 (admin, demo-pro, demo-free)')

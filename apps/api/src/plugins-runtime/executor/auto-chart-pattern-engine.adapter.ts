@@ -493,22 +493,19 @@ export async function executeAutoChartPatternEngine(
 ): Promise<PluginRawOutput> {
   const candles = ctx.candles ?? [];
 
-  // 最低 30 本必要
   if (candles.length < 30) {
     return { overlays: [], signals: [], indicators: [] };
   }
 
-  // 直近 80 本で検出（パフォーマンス考慮）
-  const slice = candles.slice(-80);
-
+  const slice   = candles.slice(-80);
   const peaks   = findPeaks(slice, 3);
   const troughs = findTroughs(slice, 3);
 
   const allOverlays: unknown[] = [];
   const allSignals:  unknown[] = [];
 
-  // 各パターン検出（最初に見つかった1件を採用）
-  const hs  = detectHeadAndShoulders(slice, peaks);
+  // Head & Shoulders / Inverse（優先度高）
+  const hs = detectHeadAndShoulders(slice, peaks);
   if (hs.signals.length > 0) {
     allOverlays.push(...hs.overlays);
     allSignals.push(...hs.signals);
@@ -520,6 +517,7 @@ export async function executeAutoChartPatternEngine(
     }
   }
 
+  // Double Top / Double Bottom
   const dt = detectDoubleTop(slice, peaks);
   if (dt.signals.length > 0) {
     allOverlays.push(...dt.overlays);
@@ -532,14 +530,16 @@ export async function executeAutoChartPatternEngine(
     }
   }
 
+  // Triangle
   const tri = detectTriangle(slice, peaks, troughs);
   allOverlays.push(...tri.overlays);
   allSignals.push(...tri.signals);
 
+  // Channel（signal なし、overlay のみ）
   const ch = detectChannel(slice, peaks, troughs);
   allOverlays.push(...ch.overlays);
 
-  // indicator: 検出パターン数サマリー
+  // indicators: 検出パターン数サマリー
   const patternCount = allSignals.length;
   const indicators: unknown[] = [
     {

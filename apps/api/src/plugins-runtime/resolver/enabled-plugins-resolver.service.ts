@@ -15,7 +15,7 @@
  *
  * 修正（Task A）:
  *   - AdaptiveRankingService.getSuppressedPluginKeys() を resolve() 冒頭で呼び出す。
- *   - action が 'suppress' または 'auto_stop' な pluginKey は実行対象から除外する。
+ *   - action が 'auto_stop' な pluginKey は実行対象から除外する。
  *   - PluginAdaptiveDecision が存在しない場合は空セット（全 plugin 実行許可）。
  */
 
