@@ -18,7 +18,7 @@
  *   GET /api/v1/plugins/adaptive-ranking
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { PluginReliabilityItem, PluginRankingItem } from '@fxde/types';
@@ -90,6 +90,7 @@ export default function ReliabilityLab() {
 
   const [filterSymbol,    setFilterSymbol]    = useState('');
   const [filterTimeframe, setFilterTimeframe] = useState('');
+  const [toastVisible,    setToastVisible]    = useState(false);
 
   const filter = {
     ...(filterSymbol    ? { symbol:    filterSymbol }    : {}),
@@ -115,9 +116,17 @@ export default function ReliabilityLab() {
     onSuccess:  () => {
       void qc.invalidateQueries({ queryKey: ['plugins'] });
     },
+    onSettled: () => {
+      setToastVisible(true);
+    },
   });
 
   const isLoading = rLoading || kLoading;
+  useEffect(() => {
+    if (!toastVisible) return;
+    const id = setTimeout(() => setToastVisible(false), 3000);
+    return () => clearTimeout(id);
+  }, [toastVisible]);
 
   // KPI 計算
   const total       = reliabilityRows.length;
@@ -278,16 +287,21 @@ export default function ReliabilityLab() {
       )}
 
       {/* ── Recompute result toast ── */}
-      {recompute.isSuccess && (
+      {toastVisible && recompute.isSuccess && (
         <div className="fixed bottom-6 right-6 bg-green-800 border border-green-600
-                        rounded-lg px-4 py-2 text-sm text-green-200 shadow-lg">
-          ✓ Recompute triggered
+                        rounded-lg px-4 py-2 text-sm text-green-200 shadow-lg z-50">
+          ✓ Recompute queued
         </div>
       )}
-      {recompute.isError && (
+      {toastVisible && recompute.isError && (
         <div className="fixed bottom-6 right-6 bg-red-800 border border-red-600
-                        rounded-lg px-4 py-2 text-sm text-red-200 shadow-lg">
-          ✗ Recompute failed
+                        rounded-lg px-4 py-2 text-sm text-red-200 shadow-lg z-50 max-w-xs">
+          <div>✗ Recompute failed</div>
+          {recompute.error instanceof Error && (
+            <div className="mt-1 text-xs text-red-300 font-mono break-all">
+              {recompute.error.message}
+            </div>
+          )}
         </div>
       )}
     </div>
