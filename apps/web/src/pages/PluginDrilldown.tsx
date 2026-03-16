@@ -154,58 +154,44 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
-         <thead>
-           <tr className="bg-slate-800 text-slate-400 text-[10px] uppercase">
-             <th className="text-left px-2 py-2">日時</th>
-             <th className="text-left px-2 py-2">Pattern</th>
-             <th className="text-left px-2 py-2">Symbol/TF</th>
-             <th className="text-center px-2 py-2">Dir</th>
-             <th className="text-center px-2 py-2">Session</th>
-             <th className="text-center px-2 py-2">Trend</th>
-             <th className="text-center px-2 py-2">ATR</th>
-+            <th className="text-center px-2 py-2">Context+</th>
-             <th className="text-right px-2 py-2">Conf</th>
-             <th className="text-right px-2 py-2">Return%</th>
-             <th className="text-center px-2 py-2">Eval</th>
-           </tr>
-         </thead>
+      <table className="min-w-max w-full text-xs">
+        <thead>
+          <tr className="bg-slate-800 text-slate-400 text-[10px] uppercase">
+            <th className="text-left px-2 py-2 whitespace-nowrap">日時</th>
+            <th className="text-left px-2 py-2 whitespace-nowrap">Pattern</th>
+            <th className="text-left px-2 py-2 whitespace-nowrap">Symbol/TF</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Dir</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Session</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Trend</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">ATR</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">HigherTrend</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Align</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Swing</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Breakout</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Hour</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">DOW</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Market</th>
+            <th className="text-right px-2 py-2 whitespace-nowrap">Conf</th>
+            <th className="text-right px-2 py-2 whitespace-nowrap">Return%</th>
+            <th className="text-center px-2 py-2 whitespace-nowrap">Eval</th>
+          </tr>
+        </thead>
         <tbody>
           {events.map((ev) => (
             <tr key={ev.id} className="border-t border-slate-800 hover:bg-slate-800/30">
-              <td className="px-2 py-1.5 text-slate-500 font-mono whitespace-nowrap">
+              <td className="px-2 py-1.5 text-slate-500 font-mono text-[10px] whitespace-nowrap">
                 {new Date(ev.emittedAt).toLocaleString('ja-JP', {
                   month: '2-digit', day: '2-digit',
                   hour: '2-digit', minute: '2-digit',
                 })}
               </td>
-              <td className="px-2 py-1.5 font-mono text-slate-300">
+              <td className="px-2 py-1.5 font-mono text-slate-300 text-[10px] whitespace-nowrap">
                 {ev.patternType ?? '—'}
               </td>
-              <td className="px-2 py-1.5 text-slate-400">
+              <td className="px-2 py-1.5 text-slate-400 text-[10px] whitespace-nowrap">
                 {ev.symbol}/{ev.timeframe}
               </td>
-              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
-                {ev.session ?? '—'}
-              </td>
-              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
-                {ev.currentTrend ?? '—'}
-              </td>
-              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
-                {ev.atrRegime ?? '—'}
-              </td>
-              <td className="px-2 py-1.5 text-[10px] text-slate-500 font-mono max-w-[160px]">
-                <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-                  {ev.higherTrend    && <span title="HigherTrend">H:{ev.higherTrend}</span>}
-                  {ev.trendAlignment && <span title="Alignment">A:{ev.trendAlignment}</span>}
-                  {ev.recentSwingBias && <span title="SwingBias">S:{ev.recentSwingBias}</span>}
-                  {ev.breakoutContext && <span title="Breakout">B:{ev.breakoutContext}</span>}
-                  {ev.hourOfDay   !== null && <span title="Hour(UTC)">Hr:{ev.hourOfDay}</span>}
-                  {ev.dayOfWeek   !== null && <span title="DOW">D:{ev.dayOfWeek}</span>}
-                  {ev.marketType  && <span title="MarketType">M:{ev.marketType}</span>}
-                </div>
-              </td>
-              <td className="px-2 py-1.5 text-center">
+              <td className="px-2 py-1.5 text-center text-[10px] whitespace-nowrap">
                 <span className={
                   ev.direction === 'BUY'  ? 'text-green-400 font-bold' :
                   ev.direction === 'SELL' ? 'text-red-400 font-bold' :
@@ -214,10 +200,40 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
                   {ev.direction ?? '—'}
                 </span>
               </td>
-              <td className="px-2 py-1.5 text-right text-slate-400">
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.session ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.currentTrend ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.atrRegime ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.higherTrend ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.trendAlignment ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.recentSwingBias ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.breakoutContext ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.hourOfDay ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.dayOfWeek ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px] whitespace-nowrap">
+                {ev.marketType ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-right text-slate-400 text-[10px] whitespace-nowrap">
                 {ev.confidence !== null ? (ev.confidence * 100).toFixed(0) + '%' : '—'}
               </td>
-              <td className="px-2 py-1.5 text-right">
+              <td className="px-2 py-1.5 text-right text-[10px] whitespace-nowrap">
                 {ev.returnPct !== null ? (
                   <span className={ev.returnPct > 0 ? 'text-green-400' : 'text-red-400'}>
                     {(ev.returnPct * 100).toFixed(2)}%
@@ -226,7 +242,7 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
                   <span className="text-slate-600">—</span>
                 )}
               </td>
-              <td className="px-2 py-1.5 text-center">
+              <td className="px-2 py-1.5 text-center whitespace-nowrap">
                 {ev.evaluated ? (
                   <span className="text-green-400 text-[10px]">✓</span>
                 ) : (

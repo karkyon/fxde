@@ -1,6 +1,7 @@
 // apps/api/src/main.ts
 import { NestFactory }   from '@nestjs/core';
 import { AppModule }     from './app.module';
+import helmet from 'helmet';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -10,6 +11,7 @@ const cookieParser = require('cookie-parser') as () => unknown;
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  app.use(helmet());
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalPipes(new ZodValidationPipe());
