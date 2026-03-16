@@ -1,6 +1,5 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { useAuthStore } from '../stores/auth.store';
 
 export default function LoginPage() {
@@ -17,21 +16,14 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    console.log("LOGIN START");
-
     try {
       await login({ email, password });
-
-      console.log("LOGIN SUCCESS");
-
       navigate('/dashboard');
 
     } catch (e) {
-      console.log("LOGIN ERROR", e);
       setError('メールアドレスまたはパスワードが正しくありません。');
 
     } finally {
-      console.log("LOGIN FINALLY");
       setLoading(false);
     }
   };
