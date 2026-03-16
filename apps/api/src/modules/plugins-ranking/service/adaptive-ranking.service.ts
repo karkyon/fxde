@@ -134,6 +134,33 @@ export class AdaptiveRankingService {
   }
 
   /**
+   * pluginKey の PluginAdaptiveDecision 履歴を返す（降順、上限 limit 件）。
+   * ReliabilityLab の trend chart 用。
+   */
+  async getHistory(pluginKey: string, limit = 50) {
+    const rows = await this.prisma.pluginAdaptiveDecision.findMany({
+      where:   { pluginKey },
+      orderBy: { decidedAt: 'desc' },
+      take:    limit,
+      select: {
+        id:              true,
+        finalRankScore:  true,
+        globalScore:     true,
+        action:          true,
+        decidedAt:       true,
+      },
+    });
+
+    // グラフ表示用に昇順で返す
+    return rows.reverse().map((d) => ({
+      finalRankScore: d.finalRankScore,
+      globalScore:    d.globalScore,
+      action:         d.action,
+      decidedAt:      d.decidedAt.toISOString(),
+    }));
+  }
+
+  /**
    * runtime resolver 専用: suppressed / auto_stop な pluginKey のセットを返す。
    * EnabledPluginsResolverService が resolve() 冒頭で呼び出す。
    * PluginAdaptiveDecision が存在しない場合は空セット（= 全 plugin 実行許可）。

@@ -4,6 +4,7 @@
  * GET  /api/v1/plugins/reliability
  * GET  /api/v1/plugins/adaptive-ranking
  * GET  /api/v1/plugins/adaptive-ranking/stop-candidates
+ * GET  /api/v1/plugins/adaptive-ranking/history/:pluginKey
  * POST /api/v1/plugins/recompute
  *
  * 修正: getReliability() で service['prisma'] に直接アクセスしていた責務違反を修正。
@@ -16,6 +17,7 @@ import {
   Get,
   Post,
   Query,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -95,6 +97,19 @@ export class PluginsRankingController {
   async getStopCandidates() {
     this.logger.debug('[PluginsRankingController] GET /plugins/adaptive-ranking/stop-candidates');
     return this.rankingService.getStopCandidates();
+  }
+
+  /**
+   * GET /api/v1/plugins/adaptive-ranking/history/:pluginKey
+   * pluginKey の AdaptiveDecision 履歴（trend chart 用・降順50件→昇順返却）
+   */
+  @Get('adaptive-ranking/history/:pluginKey')
+  @HttpCode(HttpStatus.OK)
+  async getHistory(@Param('pluginKey') pluginKey: string) {
+    this.logger.debug(
+      `[PluginsRankingController] GET /plugins/adaptive-ranking/history/${pluginKey}`,
+    );
+    return this.rankingService.getHistory(pluginKey);
   }
 
   /**

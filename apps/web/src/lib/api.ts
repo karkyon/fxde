@@ -41,6 +41,7 @@ import type {
   PluginReliabilityItem,
   PluginRankingItem,
   PluginStopCandidateItem,
+  PluginRankingHistoryItem,
 } from '@fxde/types';
 // ── Trades 集計系レスポンス型 ──────────────────────────────────────────────
 // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4
@@ -616,6 +617,12 @@ export const pluginsRankingApi = {
    */
   getRanking: (params?: { symbol?: string; timeframe?: string }): Promise<PluginRankingItem[]> =>
     api.get<PluginRankingItem[]>('/plugins/adaptive-ranking', { params }).then((r) => r.data),
+
+  /**
+   * GET /api/v1/plugins/adaptive-ranking/history/:pluginKey
+   */
+  getHistory: (pluginKey: string): Promise<PluginRankingHistoryItem[]> =>
+    api.get<PluginRankingHistoryItem[]>(`/plugins/adaptive-ranking/history/${pluginKey}`).then((r) => r.data),
 
   /**
    * GET /api/v1/plugins/adaptive-ranking/stop-candidates

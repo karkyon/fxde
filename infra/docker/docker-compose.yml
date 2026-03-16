@@ -1,11 +1,17 @@
-# FXDE v5.1 — Docker Compose
-# Phase2 用インフラ骨格
+# FXDE v5.1 — Docker Compose（全スタック）
 #
-# Port マッピング（前回失敗対策）:
+# Port マッピング:
 #   Postgres: host:5436 → container:5432
 #   Redis:    host:6386 → container:6379
+#   API:      host:3011 → container:3011
+#   Web:      host:80   → container:80
 #
-# Phase2 では api / web コンテナは起動しない（Phase3/4 で実装後に有効化）
+# 起動:
+#   pnpm docker:up
+#   または: docker compose -f infra/docker/docker-compose.yml up -d
+#
+# 開発用（DB/Redis のみ）:
+#   docker compose -f infra/docker/docker-compose.yml up -d postgres redis
 
 version: '3.9'
 
@@ -43,32 +49,53 @@ services:
       timeout: 5s
       retries: 5
 
-  # api:  # Phase3 完了後に有効化
-  #   build:
-  #     context: ../../
-  #     dockerfile: apps/api/Dockerfile
-  #   container_name: fxde_api
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     DATABASE_URL: postgresql://fxde:fxde_password@postgres:5432/fxde_db
-  #     REDIS_URL: redis://redis:6379
-  #     REDIS_PORT: 6379
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
+  api:
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
+    container_name: fxde_api
+    restart: unless-stopped
+    ports:
+      - "3011:3011"
+    environment:
+      NODE_ENV: production
+      PORT: 3011
+      DATABASE_URL: postgresql://fxde:fxde_password@postgres:5432/fxde_db
+      REDIS_URL: redis://redis:6379
+      FRONTEND_URL: http://localhost:80
+      # JWT / API keys は .env.production または CI secrets で注入
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ALPHA_VANTAGE_KEY: ${ALPHA_VANTAGE_KEY:-}
+      FRED_API_KEY: ${FRED_API_KEY:-}
+      NEWS_API_KEY: ${NEWS_API_KEY:-}
+      OANDA_API_KEY: ${OANDA_API_KEY:-}
+      OANDA_ACCOUNT_ID: ${OANDA_ACCOUNT_ID:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      CALENDAR_PROVIDER: ${CALENDAR_PROVIDER:-stooq}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3011/api/v1/health 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
-  # web:  # Phase4 完了後に有効化
-  #   build:
-  #     context: ../../
-  #     dockerfile: apps/web/Dockerfile
-  #   container_name: fxde_web
-  #   ports:
-  #     - "5173:5173"
-  #   depends_on:
-  #     - api
+  web:
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    container_name: fxde_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
 
 volumes:
   fxde_postgres_data:

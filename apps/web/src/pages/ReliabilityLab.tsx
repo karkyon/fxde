@@ -26,14 +26,15 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pluginsRankingApi } from '../lib/api';
-import type { PluginReliabilityItem, PluginRankingItem, PluginStopCandidateItem } from '@fxde/types';
+import type { PluginReliabilityItem, PluginRankingItem, PluginStopCandidateItem, PluginRankingHistoryItem } from '@fxde/types';
 
 // ── Query Keys ───────────────────────────────────────────────────────────────
 
 const labKeys = {
-  reliability:    (f?: object) => ['plugins', 'reliability', f]     as const,
-  ranking:        (f?: object) => ['plugins', 'ranking', f]         as const,
-  stopCandidates: ()           => ['plugins', 'stop-candidates']    as const,
+  reliability:    (f?: object) => ['plugins', 'reliability', f]           as const,
+  ranking:        (f?: object) => ['plugins', 'ranking', f]               as const,
+  stopCandidates: ()           => ['plugins', 'stop-candidates']          as const,
+  history:        (k: string)  => ['plugins', 'ranking-history', k]       as const,
 };
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -72,6 +73,58 @@ function KpiCard({ label, value, sub }: { label: string; value: string | number;
       <p className="text-xs text-slate-400 mb-1">{label}</p>
       <p className="text-xl font-bold text-slate-100">{value}</p>
       {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Reliability Trend Chart（SVG sparkline）──────────────────────────────────
+
+function TrendChart({ pluginKey }: { pluginKey: string }) {
+  const { data: history = [], isLoading } = useQuery<PluginRankingHistoryItem[]>({
+    queryKey: labKeys.history(pluginKey),
+    queryFn:  () => pluginsRankingApi.getHistory(pluginKey),
+    retry:    false,
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return <div className="text-xs text-slate-500 py-2">Loading...</div>;
+  }
+  if (history.length < 2) {
+    return <div className="text-xs text-slate-600 py-2 italic">Not enough history data.</div>;
+  }
+
+  const W = 240;
+  const H = 48;
+  const PAD = 4;
+  const scores = history.map((h) => h.finalRankScore);
+  const minS = Math.min(...scores);
+  const maxS = Math.max(...scores, minS + 0.001);
+
+  const toX = (i: number) => PAD + (i / (scores.length - 1)) * (W - PAD * 2);
+  const toY = (s: number) => H - PAD - ((s - minS) / (maxS - minS)) * (H - PAD * 2);
+
+  const points = scores.map((s, i) => `${toX(i)},${toY(s)}`).join(' ');
+  const lastScore = scores[scores.length - 1];
+  const lastColor = lastScore >= 0.7 ? '#2EC96A' : lastScore >= 0.5 ? '#E8B830' : '#E05252';
+
+  return (
+    <div>
+      <svg width={W} height={H} className="overflow-visible">
+        {/* threshold lines */}
+        <line x1={PAD} x2={W - PAD} y1={toY(0.7)} y2={toY(0.7)}
+              stroke="#2EC96A" strokeWidth={0.5} strokeDasharray="3,3" opacity={0.4} />
+        <line x1={PAD} x2={W - PAD} y1={toY(0.5)} y2={toY(0.5)}
+              stroke="#E8B830" strokeWidth={0.5} strokeDasharray="3,3" opacity={0.4} />
+        {/* sparkline */}
+        <polyline points={points} fill="none" stroke={lastColor} strokeWidth={1.5} opacity={0.85} />
+        {/* last point dot */}
+        <circle cx={toX(scores.length - 1)} cy={toY(lastScore)} r={3} fill={lastColor} />
+      </svg>
+      <div className="flex justify-between text-[9px] text-slate-600 mt-0.5" style={{ width: W }}>
+        <span>{history[0].decidedAt.slice(0, 10)}</span>
+        <span>{history[history.length - 1].decidedAt.slice(0, 10)}</span>
+      </div>
     </div>
   );
 }
@@ -212,6 +265,9 @@ export default function ReliabilityLab() {
     return () => clearTimeout(id);
   }, [toastVisible]);
 
+  // trend chart の展開対象 pluginKey
+  const [expandedPlugin, setExpandedPlugin] = useState<string | null>(null);
+
   // KPI 計算
   const total       = reliabilityRows.length;
   const activeCount = reliabilityRows.filter((r) => r.state === 'active').length;
@@ -326,8 +382,16 @@ export default function ReliabilityLab() {
                   ? 'bg-slate-900'
                   : 'bg-slate-800/50';
                 return (
-                  <tr key={row.id} className={`${rowCls} hover:bg-slate-700/50 transition-colors`}>
+                  <>
+                    <tr
+                      key={row.id}
+                      className={`${rowCls} hover:bg-slate-700/50 transition-colors cursor-pointer`}
+                      onClick={() => setExpandedPlugin(expandedPlugin === row.pluginKey ? null : row.pluginKey)}
+                    >
                     <td className="px-4 py-3 font-mono text-slate-200">
+                      <span className="mr-1 text-slate-500 text-xs">
+                        {expandedPlugin === row.pluginKey ? '▾' : '▸'}
+                      </span>
                       {row.pluginKey}
                       <SampleBadge count={row.sampleSize} />
                     </td>
@@ -363,6 +427,27 @@ export default function ReliabilityLab() {
                       </span>
                     </td>
                   </tr>
+                  {expandedPlugin === row.pluginKey && (
+                    <tr className="bg-slate-900/80">
+                      <td colSpan={8} className="px-6 py-3">
+                        <div className="flex items-start gap-4">
+                          <div>
+                            <p className="text-[10px] text-slate-500 mb-1 uppercase tracking-wider">
+                              Score Trend (finalRankScore)
+                            </p>
+                            <TrendChart pluginKey={row.pluginKey} />
+                          </div>
+                          <div className="text-xs text-slate-500 mt-5 space-y-0.5">
+                            <div>Expectancy: <span className="text-slate-300">{row.expectancy.toFixed(4)}</span></div>
+                            <div>Avg MFE: <span className="text-slate-300">{row.avgMfe.toFixed(4)}</span></div>
+                            <div>Avg MAE: <span className="text-slate-300">{row.avgMae.toFixed(4)}</span></div>
+                            <div>Confidence: <span className="text-slate-300">{row.confidenceScore.toFixed(3)}</span></div>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 );
               })}
             </tbody>

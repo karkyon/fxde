@@ -22,8 +22,12 @@ import {
   useCloseTrade,
   useDeleteTrade,
   useUpdateTrade,
+  useStatsHourly,
+  useStatsConsecutiveLoss,
+  useStatsByScoreBand,
 } from '../hooks/useTrades';
 import type { TradeDto } from '@fxde/types';
+import type { HourlyStats, ConsecutiveLossStats, ScoreBandStats } from '../lib/api';
 
 const PAGE_LIMIT = 10;
 
@@ -255,6 +259,10 @@ export default function TradesPage() {
           </div>
         </>
       )}
+
+      {/* ── Psychology Panel（SPEC Part 7 §1.4）── */}
+      <PsychologyPanel />
+
     </div>
   );
 }
@@ -421,6 +429,132 @@ function TradeRow({
     </>
   );
 }
+
+// ─── PsychologyPanel ─────────────────────────────────────────────────────────
+// 参照: SPEC_v51_part7 §1.4 心理バイアス分析グラフ × 3
+
+function BarChartSvg({
+  data, xKey, yKey, color = '#60a5fa', yLabel = '',
+}: {
+  data: Record<string, unknown>[];
+  xKey: string;
+  yKey: string;
+  color?: string;
+  yLabel?: string;
+}) {
+  if (data.length === 0) {
+    return <p style={{ color: '#475569', fontSize: 12, padding: '12px 0' }}>データなし</p>;
+  }
+  const W = 320; const H = 120; const PAD = { t: 8, r: 8, b: 32, l: 36 };
+  const inner = { w: W - PAD.l - PAD.r, h: H - PAD.t - PAD.b };
+  const values = data.map((d) => Number(d[yKey] ?? 0));
+  const maxV = Math.max(...values, 0.001);
+  const minV = Math.min(...values, 0);
+  const range = maxV - minV || 1;
+
+  const barW = Math.max(4, inner.w / data.length - 4);
+
+  return (
+    <svg width={W} height={H} style={{ overflow: 'visible' }}>
+      {/* y-axis zero line */}
+      {minV < 0 && (
+        <line
+          x1={PAD.l} x2={PAD.l + inner.w}
+          y1={PAD.t + inner.h * (maxV / range)}
+          y2={PAD.t + inner.h * (maxV / range)}
+          stroke="#334155" strokeWidth={1}
+        />
+      )}
+      {/* bars */}
+      {data.map((d, i) => {
+        const v = Number(d[yKey] ?? 0);
+        const x = PAD.l + (i / data.length) * inner.w + 2;
+        const barH = Math.abs(v / range) * inner.h;
+        const y = v >= 0
+          ? PAD.t + inner.h * (1 - v / range)
+          : PAD.t + inner.h * (maxV / range);
+        const c = v >= 0 ? color : '#E05252';
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={Math.max(barH, 1)} fill={c} opacity={0.8} rx={2} />
+            <text
+              x={x + barW / 2} y={H - 4}
+              textAnchor="middle" fontSize={9} fill="#64748b"
+            >
+              {String(d[xKey] ?? '').replace('時', '').replace('-', '‑')}
+            </text>
+          </g>
+        );
+      })}
+      {/* y-axis label */}
+      <text x={0} y={H / 2} textAnchor="middle" fontSize={9} fill="#64748b"
+        transform={`rotate(-90,8,${H / 2})`}>{yLabel}</text>
+    </svg>
+  );
+}
+
+function PsychologyPanel() {
+  const { data: hourly = [] }       = useStatsHourly();
+  const { data: consecutive = [] }  = useStatsConsecutiveLoss();
+  const { data: byBand = [] }       = useStatsByScoreBand();
+
+  return (
+    <div style={{ marginTop: 32, marginBottom: 8 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: '#f1f5f9', marginBottom: 16 }}>
+        心理バイアス分析
+      </h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+
+        {/* ① 時間帯別成績 */}
+        <div style={panelStyle}>
+          <p style={panelTitle}>① 時間帯別 Win Rate (%)</p>
+          <BarChartSvg
+            data={hourly as unknown as Record<string, unknown>[]}
+            xKey="hour" yKey="winRate"
+            color="#2EC96A" yLabel="Win%"
+          />
+          <p style={panelNote}>JST 3時間帯区切り・CLOSEDトレードのみ</p>
+        </div>
+
+        {/* ② 連敗後勝率 */}
+        <div style={panelStyle}>
+          <p style={panelTitle}>② 連敗後 Win Rate (%)</p>
+          <BarChartSvg
+            data={consecutive as unknown as Record<string, unknown>[]}
+            xKey="streak" yKey="winRate"
+            color="#E8B830" yLabel="Win%"
+          />
+          <p style={panelNote}>N連敗直後のトレード勝率。5以上は同一バケツ</p>
+        </div>
+
+        {/* ③ スコア帯別平均PnL */}
+        <div style={panelStyle}>
+          <p style={panelTitle}>③ スコア帯別 Avg PnL</p>
+          <BarChartSvg
+            data={byBand as unknown as Record<string, unknown>[]}
+            xKey="band" yKey="avgPnl"
+            color="#60a5fa" yLabel="Avg PnL"
+          />
+          <p style={panelNote}>TradeReview.scoreAtEntry ベース。データ不足時は空</p>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+const panelStyle: React.CSSProperties = {
+  backgroundColor: '#1a1d27',
+  border: '1px solid #2d3148',
+  borderRadius: 8,
+  padding: '14px 16px',
+};
+const panelTitle: React.CSSProperties = {
+  fontSize: 12, fontWeight: 700, color: '#94a3b8', marginBottom: 8, marginTop: 0,
+};
+const panelNote: React.CSSProperties = {
+  fontSize: 10, color: '#475569', marginTop: 6, marginBottom: 0,
+};
 
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {

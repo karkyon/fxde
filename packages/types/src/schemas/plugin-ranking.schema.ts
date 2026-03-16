@@ -81,3 +81,13 @@ export const GetPluginRankingQuerySchema = z.object({
 });
 
 export type GetPluginRankingQuery = z.infer<typeof GetPluginRankingQuerySchema>;
+
+// ── Ranking history item（trend chart 用）────────────────────────────
+export const PluginRankingHistoryItemSchema = z.object({
+  finalRankScore: z.number(),
+  globalScore:    z.number(),
+  action:         z.string(),
+  decidedAt:      z.string(),
+});
+
+export type PluginRankingHistoryItem = z.infer<typeof PluginRankingHistoryItemSchema>;
