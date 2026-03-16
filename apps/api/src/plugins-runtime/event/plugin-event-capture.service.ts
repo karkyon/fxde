@@ -38,19 +38,31 @@ export class PluginEventCaptureService {
     const now = new Date();
 
     try {
-      const data: Prisma.PluginEventCreateManyInput[] = signals.map((sig) => ({
-        pluginKey,
-        symbol,
-        timeframe,
-        eventType:  'signal',
-        direction:  sig.direction ?? null,
-        price:      sig.price ?? null,
-        confidence: sig.confidence ?? null,
-        metadata:   sig.meta
-          ? (sig.meta as Prisma.InputJsonValue)
-          : Prisma.JsonNull,
-        emittedAt:  sig.timestamp ? new Date(sig.timestamp) : now,
-      }));
+      const data: Prisma.PluginEventCreateManyInput[] = signals.map((sig) => {
+        // sig.meta から patternType を抽出（auto-chart-pattern-engine は meta.pattern に格納）
+        const sigMeta = sig.meta as Record<string, unknown> | undefined;
+        const patternType = sigMeta?.['pattern'] ?? null;
+
+        return {
+          pluginKey,
+          symbol,
+          timeframe,
+          eventType:  'signal',
+          direction:  sig.direction ?? null,
+          price:      sig.price ?? null,
+          confidence: sig.confidence ?? null,
+          // Task4: patternType / symbol / timeframe / direction / detectedAt を metadata に付与
+          metadata: {
+            ...(sigMeta ?? {}),
+            patternType,
+            symbol,
+            timeframe,
+            direction:   sig.direction ?? null,
+            detectedAt:  sig.timestamp ?? now.toISOString(),
+          } as Prisma.InputJsonValue,
+          emittedAt: sig.timestamp ? new Date(sig.timestamp) : now,
+        };
+      });
 
       await this.prisma.pluginEvent.createMany({ data });
 

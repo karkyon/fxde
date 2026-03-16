@@ -1178,6 +1178,12 @@ export default function ChartPage() {
   const [ovToggles, setOvToggles] = useState<Record<OverlayToggle, boolean>>({
     entry_sl_tp: true, prediction: false, trade_markers: false, pattern_labels: true,
   });
+  // ── Plugin 個別 visibility（追加） ─────────────────────────────────────
+  const [pluginVisibility, setPluginVisibility] = useState<Record<string, boolean>>({});
+
+  const togglePlugin = useCallback((key: string) => {
+    setPluginVisibility(prev => ({ ...prev, [key]: prev[key] !== false ? false : true }));
+  }, []);
   const [maToggles, setMAToggles] = useState<Record<MAToggle, boolean>>({
     SMA5: false, SMA20: true, SMA50: false, EMA20: false, EMA200: false, BB20: false,
   });
@@ -1225,6 +1231,26 @@ export default function ChartPage() {
   const signals    = useSignals({ symbol, limit: 10 } as never);
   const prediction = useChartPredictionOverlay(symbol, timeframe, isPro);
   const pluginRuntime = useChartPluginRuntime(symbol, timeframe);
+
+    // ── Plugin visibility フィルタ ─────────────────────────────────────────
+  const filteredOverlays = useMemo(
+    () => (pluginRuntime.data?.overlays ?? []).filter(
+      (o) => pluginVisibility[o.pluginKey] !== false,
+    ),
+    [pluginRuntime.data?.overlays, pluginVisibility],
+  );
+  const filteredSignals = useMemo(
+    () => (pluginRuntime.data?.signals ?? []).filter(
+      (s) => pluginVisibility[s.pluginKey] !== false,
+    ),
+    [pluginRuntime.data?.signals, pluginVisibility],
+  );
+  const filteredIndicators = useMemo(
+    () => (pluginRuntime.data?.indicators ?? []).filter(
+      (i) => pluginVisibility[i.pluginKey] !== false,
+    ),
+    [pluginRuntime.data?.indicators, pluginVisibility],
+  );
 
   const total       = candles.data?.candles.length ?? 0;
   const allCandles  = candles.data?.candles ?? [];
@@ -1510,9 +1536,9 @@ export default function ChartPage() {
                 onPanDelta={handlePanDelta}
                 onWheelZoom={handleWheelZoom}
                 onCrosshairChange={setCrosshair}
-                runtimeOverlays={pluginRuntime.data?.overlays ?? []}
-                runtimeSignals={pluginRuntime.data?.signals ?? []}
-                runtimeIndicators={pluginRuntime.data?.indicators ?? []}
+                runtimeOverlays={filteredOverlays}
+                runtimeSignals={filteredSignals}
+                runtimeIndicators={filteredIndicators}
               />
               <CrosshairLayer
                 crosshair={crosshair}
@@ -1555,6 +1581,50 @@ export default function ChartPage() {
       {/* Plugin Runtime ステータスバー */}
       <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
 
+      {/* Plugin Runtime ステータスバー */}
+      <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
+
+      {/* ── Plugin Visibility Panel ─────────────────────────────────────── */}
+      {(pluginRuntime.data?.pluginStatuses ?? []).length > 0 && (
+        <div style={{
+          display: 'flex', gap: 6, padding: '5px 12px',
+          backgroundColor: '#080f1a',
+          borderTop: '1px solid #1e293b',
+          flexWrap: 'wrap', alignItems: 'center',
+        }}>
+          <span style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace', marginRight: 4 }}>
+            Plugins:
+          </span>
+          {(pluginRuntime.data?.pluginStatuses ?? []).map((ps) => {
+            const isOn        = pluginVisibility[ps.pluginKey] !== false;
+            const statusColor = ps.status === 'SUCCEEDED' ? '#2EC96A'
+                              : ps.status === 'FAILED'    ? '#E05252'
+                              : ps.status === 'TIMEOUT'   ? '#E8B830'
+                              : '#94a3b8';
+            return (
+              <button
+                key={ps.pluginKey}
+                onClick={() => togglePlugin(ps.pluginKey)}
+                title={ps.status !== 'SUCCEEDED' ? ps.status : undefined}
+                style={{
+                  fontSize: 10, padding: '2px 8px', borderRadius: 4, cursor: 'pointer',
+                  border: `1px solid ${isOn ? statusColor : '#334155'}`,
+                  background: isOn ? `${statusColor}18` : 'transparent',
+                  color: isOn ? statusColor : '#334155',
+                  fontFamily: 'monospace',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {isOn ? '✓' : '○'} {ps.pluginKey}
+                {ps.status !== 'SUCCEEDED' && (
+                  <span style={{ marginLeft: 4, opacity: 0.7 }}>({ps.status})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      
       {/* ══════════════════════════════════════════
           下段 2カラム（fullscreen 非対象）
           ══════════════════════════════════════════ */}
