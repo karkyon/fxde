@@ -10,7 +10,7 @@
  * 参照仕様: SPEC_v51_part3 §16「レート制限設定」
  */
 
-import { Module }          from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer }          from '@nestjs/common';
 import { ConfigModule }    from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD }       from '@nestjs/core';
@@ -32,6 +32,7 @@ import { PluginsRankingModule } from './modules/plugins-ranking/plugins-ranking.
 import { PluginsModule }      from './modules/plugins/plugins.module';
 import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
 import { AdminModule }          from './modules/admin/admin.module';
+import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware';
 
 @Module({
   imports: [
@@ -73,4 +74,8 @@ import { AdminModule }          from './modules/admin/admin.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(HttpLoggerMiddleware).forRoutes('*');
+  }
+}

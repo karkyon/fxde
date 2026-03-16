@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pluginsRankingApi } from '../lib/api';
 import type {
@@ -277,6 +278,7 @@ function StopCandidatesSection({ items }: { items: PluginStopCandidateItem[] }) 
 
 export default function ReliabilityLab() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [filterSymbol,    setFilterSymbol]    = useState('');
   const [filterTimeframe, setFilterTimeframe] = useState('');
   const [toastVisible,    setToastVisible]    = useState(false);
@@ -432,7 +434,7 @@ export default function ReliabilityLab() {
                     <tr
                       key={row.id}
                       className={`${rowCls} hover:bg-slate-700/50 transition-colors cursor-pointer`}
-                      onClick={() => setExpandedPlugin(expandedPlugin === row.pluginKey ? null : row.pluginKey)}
+                      onClick={() => navigate(`/research/plugins/${row.pluginKey}`)}
                     >
                       <td className="px-4 py-3 font-mono text-slate-200">
                         <span className="mr-1 text-slate-500 text-xs">
