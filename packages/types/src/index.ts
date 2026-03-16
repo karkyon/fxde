@@ -572,3 +572,53 @@ export * from './schemas';
 // ErrorResponse / SuccessResponse を公開する
 export * from './api';
 // 参照: SPEC_v51_part3 §2「共通型定義」
+
+// ══════════════════════════════════════════
+// Condition Context Engine
+// パターン検出時の周辺状況を構造化した型
+// 参照: FXDE_Condition_Context_Engine_完全設計 §6
+// ══════════════════════════════════════════
+
+export type TrendDirection = 'up' | 'down' | 'range' | 'unknown'
+export type TrendAlignment = 'aligned_bull' | 'aligned_bear' | 'mixed' | 'range' | 'unknown'
+export type SessionType    = 'asia' | 'london' | 'newyork' | 'overlap' | 'offhours'
+export type AtrRegime      = 'low' | 'normal' | 'high' | 'extreme' | 'unknown'
+export type SwingBias      = 'bullish' | 'bearish' | 'neutral' | 'unknown'
+export type BreakoutContext = 'pre_breakout' | 'post_breakout' | 'inside_range' | 'unknown'
+export type PatternDirection = 'bullish' | 'bearish' | 'neutral' | 'unknown'
+
+export interface PatternEventContext {
+  time: {
+    detectedAt: string
+    hourOfDay:  number
+    dayOfWeek:  number
+    session:    SessionType
+  }
+  market: {
+    symbol:     string
+    marketType: 'fx' | 'crypto' | 'index' | 'commodity' | 'unknown'
+  }
+  timeframe: {
+    current: string
+    higher:  string | null
+  }
+  trend: {
+    currentTrend:   TrendDirection
+    higherTrend:    TrendDirection
+    trendAlignment: TrendAlignment
+  }
+  volatility: {
+    atr:       number | null
+    atrPercent: number | null
+    atrRegime: AtrRegime
+  }
+  structure: {
+    recentSwingBias: SwingBias
+    breakoutContext: BreakoutContext
+  }
+  pattern: {
+    patternType: string
+    direction:   PatternDirection
+    qualityScore: number | null
+  }
+}

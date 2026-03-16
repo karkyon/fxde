@@ -57,8 +57,9 @@ export class PluginEventCaptureService {
             patternType,
             symbol,
             timeframe,
-            direction:   sig.direction ?? null,
-            detectedAt:  sig.timestamp ?? now.toISOString(),
+            direction:  sig.direction ?? null,
+            detectedAt: sig.timestamp ?? now.toISOString(),
+            context:    (sigMeta?.['context'] ?? null) as Prisma.InputJsonValue | null,
           } as Prisma.InputJsonValue,
           emittedAt: sig.timestamp ? new Date(sig.timestamp) : now,
         };

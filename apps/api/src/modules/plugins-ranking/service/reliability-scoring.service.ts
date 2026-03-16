@@ -20,10 +20,13 @@ export interface ConditionBreakdownRow {
 }
 
 export interface PluginConditionBreakdown {
-  pluginKey:    string;
-  byPattern:    ConditionBreakdownRow[];
-  bySymbolTf:   ConditionBreakdownRow[];
-  byDirection:  ConditionBreakdownRow[];
+  pluginKey:      string;
+  byPattern:      ConditionBreakdownRow[];
+  bySymbolTf:     ConditionBreakdownRow[];
+  byDirection:    ConditionBreakdownRow[];
+  bySession:      ConditionBreakdownRow[];
+  byTrend:        ConditionBreakdownRow[];
+  byAtrRegime:    ConditionBreakdownRow[];
   totalEvaluated: number;
 }
 
@@ -189,6 +192,25 @@ export class ReliabilityScoringService {
     const byPattern   = this._groupAndCalc(rows, (r) => r.patternType);
     const bySymbolTf  = this._groupAndCalc(rows, (r) => `${r.symbol}/${r.timeframe}`);
     const byDirection = this._groupAndCalc(rows, (r) => r.direction);
+
+    // ── context 軸集計（session / currentTrend / atrRegime）───────────────
+    const withContext = events.filter((e) => {
+      const meta = e.metadata as Record<string, unknown> | null;
+      return meta?.['context'] != null;
+    });
+
+    const bySession   = this._groupBy(withContext, (e) => {
+      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
+      return (ctx?.['time'] as Record<string,unknown>)?.['session'] as string ?? 'unknown';
+    });
+    const byTrend     = this._groupBy(withContext, (e) => {
+      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
+      return (ctx?.['trend'] as Record<string,unknown>)?.['currentTrend'] as string ?? 'unknown';
+    });
+    const byAtrRegime = this._groupBy(withContext, (e) => {
+      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
+      return (ctx?.['volatility'] as Record<string,unknown>)?.['atrRegime'] as string ?? 'unknown';
+    });
 
     return {
       pluginKey,
