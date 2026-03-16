@@ -155,20 +155,21 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
-        <thead>
-          <tr className="bg-slate-800 text-slate-400 text-[10px] uppercase">
-            <th className="text-left px-2 py-2">日時</th>
-            <th className="text-left px-2 py-2">Pattern</th>
-            <th className="text-left px-2 py-2">Symbol/TF</th>
-            <th className="text-center px-2 py-2">Dir</th>
-            <th className="text-center px-2 py-2">Session</th>
-            <th className="text-center px-2 py-2">Trend</th>
-            <th className="text-center px-2 py-2">ATR</th>
-            <th className="text-right px-2 py-2">Conf</th>
-            <th className="text-right px-2 py-2">Return%</th>
-            <th className="text-center px-2 py-2">Eval</th>
-          </tr>
-        </thead>
+         <thead>
+           <tr className="bg-slate-800 text-slate-400 text-[10px] uppercase">
+             <th className="text-left px-2 py-2">日時</th>
+             <th className="text-left px-2 py-2">Pattern</th>
+             <th className="text-left px-2 py-2">Symbol/TF</th>
+             <th className="text-center px-2 py-2">Dir</th>
+             <th className="text-center px-2 py-2">Session</th>
+             <th className="text-center px-2 py-2">Trend</th>
+             <th className="text-center px-2 py-2">ATR</th>
++            <th className="text-center px-2 py-2">Context+</th>
+             <th className="text-right px-2 py-2">Conf</th>
+             <th className="text-right px-2 py-2">Return%</th>
+             <th className="text-center px-2 py-2">Eval</th>
+           </tr>
+         </thead>
         <tbody>
           {events.map((ev) => (
             <tr key={ev.id} className="border-t border-slate-800 hover:bg-slate-800/30">
@@ -192,6 +193,17 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
               </td>
               <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
                 {ev.atrRegime ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-[10px] text-slate-500 font-mono max-w-[160px]">
+                <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
+                  {ev.higherTrend    && <span title="HigherTrend">H:{ev.higherTrend}</span>}
+                  {ev.trendAlignment && <span title="Alignment">A:{ev.trendAlignment}</span>}
+                  {ev.recentSwingBias && <span title="SwingBias">S:{ev.recentSwingBias}</span>}
+                  {ev.breakoutContext && <span title="Breakout">B:{ev.breakoutContext}</span>}
+                  {ev.hourOfDay   !== null && <span title="Hour(UTC)">Hr:{ev.hourOfDay}</span>}
+                  {ev.dayOfWeek   !== null && <span title="DOW">D:{ev.dayOfWeek}</span>}
+                  {ev.marketType  && <span title="MarketType">M:{ev.marketType}</span>}
+                </div>
               </td>
               <td className="px-2 py-1.5 text-center">
                 <span className={
@@ -340,6 +352,17 @@ export default function PluginDrilldown() {
               <BreakdownTable title="セッション別"   rows={breakdown.bySession   ?? []} />
               <BreakdownTable title="トレンド別"     rows={breakdown.byTrend     ?? []} />
               <BreakdownTable title="ATR Regime別"   rows={breakdown.byAtrRegime ?? []} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-3 border-t border-slate-700/50">
+              <BreakdownTable title="上位トレンド別"  rows={breakdown.byHigherTrend    ?? []} />
+              <BreakdownTable title="トレンド整合別"  rows={breakdown.byTrendAlignment ?? []} />
+              <BreakdownTable title="Swing Bias別"   rows={breakdown.bySwingBias      ?? []} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-3 border-t border-slate-700/50">
+              <BreakdownTable title="Breakout別"     rows={breakdown.byBreakoutContext ?? []} />
+              <BreakdownTable title="時間帯別(UTC)"  rows={breakdown.byHour            ?? []} />
+              <BreakdownTable title="曜日別"         rows={breakdown.byDayOfWeek       ?? []} />
+              <BreakdownTable title="市場種別"       rows={breakdown.byMarketType      ?? []} />
             </div>
           </div>
         ) : (

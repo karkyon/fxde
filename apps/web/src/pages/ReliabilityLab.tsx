@@ -214,6 +214,17 @@ function ConditionBreakdownSection({ pluginKey }: { pluginKey: string }) {
             <BreakdownTable title="トレンド別"     rows={data.byTrend ?? []} />
             <BreakdownTable title="ATR Regime別"   rows={data.byAtrRegime ?? []} />
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-700/50">
+            <BreakdownTable title="上位トレンド別"  rows={data.byHigherTrend    ?? []} />
+            <BreakdownTable title="トレンド整合別"  rows={data.byTrendAlignment ?? []} />
+            <BreakdownTable title="Swing Bias別"   rows={data.bySwingBias      ?? []} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2 border-t border-slate-700/50">
+            <BreakdownTable title="Breakout別"     rows={data.byBreakoutContext ?? []} />
+            <BreakdownTable title="時間帯別(UTC)"  rows={data.byHour            ?? []} />
+            <BreakdownTable title="曜日別"         rows={data.byDayOfWeek       ?? []} />
+            <BreakdownTable title="市場種別"       rows={data.byMarketType      ?? []} />
+          </div>
         </div>
       )}
     </div>

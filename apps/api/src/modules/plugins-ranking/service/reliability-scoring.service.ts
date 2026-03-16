@@ -20,14 +20,21 @@ export interface ConditionBreakdownRow {
 }
 
 export interface PluginConditionBreakdown {
-  pluginKey:      string;
-  byPattern:      ConditionBreakdownRow[];
-  bySymbolTf:     ConditionBreakdownRow[];
-  byDirection:    ConditionBreakdownRow[];
-  bySession:      ConditionBreakdownRow[];
-  byTrend:        ConditionBreakdownRow[];
-  byAtrRegime:    ConditionBreakdownRow[];
-  totalEvaluated: number;
+  pluginKey:        string;
+  byPattern:        ConditionBreakdownRow[];
+  bySymbolTf:       ConditionBreakdownRow[];
+  byDirection:      ConditionBreakdownRow[];
+  bySession:        ConditionBreakdownRow[];
+  byTrend:          ConditionBreakdownRow[];
+  byAtrRegime:      ConditionBreakdownRow[];
+  byHigherTrend:    ConditionBreakdownRow[];
+  byTrendAlignment: ConditionBreakdownRow[];
+  bySwingBias:      ConditionBreakdownRow[];
+  byBreakoutContext: ConditionBreakdownRow[];
+  byHour:           ConditionBreakdownRow[];
+  byDayOfWeek:      ConditionBreakdownRow[];
+  byMarketType:     ConditionBreakdownRow[];
+  totalEvaluated:   number;
 }
 
 @Injectable()
@@ -172,32 +179,50 @@ export class ReliabilityScoringService {
       },
     });
 
-    // 評価済み行のみ
     const rows = events
       .map((e) => {
         const meta        = e.metadata as Record<string, unknown> | null;
         const patternType = (meta?.['patternType'] as string) ?? 'unknown';
         const returnPct   = e.results[0]?.returnPct ?? null;
         const context     = meta?.['context'] as Record<string, unknown> | null;
+        const timeCtx     = context?.['time']       as Record<string, unknown> | null;
+        const trendCtx    = context?.['trend']      as Record<string, unknown> | null;
+        const volCtx      = context?.['volatility'] as Record<string, unknown> | null;
+        const structCtx   = context?.['structure']  as Record<string, unknown> | null;
+        const mktCtx      = context?.['market']     as Record<string, unknown> | null;
         return {
-          symbol:      e.symbol,
-          timeframe:   e.timeframe,
-          direction:   e.direction ?? 'NEUTRAL',
+          symbol:          e.symbol,
+          timeframe:       e.timeframe,
+          direction:       e.direction ?? 'NEUTRAL',
           patternType,
           returnPct,
-          session:     (context?.['time'] as Record<string, unknown> | null)?.['session'] as string ?? 'unknown',
-          currentTrend:(context?.['trend'] as Record<string, unknown> | null)?.['currentTrend'] as string ?? 'unknown',
-          atrRegime:   (context?.['volatility'] as Record<string, unknown> | null)?.['atrRegime'] as string ?? 'unknown',
+          session:         (timeCtx?.['session']          as string)  ?? 'unknown',
+          hourOfDay:       (timeCtx?.['hourOfDay']         as number)  ?? -1,
+          dayOfWeek:       (timeCtx?.['dayOfWeek']         as number)  ?? -1,
+          currentTrend:    (trendCtx?.['currentTrend']     as string)  ?? 'unknown',
+          higherTrend:     (trendCtx?.['higherTrend']      as string)  ?? 'unknown',
+          trendAlignment:  (trendCtx?.['trendAlignment']   as string)  ?? 'unknown',
+          atrRegime:       (volCtx?.['atrRegime']          as string)  ?? 'unknown',
+          recentSwingBias: (structCtx?.['recentSwingBias'] as string)  ?? 'unknown',
+          breakoutContext: (structCtx?.['breakoutContext']  as string)  ?? 'unknown',
+          marketType:      (mktCtx?.['marketType']         as string)  ?? 'unknown',
         };
       })
       .filter((r): r is typeof r & { returnPct: number } => r.returnPct !== null);
 
-    const byPattern   = this._groupAndCalc(rows, (r) => r.patternType);
-    const bySymbolTf  = this._groupAndCalc(rows, (r) => `${r.symbol}/${r.timeframe}`);
-    const byDirection = this._groupAndCalc(rows, (r) => r.direction);
-    const bySession   = this._groupAndCalc(rows, (r) => r.session);
-    const byTrend     = this._groupAndCalc(rows, (r) => r.currentTrend);
-    const byAtrRegime = this._groupAndCalc(rows, (r) => r.atrRegime);
+    const byPattern        = this._groupAndCalc(rows, (r) => r.patternType);
+    const bySymbolTf       = this._groupAndCalc(rows, (r) => `${r.symbol}/${r.timeframe}`);
+    const byDirection      = this._groupAndCalc(rows, (r) => r.direction);
+    const bySession        = this._groupAndCalc(rows, (r) => r.session);
+    const byTrend          = this._groupAndCalc(rows, (r) => r.currentTrend);
+    const byAtrRegime      = this._groupAndCalc(rows, (r) => r.atrRegime);
+    const byHigherTrend    = this._groupAndCalc(rows, (r) => r.higherTrend);
+    const byTrendAlignment = this._groupAndCalc(rows, (r) => r.trendAlignment);
+    const bySwingBias      = this._groupAndCalc(rows, (r) => r.recentSwingBias);
+    const byBreakoutContext = this._groupAndCalc(rows, (r) => r.breakoutContext);
+    const byHour           = this._groupAndCalc(rows, (r) => r.hourOfDay >= 0 ? String(r.hourOfDay) : 'unknown');
+    const byDayOfWeek      = this._groupAndCalc(rows, (r) => r.dayOfWeek  >= 0 ? String(r.dayOfWeek)  : 'unknown');
+    const byMarketType     = this._groupAndCalc(rows, (r) => r.marketType);
 
     return {
       pluginKey,
@@ -207,6 +232,13 @@ export class ReliabilityScoringService {
       bySession,
       byTrend,
       byAtrRegime,
+      byHigherTrend,
+      byTrendAlignment,
+      bySwingBias,
+      byBreakoutContext,
+      byHour,
+      byDayOfWeek,
+      byMarketType,
       totalEvaluated: rows.length,
     };
   }
@@ -304,36 +336,55 @@ export class ReliabilityScoringService {
         metadata:   true,
         emittedAt:  true,
         results: {
-          select: { returnPct: true, candleOffset: true },
+          select:  { returnPct: true, candleOffset: true },
           orderBy: { candleOffset: 'asc' },
           take: 1,
         },
       },
     });
- 
+
     return events.map((e) => {
       const meta        = e.metadata as Record<string, unknown> | null;
       const patternType = (meta?.['patternType'] as string) ?? null;
       const returnPct   = e.results[0]?.returnPct ?? null;
-      const context = meta?.['context'] as Record<string, unknown> | null;
-      const session      = (context?.['time']       as Record<string,unknown> | null)?.['session']      as string | null ?? null;
-      const currentTrend = (context?.['trend']      as Record<string,unknown> | null)?.['currentTrend'] as string | null ?? null;
-      const atrRegime    = (context?.['volatility'] as Record<string,unknown> | null)?.['atrRegime']    as string | null ?? null;
+      const context     = meta?.['context'] as Record<string, unknown> | null;
+      const timeCtx     = context?.['time']       as Record<string, unknown> | null;
+      const trendCtx    = context?.['trend']      as Record<string, unknown> | null;
+      const volCtx      = context?.['volatility'] as Record<string, unknown> | null;
+      const structCtx   = context?.['structure']  as Record<string, unknown> | null;
+      const mktCtx      = context?.['market']     as Record<string, unknown> | null;
+      const session        = (timeCtx?.['session']          as string | null)  ?? null;
+      const hourOfDay      = (timeCtx?.['hourOfDay']         as number | null)  ?? null;
+      const dayOfWeek      = (timeCtx?.['dayOfWeek']         as number | null)  ?? null;
+      const currentTrend   = (trendCtx?.['currentTrend']     as string | null)  ?? null;
+      const higherTrend    = (trendCtx?.['higherTrend']      as string | null)  ?? null;
+      const trendAlignment = (trendCtx?.['trendAlignment']   as string | null)  ?? null;
+      const atrRegime      = (volCtx?.['atrRegime']          as string | null)  ?? null;
+      const recentSwingBias = (structCtx?.['recentSwingBias'] as string | null) ?? null;
+      const breakoutContext = (structCtx?.['breakoutContext']  as string | null) ?? null;
+      const marketType     = (mktCtx?.['marketType']          as string | null) ?? null;
 
       return {
-        id:           e.id,
-        symbol:       e.symbol,
-        timeframe:    e.timeframe,
-        direction:    e.direction,
-        price:        e.price,
-        confidence:   e.confidence,
+        id:              e.id,
+        symbol:          e.symbol,
+        timeframe:       e.timeframe,
+        direction:       e.direction,
+        price:           e.price,
+        confidence:      e.confidence,
         patternType,
         returnPct,
-        evaluated:    returnPct !== null,
-        emittedAt:    e.emittedAt.toISOString(),
+        evaluated:       returnPct !== null,
+        emittedAt:       e.emittedAt.toISOString(),
         session,
+        hourOfDay,
+        dayOfWeek,
         currentTrend,
+        higherTrend,
+        trendAlignment,
         atrRegime,
+        recentSwingBias,
+        breakoutContext,
+        marketType,
       };
     });
   }

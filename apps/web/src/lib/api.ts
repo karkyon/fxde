@@ -82,8 +82,15 @@ export interface PluginEventRow {
   evaluated:    boolean;
   emittedAt:    string;
   session:      string | null;
+  hourOfDay:       number | null;
+  dayOfWeek:       number | null;
   currentTrend: string | null;
+  higherTrend:     string | null;
+  trendAlignment:  string | null;
   atrRegime:    string | null;
+  recentSwingBias: string | null;
+  breakoutContext: string | null;
+  marketType:      string | null;
 }
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
@@ -104,6 +111,13 @@ export interface PluginConditionBreakdown {
   bySession:      ConditionBreakdownRow[];
   byTrend:        ConditionBreakdownRow[];
   byAtrRegime:    ConditionBreakdownRow[];
+  byHigherTrend:    ConditionBreakdownRow[];
+  byTrendAlignment: ConditionBreakdownRow[];
+  bySwingBias:      ConditionBreakdownRow[];
+  byBreakoutContext: ConditionBreakdownRow[];
+  byHour:           ConditionBreakdownRow[];
+  byDayOfWeek:      ConditionBreakdownRow[];
+  byMarketType:     ConditionBreakdownRow[];
   totalEvaluated: number;
 }
 
