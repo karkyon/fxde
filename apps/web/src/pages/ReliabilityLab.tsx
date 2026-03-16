@@ -26,7 +26,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pluginsRankingApi } from '../lib/api';
-import type { PluginReliabilityItem, PluginRankingItem, PluginStopCandidateItem, PluginRankingHistoryItem } from '@fxde/types';
+import type { PluginReliabilityItem, PluginRankingItem, PluginStopCandidateItem } from '@fxde/types';
 
 // ── Query Keys ───────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ function KpiCard({ label, value, sub }: { label: string; value: string | number;
 // ── Reliability Trend Chart（SVG sparkline）──────────────────────────────────
 
 function TrendChart({ pluginKey }: { pluginKey: string }) {
-  const { data: history = [], isLoading } = useQuery<PluginRankingHistoryItem[]>({
+  const { data: history = [], isLoading } = useQuery<PluginRankingItem[]>({
     queryKey: labKeys.history(pluginKey),
     queryFn:  () => pluginsRankingApi.getHistory(pluginKey),
     retry:    false,
