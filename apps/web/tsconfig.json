@@ -13,7 +13,9 @@
     "paths": {
       "@fxde/types": ["../../packages/types/dist"],
       "@fxde/config": ["../../packages/config/dist"],
-      "@fxde/ui": ["../../packages/ui/dist"]
+      "@fxde/ui": ["../../packages/ui/dist"],
+      "@fxde/shared": ["../../packages/shared/dist"],
+      "@fxde/shared/*": ["../../packages/shared/dist/*"]
     },
     "noEmit": true
   },

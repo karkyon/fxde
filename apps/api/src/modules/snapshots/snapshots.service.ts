@@ -28,6 +28,9 @@ import {
   EvaluateSnapshotDto,
 } from '@fxde/types';
 import type { EntryState } from '@fxde/types';
+import { calculateScore, evaluateEntryDecision } from '@fxde/shared';
+import type { ScoreIndicators, MtfAlignment } from '@fxde/shared';
+import { SettingsService } from '../settings/settings.service';
 
 // v5.1: スタブ用デフォルト指標値（実計算は snapshot-capture ワーカーで行う）
 const STUB_INDICATORS = {
@@ -99,7 +102,10 @@ function buildEntryDecision(entryState: EntryState) {
 export class SnapshotsService {
   private readonly logger = new Logger(SnapshotsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma:    PrismaService,
+    private readonly settings:  SettingsService,
+  ) {}
 
   /**
    * POST /api/v1/snapshots/capture
@@ -111,6 +117,42 @@ export class SnapshotsService {
     const { symbol, timeframe, asOf } = dto;
     const capturedAt = asOf ? new Date(asOf) : new Date();
 
+    // ユーザー設定取得（scoreThreshold / forceLock）
+    // 設定未作成の場合はデフォルト値にフォールバック
+    let scoreThreshold = 75;
+    let forceLock      = false;
+    let featureSwitches: { patternBonus?: boolean } = { patternBonus: false };
+    try {
+      const s = await this.settings.getSettings(userId);
+      scoreThreshold  = s.scoreThreshold;
+      forceLock       = s.forceLock;
+      featureSwitches = (s.featureSwitches as { patternBonus?: boolean }) ?? {};
+    } catch {
+      // SETTINGS_NOT_FOUND: デフォルト値で続行
+    }
+
+    // スコア計算（コネクタ未接続時は STUB_INDICATORS を使用 → 低スコアになる）
+    const scoreResult = calculateScore({
+      indicators:      STUB_INDICATORS as unknown as ScoreIndicators,
+      patterns:        [],
+      mtfAlignment:    {} as MtfAlignment,
+      rr:              STUB_ENTRY_CONTEXT.rr,
+      featureSwitches,
+    });
+
+    // エントリー判定
+    const decision = evaluateEntryDecision({
+      score:          scoreResult.total,
+      rr:             STUB_ENTRY_CONTEXT.rr,
+      lotSize:        STUB_ENTRY_CONTEXT.lotSize,
+      maxLot:         0,    // connector未接続のため制限なし
+      isEventWindow:  false,
+      isCooldown:     false,
+      isDailyLimit:   false,
+      forceLock,
+      scoreThreshold,
+    });
+
     try {
       const snapshot = await this.prisma.snapshot.create({
         data: {
@@ -121,9 +163,9 @@ export class SnapshotsService {
           indicators:     STUB_INDICATORS,
           patterns:       [],
           mtfAlignment:   {},
-          scoreTotal:     0,
-          scoreBreakdown: STUB_SCORE_BREAKDOWN,
-          entryState:     'SCORE_LOW',
+          scoreTotal:     scoreResult.total,
+          scoreBreakdown: scoreResult.breakdown,
+          entryState:     decision.status as any,
           entryContext:   STUB_ENTRY_CONTEXT,
         },
       });
@@ -148,7 +190,38 @@ export class SnapshotsService {
     const { symbol, timeframe, asOf } = dto;
     const capturedAt = asOf ? new Date(asOf) : new Date();
 
-    // DB 保存なし・スタブ値で SnapshotResponse 形式を返す
+    let scoreThreshold = 75;
+    let forceLock      = false;
+    let featureSwitches: { patternBonus?: boolean } = { patternBonus: false };
+    try {
+      const s = await this.settings.getSettings(userId);
+      scoreThreshold  = s.scoreThreshold;
+      forceLock       = s.forceLock;
+      featureSwitches = (s.featureSwitches as { patternBonus?: boolean }) ?? {};
+    } catch {
+      // SETTINGS_NOT_FOUND: デフォルト値で続行
+    }
+
+    const scoreResult = calculateScore({
+      indicators:      STUB_INDICATORS as unknown as ScoreIndicators,
+      patterns:        [],
+      mtfAlignment:    {} as MtfAlignment,
+      rr:              STUB_ENTRY_CONTEXT.rr,
+      featureSwitches,
+    });
+
+    const decision = evaluateEntryDecision({
+      score:          scoreResult.total,
+      rr:             STUB_ENTRY_CONTEXT.rr,
+      lotSize:        STUB_ENTRY_CONTEXT.lotSize,
+      maxLot:         0,
+      isEventWindow:  false,
+      isCooldown:     false,
+      isDailyLimit:   false,
+      forceLock,
+      scoreThreshold,
+    });
+
     return this.formatSnapshotRaw({
       id:             crypto.randomUUID(),
       userId,
@@ -158,9 +231,9 @@ export class SnapshotsService {
       indicators:     STUB_INDICATORS,
       patterns:       [],
       mtfAlignment:   {},
-      scoreTotal:     0,
-      scoreBreakdown: STUB_SCORE_BREAKDOWN,
-      entryState:     'SCORE_LOW',
+      scoreTotal:     scoreResult.total,
+      scoreBreakdown: scoreResult.breakdown,
+      entryState:     decision.status,
       entryContext:   STUB_ENTRY_CONTEXT,
       createdAt:      capturedAt,
     });

@@ -13,6 +13,7 @@
     "@fxde/types": "workspace:*",
     "@fxde/config": "workspace:*",
     "@fxde/ui": "workspace:*",
+    "@fxde/shared": "workspace:*",
     "@tanstack/react-query": "^5.35.1",
     "@tanstack/react-query-devtools": "^5.35.1",
     "axios": "^1.6.8",

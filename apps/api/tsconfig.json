@@ -7,15 +7,11 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "paths": {
-      "@fxde/types": [
-        "../../packages/types/dist"
-      ],
-      "@fxde/types/*": [
-        "../../packages/types/dist/*"
-      ],
-      "@fxde/config": [
-        "../../packages/config/dist"
-      ]
+      "@fxde/types": ["../../packages/types/dist"],
+      "@fxde/types/*": ["../../packages/types/dist/*"],
+      "@fxde/config": ["../../packages/config/dist"],
+      "@fxde/shared": ["../../packages/shared/dist"],
+      "@fxde/shared/*": ["../../packages/shared/dist/*"]
     }
   },
   "include": ["src/**/*.ts"],
