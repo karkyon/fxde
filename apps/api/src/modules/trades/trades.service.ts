@@ -362,6 +362,145 @@ export class TradesService {
     };
   }
 
+    // ─────────────────────────────────────────────
+  // GET STATS HOURLY
+  // GET /api/v1/trades/stats/hourly
+  // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4①
+  // ─────────────────────────────────────────────
+  async getStatsHourly(userId: string) {
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        userId,
+        status:   TradeStatus.CLOSED,
+        exitTime: { not: null },
+        pnl:      { not: null },
+      },
+      select: { exitTime: true, pnl: true },
+    });
+
+    // 3時間帯区切り（JST = UTC+9）
+    const BANDS = [
+      { label: '0-3時',   start: 0,  end: 3  },
+      { label: '3-6時',   start: 3,  end: 6  },
+      { label: '6-9時',   start: 6,  end: 9  },
+      { label: '9-12時',  start: 9,  end: 12 },
+      { label: '12-15時', start: 12, end: 15 },
+      { label: '15-18時', start: 15, end: 18 },
+      { label: '18-21時', start: 18, end: 21 },
+      { label: '21-24時', start: 21, end: 24 },
+    ];
+
+    const buckets = BANDS.map((b) => ({
+      ...b,
+      pnls: [] as number[],
+    }));
+
+    for (const t of trades) {
+      if (!t.exitTime) continue;
+      const hourJst = (t.exitTime.getUTCHours() + 9) % 24;
+      const bucket  = buckets.find((b) => hourJst >= b.start && hourJst < b.end);
+      if (bucket) bucket.pnls.push(Number(t.pnl ?? 0));
+    }
+
+    return buckets.map(({ label, pnls }) => {
+      const count   = pnls.length;
+      const pnl     = pnls.reduce((s, v) => s + v, 0);
+      const winCount = pnls.filter((v) => v > 0).length;
+      const winRate  = count > 0 ? Math.round((winCount / count) * 1000) / 10 : 0;
+      return { hour: label, winRate, pnl: Math.round(pnl * 100) / 100, count };
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  // GET STATS CONSECUTIVE LOSS
+  // GET /api/v1/trades/stats/consecutive-loss
+  // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4②
+  // ─────────────────────────────────────────────
+  async getStatsConsecutiveLoss(userId: string) {
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        userId,
+        status:   TradeStatus.CLOSED,
+        exitTime: { not: null },
+        pnl:      { not: null },
+      },
+      orderBy: { exitTime: 'asc' },
+      select:  { pnl: true },
+    });
+
+    if (trades.length === 0) return [];
+
+    // streak ごとに直後トレードの勝敗を集計
+    const afterStreak: Record<number, { wins: number; total: number }> = {};
+
+    let streak = 0;
+    for (let i = 0; i < trades.length; i++) {
+      const pnl = Number(trades[i].pnl ?? 0);
+      // このトレード直前の streak で記録（i > 0 の場合）
+      if (i > 0) {
+        const s = Math.min(streak, 5); // 5以上は同一バケツ
+        if (!afterStreak[s]) afterStreak[s] = { wins: 0, total: 0 };
+        afterStreak[s].total++;
+        if (pnl > 0) afterStreak[s].wins++;
+      }
+      if (pnl < 0) {
+        streak++;
+      } else {
+        streak = 0;
+      }
+    }
+
+    return Object.entries(afterStreak)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([key, { wins, total }]) => ({
+        streak:      Number(key),
+        winRate:     total > 0 ? Math.round((wins / total) * 1000) / 10 : 0,
+        sampleCount: total,
+      }));
+  }
+
+  // ─────────────────────────────────────────────
+  // GET STATS BY SCORE BAND
+  // GET /api/v1/trades/stats/by-score-band
+  // 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4③
+  // ─────────────────────────────────────────────
+  async getStatsByScoreBand(userId: string) {
+    // TradeReview.scoreAtEntry が存在するトレードのみ集計
+    const reviews = await this.prisma.tradeReview.findMany({
+      where: { trade: { userId, status: TradeStatus.CLOSED } },
+      select: {
+        scoreAtEntry: true,
+        trade:        { select: { pnl: true } },
+      },
+    });
+
+    const BANDS = [
+      { label: '0-49',   scoreBand: 'LOW' as const,  min: 0,  max: 49  },
+      { label: '50-74',  scoreBand: 'MID' as const,  min: 50, max: 74  },
+      { label: '75-79',  scoreBand: 'HIGH' as const, min: 75, max: 79  },
+      { label: '80-89',  scoreBand: 'HIGH' as const, min: 80, max: 89  },
+      { label: '90-100', scoreBand: 'HIGH' as const, min: 90, max: 100 },
+    ];
+
+    return BANDS.map(({ label, scoreBand, min, max }) => {
+      const inBand = reviews.filter(
+        (r) => r.scoreAtEntry >= min && r.scoreAtEntry <= max,
+      );
+      const count    = inBand.length;
+      const totalPnl = inBand.reduce((s, r) => s + Number(r.trade.pnl ?? 0), 0);
+      const avgPnl   = count > 0 ? totalPnl / count : 0;
+      const wins     = inBand.filter((r) => Number(r.trade.pnl ?? 0) > 0).length;
+      const winRate  = count > 0 ? Math.round((wins / count) * 1000) / 10 : 0;
+      return {
+        band:        label,
+        scoreBand,
+        avgPnl:      Math.round(avgPnl * 100) / 100,
+        winRate,
+        tradeCount:  count,
+      };
+    });
+  }
+  
   // ─────────────────────────────────────────────
   // Private helpers
   // ─────────────────────────────────────────────

@@ -38,6 +38,8 @@ import type {
   TogglePluginResponse,
   PluginAuditLogListResponse,
   ChartPluginRuntimeResponse,
+  PluginReliabilityItem,
+  PluginRankingItem,
 } from '@fxde/types';
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
@@ -53,7 +55,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.trim() ||
   `${window.location.protocol}//${window.location.hostname}:3011`;
 
-export const api: AxiosInstance = axios.create({
+const api: AxiosInstance = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
@@ -549,35 +551,25 @@ export const pluginsRuntimeApi = {
    * chart runtime plugin 実行結果取得
    * overlays / signals / indicators / pluginStatuses を含む
    */
-  chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> => {
-    const url = '/plugins-runtime/chart';
-    // [DEBUG] リクエスト直前ログ（URL / method / Authorization 有無）
-    console.log('[pluginsRuntimeApi] request', {
-      url,
-      method:        'GET',
-      params,
-      hasAuthHeader: Boolean(getAccessToken()),
-    });
-    return api
-      .get<ChartPluginRuntimeResponse>(url, { params })
-      .then((r) => {
-        // [DEBUG] ステータスコード・生レスポンス本文
-        console.log('[pluginsRuntimeApi] response status', r.status);
-        console.log('[pluginsRuntimeApi] response body',   r.data);
-        return r.data;
-      })
-      .catch((err: unknown) => {
-        // [DEBUG] エラー詳細
-        const axiosErr = err as {
-          response?: { status?: number; data?: unknown };
-          message?:  string;
-        };
-        console.error('[pluginsRuntimeApi] error', {
-          status:  axiosErr?.response?.status,
-          data:    axiosErr?.response?.data,
-          message: axiosErr?.message,
-        });
-        throw err;
-      });
-  },
+  chart: (params: { symbol: string; timeframe: string }): Promise<ChartPluginRuntimeResponse> =>
+    api.get<ChartPluginRuntimeResponse>('/plugins-runtime/chart', { params }).then((r) => r.data),
+};
+export const pluginsRankingApi = {
+  /**
+   * GET /api/v1/plugins/reliability
+   */
+  getReliability: (params?: { symbol?: string; timeframe?: string }): Promise<PluginReliabilityItem[]> =>
+    api.get<PluginReliabilityItem[]>('/plugins/reliability', { params }).then((r) => r.data),
+
+  /**
+   * GET /api/v1/plugins/adaptive-ranking
+   */
+  getRanking: (params?: { symbol?: string; timeframe?: string }): Promise<PluginRankingItem[]> =>
+    api.get<PluginRankingItem[]>('/plugins/adaptive-ranking', { params }).then((r) => r.data),
+
+  /**
+   * POST /api/v1/plugins/recompute
+   */
+  recompute: (): Promise<{ status: string }> =>
+    api.post<{ status: string }>('/plugins/recompute', {}).then((r) => r.data),
 };

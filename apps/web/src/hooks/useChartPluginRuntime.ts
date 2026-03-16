@@ -52,25 +52,9 @@ export function useChartPluginRuntime(
   timeframe: Timeframe | string,
   enabled = true,
 ) {
-  // [DEBUG] hook 呼び出し確認
-  console.log('[useChartPluginRuntime] hook called', { symbol, timeframe, enabled });
-
   return useQuery<ChartPluginRuntimeResponse>({
     queryKey: chartPluginRuntimeKeys.chart(symbol, timeframe),
-    queryFn:  async () => {
-      // [DEBUG] fetch 開始
-      console.log('[useChartPluginRuntime] start', { symbol, timeframe });
-      try {
-        const result = await pluginsRuntimeApi.chart({ symbol, timeframe });
-        // [DEBUG] 成功レスポンス全体
-        console.log('[useChartPluginRuntime] success', result);
-        return result;
-      } catch (error) {
-        // [DEBUG] 失敗レスポンス全体
-        console.error('[useChartPluginRuntime] error', error);
-        throw error;
-      }
-    },
+    queryFn:  () => pluginsRuntimeApi.chart({ symbol, timeframe }),
     enabled:         !!symbol && !!timeframe && enabled,
     refetchInterval: PLUGIN_RUNTIME_REFETCH_MS,
     retry:           false,   // plugin 実行 API は再試行しない（次の poll で自然回復）

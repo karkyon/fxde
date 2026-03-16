@@ -7,7 +7,8 @@
  *
  * 注意:
  *   NestJS ルート解決順序により、
- *   static path (equity-curve / stats/summary) は :id より先に定義すること。
+ *   static path (equity-curve / stats/summary / stats/hourly /
+ *   stats/consecutive-loss / stats/by-score-band) は :id より先に定義すること。
  */
 
 import {
@@ -99,6 +100,42 @@ export class TradesController {
   @ApiOperation({ summary: '月次サマリー（勝率・損益・DD・規律遵守率）' })
   getStatsSummary(@CurrentUser() user: JwtPayload) {
     return this.tradesService.getStatsSummary(user.sub);
+  }
+
+  /**
+   * GET /api/v1/trades/stats/hourly
+   * ⚠️ static route → :id より前に定義すること
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4①
+   */
+  @Get('stats/hourly')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '時間帯別成績（JST 3時間帯区切り）' })
+  getStatsHourly(@CurrentUser() user: JwtPayload) {
+    return this.tradesService.getStatsHourly(user.sub);
+  }
+
+  /**
+   * GET /api/v1/trades/stats/consecutive-loss
+   * ⚠️ static route → :id より前に定義すること
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4②
+   */
+  @Get('stats/consecutive-loss')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: '連敗後の勝率推移' })
+  getStatsConsecutiveLoss(@CurrentUser() user: JwtPayload) {
+    return this.tradesService.getStatsConsecutiveLoss(user.sub);
+  }
+
+  /**
+   * GET /api/v1/trades/stats/by-score-band
+   * ⚠️ static route → :id より前に定義すること
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4③
+   */
+  @Get('stats/by-score-band')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'スコア帯別損益（TradeReview.scoreAtEntry ベース）' })
+  getStatsByScoreBand(@CurrentUser() user: JwtPayload) {
+    return this.tradesService.getStatsByScoreBand(user.sub);
   }
 
   /** GET /api/v1/trades/:id */

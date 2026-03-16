@@ -1228,35 +1228,7 @@ export default function ChartPage() {
 
   const total       = candles.data?.candles.length ?? 0;
   const allCandles  = candles.data?.candles ?? [];
-
-  // [DEBUG] pluginRuntime 状態変化ログ（symbol/timeframe変化・loading完了・エラー時に出力）
-  useEffect(() => {
-    console.log('[Chart] render', {
-      symbol,
-      timeframe,
-      pluginRuntimeLoading:  pluginRuntime.isLoading,
-      pluginRuntimeError:    pluginRuntime.error,
-      overlays:              pluginRuntime.data?.overlays?.length      ?? 0,
-      signals:               pluginRuntime.data?.signals?.length       ?? 0,
-      indicators:            pluginRuntime.data?.indicators?.length    ?? 0,
-      pluginStatuses:        pluginRuntime.data?.pluginStatuses?.length ?? 0,
-    });
-  }, [
-    symbol,
-    timeframe,
-    pluginRuntime.isLoading,
-    pluginRuntime.error,
-    pluginRuntime.data,
-  ]);
-
-  // [DEBUG] Chart アンマウント時（cleanup）ログ
-  useEffect(() => {
-    return () => {
-      console.log('[Chart] unmount / cleanup', { symbol, timeframe });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  
+ 
   // candles / symbol / timeframe 変化 → visible range 再初期化
   useEffect(() => {
     if (total > 0) {

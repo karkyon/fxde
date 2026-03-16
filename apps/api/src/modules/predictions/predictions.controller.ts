@@ -133,4 +133,28 @@ export class PredictionsController {
   ) {
     return this.predictionsService.updateTfWeights(user.sub, id, dto);
   }
+    /**
+   * GET /api/v1/predictions/accuracy/timestep
+   * タイムステップ別予測精度
+   *
+   * 権限: PRO | PRO_PLUS | ADMIN のみ
+   *
+   * v5.1: 実 DB 集計は v6 対象。
+   *       SPEC_v51_part8 §7「TimestepAccuracy サンプルデータ（H4 エントリー足）」
+   *       の固定値をスタブとして返す。
+   *
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part8 §7
+   */
+  @Get('accuracy/timestep')
+  @HttpCode(HttpStatus.OK)
+  getAccuracyTimestep() {
+    // v5.1 スタブ: SPEC_v51_part8 §7 サンプルデータ準拠
+    return [
+      { bars:  1, hoursAhead:   4, directional: 0.632, mae:  8.4, sampleSize: 120 },
+      { bars:  5, hoursAhead:  20, directional: 0.618, mae: 18.2, sampleSize: 120 },
+      { bars: 10, hoursAhead:  40, directional: 0.584, mae: 32.6, sampleSize: 115 },
+      { bars: 20, hoursAhead:  80, directional: 0.551, mae: 48.9, sampleSize: 108 },
+      { bars: 50, hoursAhead: 200, directional: 0.513, mae: 72.4, sampleSize:  95 },
+    ];
+  }
 }

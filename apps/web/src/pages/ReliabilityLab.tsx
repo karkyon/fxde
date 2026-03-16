@@ -20,21 +20,8 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { pluginsRankingApi } from '../lib/api';
 import type { PluginReliabilityItem, PluginRankingItem } from '@fxde/types';
-
-// ── API helpers ──────────────────────────────────────────────────────────────
-
-const reliabilityLabApi = {
-  getReliability: (params?: { symbol?: string; timeframe?: string }) =>
-    api.get<PluginReliabilityItem[]>('/plugins/reliability', { params }).then((r) => r.data),
-
-  getRanking: (params?: { symbol?: string; timeframe?: string }) =>
-    api.get<PluginRankingItem[]>('/plugins/adaptive-ranking', { params }).then((r) => r.data),
-
-  recompute: () =>
-    api.post('/plugins/recompute', {}).then((r) => r.data),
-};
 
 // ── Query Keys ───────────────────────────────────────────────────────────────
 
@@ -100,19 +87,19 @@ export default function ReliabilityLab() {
   const { data: reliabilityRows = [], isLoading: rLoading } =
     useQuery<PluginReliabilityItem[]>({
       queryKey: labKeys.reliability(filter),
-      queryFn:  () => reliabilityLabApi.getReliability(filter),
+      queryFn:  () => pluginsRankingApi.getReliability(filter),
       retry:    false,
     });
 
   const { data: rankingRows = [], isLoading: kLoading } =
     useQuery<PluginRankingItem[]>({
       queryKey: labKeys.ranking(filter),
-      queryFn:  () => reliabilityLabApi.getRanking(filter),
+      queryFn:  () => pluginsRankingApi.getRanking(filter),
       retry:    false,
     });
 
   const recompute = useMutation({
-    mutationFn: () => reliabilityLabApi.recompute(),
+    mutationFn: () => pluginsRankingApi.recompute(),
     onSuccess:  () => {
       void qc.invalidateQueries({ queryKey: ['plugins'] });
     },

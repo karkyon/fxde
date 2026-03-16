@@ -40,6 +40,7 @@ import { MarketDataModule }   from './modules/market-data/market-data.module';
 import { PluginsRankingModule } from './modules/plugins-ranking/plugins-ranking.module';  // PluginsModule より前
 import { PluginsModule }      from './modules/plugins/plugins.module';
 import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
+import { AdminModule }          from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
     PluginsRankingModule,   // ⚠️ PluginsModule より前（静的ルート先勝ち確保）
     PluginsModule,
     PluginsRuntimeModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
