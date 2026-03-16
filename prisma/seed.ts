@@ -430,6 +430,46 @@ export async function execute(ctx: FxdeContext): Promise<OverlayResult> {
       isSigned:         false,
       installScope:     'system' as PluginInstallScope,
     },
+    {
+      id:              'plg_auto_chart_pattern',
+      slug:            'auto-chart-pattern-engine',
+      displayName:     'Auto Chart Pattern Engine',
+      version:         '1.0.0',
+      descriptionShort: 'チャートパターンを自動検出してオーバーレイ表示',
+      descriptionLong:  'Head & Shoulders / Double Top / Double Bottom / Triangle / Channel を自動検出し、ネックライン・トレンドラインをチャートにオーバーレイ表示します。Reliability Engine と連携し、パターンの勝率・優位性を統計的に追跡します。',
+      pluginType:      'indicator' as PluginType,
+      authorName:      'msnk',
+      sourceLabel:     'Local Signed Plugin',
+      coverImageUrl:   null,
+      sourcePreview:   `/**
+ * Auto Chart Pattern Engine — manifest excerpt
+ * @version 1.0.0
+ */
+export const manifest = {
+  id:         'plg_auto_chart_pattern',
+  pluginType: 'indicator',
+  capabilities: ['chart_overlay', 'chart_signal', 'pattern_detection'],
+  fxdeApiVersion: '5.1',
+};
+ 
+export async function execute(ctx: FxdeContext): Promise<PatternResult> {
+  const { candles } = ctx;
+  // Head & Shoulders / Double Top / Triangle / Channel detection...
+  return { overlays: [], signals: [] };
+}`,
+      entryFile:       'dist/index.js',
+      checksum:        'sha256:placeholder_auto_chart_pattern',
+      fxdeApiVersion:  '5.1',
+      fxdeWebVersion:  '5.1',
+      capabilitiesJson: ['chart_overlay', 'chart_signal', 'pattern_detection'],
+      permissionsJson:  ['read_candles'],
+      dependenciesJson: [],
+      optionalDepsJson: [],
+      tagsJson:         ['pattern', 'chart', 'head-shoulders', 'double-top', 'triangle'],
+      isCore:           false,
+      isSigned:         true,
+      installScope:     'system' as PluginInstallScope,
+    },
   ]
  
   for (const manifest of pluginManifests) {

@@ -5,17 +5,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ResolvedPlugin } from '../types/resolved-plugin';
 import type { PluginExecutionContext, PluginRawOutput } from '../types/plugin-execution-context';
-import { executeSupplyDemandZonesPro } from './supply-demand-zones-pro.adapter';
-import { executeSessionOverlayPack }   from './session-overlay-pack.adapter';
-import { executeTrendBiasAnalyzer }    from './trend-bias-analyzer.adapter';
+import { executeSupplyDemandZonesPro }     from './supply-demand-zones-pro.adapter';
+import { executeSessionOverlayPack }        from './session-overlay-pack.adapter';
+import { executeTrendBiasAnalyzer }         from './trend-bias-analyzer.adapter';
+import { executeAutoChartPatternEngine }    from './auto-chart-pattern-engine.adapter';
 
 type AdapterFn = (ctx: PluginExecutionContext) => Promise<PluginRawOutput>;
 
 /** plugin slug → adapter 関数のマッピング */
 const PLUGIN_ADAPTERS: Record<string, AdapterFn> = {
-  'supply-demand-zones-pro': executeSupplyDemandZonesPro,
-  'session-overlay-pack':    executeSessionOverlayPack,
-  'trend-bias-analyzer':     executeTrendBiasAnalyzer,
+  'supply-demand-zones-pro':    executeSupplyDemandZonesPro,
+  'session-overlay-pack':       executeSessionOverlayPack,
+  'trend-bias-analyzer':        executeTrendBiasAnalyzer,
+  'auto-chart-pattern-engine':  executeAutoChartPatternEngine,
 };
 
 export type PluginExecutionResult =

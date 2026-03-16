@@ -154,7 +154,7 @@ export class AdaptiveRankingService {
 
     const suppressed = new Set<string>();
     for (const [key, action] of latestActionMap.entries()) {
-      if (action === 'suppress' || action === 'auto_stop') {
+      if (action === 'auto_stop') {
         suppressed.add(key);
       }
     }

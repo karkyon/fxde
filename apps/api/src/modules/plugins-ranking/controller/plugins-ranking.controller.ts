@@ -1,27 +1,33 @@
 /**
  * apps/api/src/modules/plugins-ranking/controller/plugins-ranking.controller.ts
  *
- * GET /api/v1/plugins/reliability
- * GET /api/v1/plugins/adaptive-ranking
- * GET /api/v1/plugins/adaptive-ranking/stop-candidates
+ * GET  /api/v1/plugins/reliability
+ * GET  /api/v1/plugins/adaptive-ranking
+ * GET  /api/v1/plugins/adaptive-ranking/stop-candidates
+ * POST /api/v1/plugins/recompute
  *
  * 修正: getReliability() で service['prisma'] に直接アクセスしていた責務違反を修正。
  *       ReliabilityScoringService.findAll() 経由に変更。
+ * 追加: POST /plugins/recompute — 手動リコンピュートジョブをキューに投入。
  */
 
 import {
   Controller,
   Get,
+  Post,
   Query,
   UseGuards,
   HttpCode,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { InjectQueue }               from '@nestjs/bullmq';
+import { Queue }                     from 'bullmq';
 import { ReliabilityScoringService } from '../service/reliability-scoring.service';
 import { AdaptiveRankingService }    from '../service/adaptive-ranking.service';
 import { GetPluginRankingQueryDto }  from '../dto/get-plugin-ranking.query.dto';
 import { JwtAuthGuard }              from '../../../common/guards/jwt-auth.guard';
+import { QUEUE_NAMES }               from '../../../jobs/queues';
 
 @Controller('plugins')
 @UseGuards(JwtAuthGuard)
@@ -31,6 +37,8 @@ export class PluginsRankingController {
   constructor(
     private readonly reliabilityService: ReliabilityScoringService,
     private readonly rankingService:     AdaptiveRankingService,
+    @InjectQueue(QUEUE_NAMES.PLUGIN_RELIABILITY_RECOMPUTE)
+    private readonly recomputeQueue: Queue,
   ) {}
 
   /**
@@ -87,5 +95,25 @@ export class PluginsRankingController {
   async getStopCandidates() {
     this.logger.debug('[PluginsRankingController] GET /plugins/adaptive-ranking/stop-candidates');
     return this.rankingService.getStopCandidates();
+  }
+
+  /**
+   * POST /api/v1/plugins/recompute
+   * 手動でリコンピュートジョブをキューに投入する。
+   * ReliabilityLab UI の Recompute ボタンから呼び出される。
+   */
+  @Post('recompute')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async recompute() {
+    this.logger.log('[PluginsRankingController] POST /plugins/recompute — manual trigger');
+    await this.recomputeQueue.add(
+      'reliability-recompute',
+      {},
+      {
+        removeOnComplete: { count: 5 },
+        removeOnFail:     { count: 5 },
+      },
+    );
+    return { status: 'queued' };
   }
 }

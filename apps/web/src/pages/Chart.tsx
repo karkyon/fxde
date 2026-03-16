@@ -14,7 +14,7 @@
  *     固定 height を fullscreen 時は除去。
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useChartMeta,
@@ -579,9 +579,19 @@ function CandleChart({
         );
       })}
  
-      {/* ── Plugin Runtime Zone Overlay ── */}
+      {/* ── Plugin Runtime Overlays (zone / line / band / box / path / marker) ── */}
       {runtimeOverlays.map((overlay) => {
         if (!overlay.visible) return null;
+        const strokeColor = overlay.style?.color    ?? '#94a3b8';
+        const fillColor   = overlay.style?.fillColor ?? 'none';
+        const opacity     = overlay.style?.opacity   ?? 1;
+        const lineWidth   = overlay.style?.lineWidth ?? 1;
+        const lineStyle   = overlay.style?.lineStyle ?? 'solid';
+        const dashArray   = lineStyle === 'dashed' ? '6 3'
+                          : lineStyle === 'dotted' ? '2 3'
+                          : undefined;
+
+        // ── zone ─────────────────────────────────────────────
         if (overlay.kind === 'zone') {
           const g = overlay.geometry as {
             zoneType: 'supply' | 'demand';
@@ -597,25 +607,217 @@ function CandleChart({
             const fromIdx = visibleCandles.findIndex((c) => c.time >= g.fromTime!);
             if (fromIdx >= 0) startX = toX(fromIdx);
           }
-          const isSupply    = g.zoneType === 'supply';
-          const fillColor   = overlay.style?.fillColor ?? (isSupply ? 'rgba(224,82,82,0.12)' : 'rgba(46,201,106,0.12)');
-          const strokeColor = overlay.style?.color     ?? (isSupply ? '#E05252' : '#2EC96A');
-          const opacity     = overlay.style?.opacity   ?? 0.35;
+          const isSupply     = g.zoneType === 'supply';
+          const zoneFill     = overlay.style?.fillColor ?? (isSupply ? 'rgba(224,82,82,0.12)' : 'rgba(46,201,106,0.12)');
+          const zoneStroke   = overlay.style?.color     ?? (isSupply ? '#E05252' : '#2EC96A');
+          const zoneOpacity  = overlay.style?.opacity   ?? 0.35;
           return (
             <g key={overlay.id}>
               <rect
                 x={startX} y={upperY}
                 width={Math.max(0, CHART_PAD_L + cW - startX)} height={zoneH}
-                fill={fillColor} stroke={strokeColor}
-                strokeWidth={0.8} strokeOpacity={Math.min(1, opacity * 2)} fillOpacity={opacity}
+                fill={zoneFill} stroke={zoneStroke}
+                strokeWidth={0.8} strokeOpacity={Math.min(1, zoneOpacity * 2)} fillOpacity={zoneOpacity}
               />
               <text x={startX + 4} y={upperY + 10}
-                fill={strokeColor} fontSize={8} fontFamily="monospace" opacity={0.9}>
+                fill={zoneStroke} fontSize={8} fontFamily="monospace" opacity={0.9}>
                 {overlay.label}
               </text>
             </g>
           );
         }
+
+        // ── line: 水平線 {price} または 2点線 {x1Time,y1,x2Time,y2} ──────
+        if (overlay.kind === 'line') {
+          const g = overlay.geometry as {
+            price?:   number;
+            x1Time?:  string;
+            y1?:      number;
+            x2Time?:  string;
+            y2?:      number;
+          };
+          if (g.price !== undefined) {
+            // 水平線
+            const lineY = toY(g.price);
+            return (
+              <g key={overlay.id} opacity={opacity}>
+                <line
+                  x1={CHART_PAD_L} y1={lineY} x2={CHART_PAD_L + cW} y2={lineY}
+                  stroke={strokeColor} strokeWidth={lineWidth}
+                  strokeDasharray={dashArray}
+                />
+                <text x={CHART_PAD_L + 4} y={lineY - 3}
+                  fill={strokeColor} fontSize={7} fontFamily="monospace" opacity={0.8}>
+                  {overlay.label}
+                </text>
+              </g>
+            );
+          }
+          if (g.x1Time !== undefined && g.y1 !== undefined && g.x2Time !== undefined && g.y2 !== undefined) {
+            const i1 = visibleCandles.findIndex((c) => c.time >= g.x1Time!);
+            const i2 = visibleCandles.findIndex((c) => c.time >= g.x2Time!);
+            if (i1 < 0 || i2 < 0) return null;
+            const x1 = toX(i1); const y1 = toY(g.y1);
+            const x2 = toX(i2); const y2 = toY(g.y2);
+            return (
+              <g key={overlay.id} opacity={opacity}>
+                <line x1={x1} y1={y1} x2={x2} y2={y2}
+                  stroke={strokeColor} strokeWidth={lineWidth}
+                  strokeDasharray={dashArray}
+                />
+                <text x={(x1 + x2) / 2} y={Math.min(y1, y2) - 3}
+                  fill={strokeColor} fontSize={7} fontFamily="monospace"
+                  textAnchor="middle" opacity={0.8}>
+                  {overlay.label}
+                </text>
+              </g>
+            );
+          }
+          return null;
+        }
+
+        // ── band: 上下2本の水平線 + 塗り {upper, lower} ─────────────────
+        if (overlay.kind === 'band') {
+          const g = overlay.geometry as { upper: number; lower: number };
+          if (g.upper === undefined || g.lower === undefined) return null;
+          const upperY = toY(g.upper);
+          const lowerY = toY(g.lower);
+          const bandH  = Math.max(1, lowerY - upperY);
+          const bandFill = overlay.style?.fillColor ?? `${strokeColor}1a`;
+          return (
+            <g key={overlay.id} opacity={opacity}>
+              <rect
+                x={CHART_PAD_L} y={upperY}
+                width={cW} height={bandH}
+                fill={bandFill} stroke="none"
+              />
+              <line x1={CHART_PAD_L} y1={upperY} x2={CHART_PAD_L + cW} y2={upperY}
+                stroke={strokeColor} strokeWidth={lineWidth} strokeDasharray={dashArray} />
+              <line x1={CHART_PAD_L} y1={lowerY} x2={CHART_PAD_L + cW} y2={lowerY}
+                stroke={strokeColor} strokeWidth={lineWidth} strokeDasharray={dashArray} />
+              <text x={CHART_PAD_L + 4} y={upperY - 3}
+                fill={strokeColor} fontSize={7} fontFamily="monospace" opacity={0.8}>
+                {overlay.label}
+              </text>
+            </g>
+          );
+        }
+
+        // ── box: 矩形 {x1Time, x2Time, upper, lower} ─────────────────────
+        if (overlay.kind === 'box') {
+          const g = overlay.geometry as {
+            x1Time: string;
+            x2Time: string;
+            upper:  number;
+            lower:  number;
+          };
+          const i1 = visibleCandles.findIndex((c) => c.time >= g.x1Time);
+          const i2 = visibleCandles.findIndex((c) => c.time >= g.x2Time);
+          if (i1 < 0 && i2 < 0) return null;
+          const x1    = i1 >= 0 ? toX(i1) : CHART_PAD_L;
+          const x2    = i2 >= 0 ? toX(i2) : CHART_PAD_L + cW;
+          const upperY = toY(g.upper);
+          const lowerY = toY(g.lower);
+          const boxFill = overlay.style?.fillColor ?? `${strokeColor}1a`;
+          return (
+            <g key={overlay.id} opacity={opacity}>
+              <rect
+                x={Math.min(x1, x2)} y={upperY}
+                width={Math.abs(x2 - x1)} height={Math.max(1, lowerY - upperY)}
+                fill={boxFill} stroke={strokeColor} strokeWidth={lineWidth}
+                strokeDasharray={dashArray}
+              />
+              <text x={Math.min(x1, x2) + 4} y={upperY + 10}
+                fill={strokeColor} fontSize={7} fontFamily="monospace" opacity={0.9}>
+                {overlay.label}
+              </text>
+            </g>
+          );
+        }
+
+        // ── path: 折れ線パス {points: [{time, price}]} ───────────────────
+        if (overlay.kind === 'path') {
+          const g = overlay.geometry as { points?: { time: string; price: number }[] };
+          if (!g.points || g.points.length < 2) return null;
+          const pts = g.points
+            .map((p) => {
+              const idx = visibleCandles.findIndex((c) => c.time >= p.time);
+              if (idx < 0) return null;
+              return `${toX(idx)},${toY(p.price)}`;
+            })
+            .filter(Boolean);
+          if (pts.length < 2) return null;
+          const firstPt = g.points.find((p) => visibleCandles.findIndex((c) => c.time >= p.time) >= 0);
+          const labelX  = firstPt ? toX(visibleCandles.findIndex((c) => c.time >= firstPt.time)) : CHART_PAD_L;
+          const labelY  = firstPt ? toY(firstPt.price) - 6 : CHART_PAD_T;
+          return (
+            <g key={overlay.id} opacity={opacity}>
+              <polyline
+                points={pts.join(' ')}
+                fill={fillColor === 'none' ? 'none' : fillColor}
+                stroke={strokeColor} strokeWidth={lineWidth}
+                strokeDasharray={dashArray}
+              />
+              <text x={labelX} y={labelY}
+                fill={strokeColor} fontSize={7} fontFamily="monospace" opacity={0.8}>
+                {overlay.label}
+              </text>
+            </g>
+          );
+        }
+
+        // ── marker: 特定価格・時刻にマーク {time, price, shape?} ──────────
+        if (overlay.kind === 'marker') {
+          const g = overlay.geometry as {
+            time?:  string;
+            price?: number;
+            shape?: 'circle' | 'diamond' | 'triangle_up' | 'triangle_down';
+          };
+          if (g.price === undefined) return null;
+          let markerX = CHART_PAD_L + cW / 2;
+          if (g.time) {
+            const idx = visibleCandles.findIndex((c) => c.time >= g.time!);
+            if (idx < 0) return null;
+            markerX = toX(idx);
+          }
+          const markerY = toY(g.price);
+          const shape   = g.shape ?? 'circle';
+          const r = 5;
+          let shapeEl: React.ReactNode;
+          if (shape === 'circle') {
+            shapeEl = <circle cx={markerX} cy={markerY} r={r}
+              fill={fillColor === 'none' ? strokeColor : fillColor}
+              stroke={strokeColor} strokeWidth={lineWidth} opacity={opacity} />;
+          } else if (shape === 'diamond') {
+            shapeEl = <polygon
+              points={`${markerX},${markerY - r} ${markerX + r},${markerY} ${markerX},${markerY + r} ${markerX - r},${markerY}`}
+              fill={fillColor === 'none' ? strokeColor : fillColor}
+              stroke={strokeColor} strokeWidth={lineWidth} opacity={opacity} />;
+          } else if (shape === 'triangle_up') {
+            shapeEl = <polygon
+              points={`${markerX},${markerY - r} ${markerX + r},${markerY + r} ${markerX - r},${markerY + r}`}
+              fill={fillColor === 'none' ? strokeColor : fillColor}
+              stroke={strokeColor} strokeWidth={lineWidth} opacity={opacity} />;
+          } else {
+            shapeEl = <polygon
+              points={`${markerX},${markerY + r} ${markerX + r},${markerY - r} ${markerX - r},${markerY - r}`}
+              fill={fillColor === 'none' ? strokeColor : fillColor}
+              stroke={strokeColor} strokeWidth={lineWidth} opacity={opacity} />;
+          }
+          return (
+            <g key={overlay.id}>
+              {shapeEl}
+              {overlay.label && (
+                <text x={markerX} y={markerY - r - 3}
+                  fill={strokeColor} fontSize={7} fontFamily="monospace"
+                  textAnchor="middle" opacity={0.85}>
+                  {overlay.label}
+                </text>
+              )}
+            </g>
+          );
+        }
+
         return null;
       })}
  

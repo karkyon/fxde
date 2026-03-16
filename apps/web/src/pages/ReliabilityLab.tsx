@@ -11,7 +11,7 @@
  *   - KPI Summary Cards（4枚）
  *   - Plugin Detail → /research/plugins/:pluginKey（将来実装）への導線
  *   - suppress / stop_candidate 状態バッジ
- *   - manual recompute trigger（POST /api/v1/plugins-ranking/recompute）
+ *   - manual recompute trigger（POST /api/v1/plugins/recompute）
  *
  * データソース:
  *   GET /api/v1/plugins/reliability
@@ -33,7 +33,7 @@ const reliabilityLabApi = {
     api.get<PluginRankingItem[]>('/plugins/adaptive-ranking', { params }).then((r) => r.data),
 
   recompute: () =>
-    api.post('/plugins-ranking/recompute', {}).then((r) => r.data),
+    api.post('/plugins/recompute', {}).then((r) => r.data),
 };
 
 // ── Query Keys ───────────────────────────────────────────────────────────────
