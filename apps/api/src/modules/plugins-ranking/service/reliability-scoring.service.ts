@@ -272,4 +272,49 @@ export class ReliabilityScoringService {
     if (score < 0.70) return 'demoted';
     return 'active';
   }
+
+  /**
+   * 生 PluginEvent 履歴を返す（drilldown 用）
+   * eventType = 'signal' のみ。最新 limit 件降順。
+   */
+  async getRecentEvents(pluginKey: string, limit = 50) {
+    const events = await this.prisma.pluginEvent.findMany({
+      where:   { pluginKey, eventType: 'signal' },
+      orderBy: { emittedAt: 'desc' },
+      take:    limit,
+      select: {
+        id:         true,
+        symbol:     true,
+        timeframe:  true,
+        direction:  true,
+        price:      true,
+        confidence: true,
+        metadata:   true,
+        emittedAt:  true,
+        results: {
+          select: { returnPct: true, candleOffset: true },
+          orderBy: { candleOffset: 'asc' },
+          take: 1,
+        },
+      },
+    });
+ 
+    return events.map((e) => {
+      const meta        = e.metadata as Record<string, unknown> | null;
+      const patternType = (meta?.['patternType'] as string) ?? null;
+      const returnPct   = e.results[0]?.returnPct ?? null;
+      return {
+        id:          e.id,
+        symbol:      e.symbol,
+        timeframe:   e.timeframe,
+        direction:   e.direction,
+        price:       e.price,
+        confidence:  e.confidence,
+        patternType,
+        returnPct,
+        evaluated:   returnPct !== null,
+        emittedAt:   e.emittedAt.toISOString(),
+      };
+    });
+  }
 }

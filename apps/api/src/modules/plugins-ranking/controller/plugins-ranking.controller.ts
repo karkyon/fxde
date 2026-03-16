@@ -89,6 +89,19 @@ export class PluginsRankingController {
   }
 
   /**
+   * GET /api/v1/plugins/reliability/events/:pluginKey
+   * 生 PluginEvent 履歴（signal のみ・最新50件）
+   */
+  @Get('reliability/events/:pluginKey')
+  @HttpCode(HttpStatus.OK)
+  async getRecentEvents(@Param('pluginKey') pluginKey: string) {
+    this.logger.debug(
+      `[PluginsRankingController] GET /plugins/reliability/events/${pluginKey}`,
+    );
+    return this.reliabilityService.getRecentEvents(pluginKey);
+  }
+
+  /**
    * GET /api/v1/plugins/adaptive-ranking
    * Plugin ランキング一覧（最新 decision）
    */

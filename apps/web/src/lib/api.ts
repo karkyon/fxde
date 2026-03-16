@@ -69,6 +69,20 @@ export interface ScoreBandStats {
   winRate:    number;
   tradeCount: number;
 }
+
+export interface PluginEventRow {
+  id:          string;
+  symbol:      string;
+  timeframe:   string;
+  direction:   string | null;
+  price:       number | null;
+  confidence:  number | null;
+  patternType: string | null;
+  returnPct:   number | null;
+  evaluated:   boolean;
+  emittedAt:   string;
+}
+
 // ── ページネーション補助型 ────────────────────────────────────────────────
 export interface PaginationParams {
   page?: number;
@@ -647,6 +661,12 @@ export const pluginsRankingApi = {
   getStopCandidates: (): Promise<PluginStopCandidateItem[]> =>
     api.get<PluginStopCandidateItem[]>('/plugins/adaptive-ranking/stop-candidates').then((r) => r.data),
 
+    /**
+   * GET /api/v1/plugins/reliability/events/:pluginKey
+   */
+  getRecentEvents: (pluginKey: string): Promise<PluginEventRow[]> =>
+    api.get<PluginEventRow[]>(`/plugins/reliability/events/${pluginKey}`).then((r) => r.data),
+  
   /**
    * POST /api/v1/plugins/recompute
    */

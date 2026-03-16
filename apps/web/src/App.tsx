@@ -23,6 +23,7 @@ import {
 import { useAuthStore } from './stores/auth.store';
 import { useInitAuth }  from './hooks/useInitAuth';
 import Layout           from './components/layout/Layout';
+import PluginDrilldownPage from './pages/PluginDrilldown';
 
 // ── ページ（遅延ロード対象と即時ロード対象の分離）────────────────────────
 import LoginPage    from './pages/Login';
@@ -107,6 +108,7 @@ const router = createBrowserRouter([
       { path: '/settings',    element: <SettingsPage /> },
       { path: '/plan',        element: <PlanPage /> },
       { path: '/research/plugins', element: <ReliabilityLabPage /> },
+      { path: '/research/plugins/:pluginKey',   element: <PluginDrilldownPage /> },
       // PRO | PRO_PLUS | ADMIN のみ
       {
         element: <ProGuard />,
