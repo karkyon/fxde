@@ -156,7 +156,6 @@ export class ReliabilityScoringService {
    * PluginEvent.results の candleOffset=1 を primary metric とする。
    */
   async getConditionBreakdown(pluginKey: string): Promise<PluginConditionBreakdown> {
-    // signal event + 最初の PluginEventResult（offset=1）を取得
     const events = await this.prisma.pluginEvent.findMany({
       where: { pluginKey, eventType: 'signal' },
       select: {
@@ -173,18 +172,22 @@ export class ReliabilityScoringService {
       },
     });
 
-    // metadata から patternType を抽出し、returnPct を付与
+    // 評価済み行のみ
     const rows = events
       .map((e) => {
         const meta        = e.metadata as Record<string, unknown> | null;
         const patternType = (meta?.['patternType'] as string) ?? 'unknown';
         const returnPct   = e.results[0]?.returnPct ?? null;
+        const context     = meta?.['context'] as Record<string, unknown> | null;
         return {
           symbol:      e.symbol,
           timeframe:   e.timeframe,
           direction:   e.direction ?? 'NEUTRAL',
           patternType,
           returnPct,
+          session:     (context?.['time'] as Record<string, unknown> | null)?.['session'] as string ?? 'unknown',
+          currentTrend:(context?.['trend'] as Record<string, unknown> | null)?.['currentTrend'] as string ?? 'unknown',
+          atrRegime:   (context?.['volatility'] as Record<string, unknown> | null)?.['atrRegime'] as string ?? 'unknown',
         };
       })
       .filter((r): r is typeof r & { returnPct: number } => r.returnPct !== null);
@@ -192,31 +195,18 @@ export class ReliabilityScoringService {
     const byPattern   = this._groupAndCalc(rows, (r) => r.patternType);
     const bySymbolTf  = this._groupAndCalc(rows, (r) => `${r.symbol}/${r.timeframe}`);
     const byDirection = this._groupAndCalc(rows, (r) => r.direction);
-
-    // ── context 軸集計（session / currentTrend / atrRegime）───────────────
-    const withContext = events.filter((e) => {
-      const meta = e.metadata as Record<string, unknown> | null;
-      return meta?.['context'] != null;
-    });
-
-    const bySession   = this._groupBy(withContext, (e) => {
-      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
-      return (ctx?.['time'] as Record<string,unknown>)?.['session'] as string ?? 'unknown';
-    });
-    const byTrend     = this._groupBy(withContext, (e) => {
-      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
-      return (ctx?.['trend'] as Record<string,unknown>)?.['currentTrend'] as string ?? 'unknown';
-    });
-    const byAtrRegime = this._groupBy(withContext, (e) => {
-      const ctx = ((e.metadata as Record<string,unknown>)?.['context'] as Record<string,unknown> | null);
-      return (ctx?.['volatility'] as Record<string,unknown>)?.['atrRegime'] as string ?? 'unknown';
-    });
+    const bySession   = this._groupAndCalc(rows, (r) => r.session);
+    const byTrend     = this._groupAndCalc(rows, (r) => r.currentTrend);
+    const byAtrRegime = this._groupAndCalc(rows, (r) => r.atrRegime);
 
     return {
       pluginKey,
       byPattern,
       bySymbolTf,
       byDirection,
+      bySession,
+      byTrend,
+      byAtrRegime,
       totalEvaluated: rows.length,
     };
   }
@@ -325,17 +315,25 @@ export class ReliabilityScoringService {
       const meta        = e.metadata as Record<string, unknown> | null;
       const patternType = (meta?.['patternType'] as string) ?? null;
       const returnPct   = e.results[0]?.returnPct ?? null;
+      const context = meta?.['context'] as Record<string, unknown> | null;
+      const session      = (context?.['time']       as Record<string,unknown> | null)?.['session']      as string | null ?? null;
+      const currentTrend = (context?.['trend']      as Record<string,unknown> | null)?.['currentTrend'] as string | null ?? null;
+      const atrRegime    = (context?.['volatility'] as Record<string,unknown> | null)?.['atrRegime']    as string | null ?? null;
+
       return {
-        id:          e.id,
-        symbol:      e.symbol,
-        timeframe:   e.timeframe,
-        direction:   e.direction,
-        price:       e.price,
-        confidence:  e.confidence,
+        id:           e.id,
+        symbol:       e.symbol,
+        timeframe:    e.timeframe,
+        direction:    e.direction,
+        price:        e.price,
+        confidence:   e.confidence,
         patternType,
         returnPct,
-        evaluated:   returnPct !== null,
-        emittedAt:   e.emittedAt.toISOString(),
+        evaluated:    returnPct !== null,
+        emittedAt:    e.emittedAt.toISOString(),
+        session,
+        currentTrend,
+        atrRegime,
       };
     });
   }

@@ -203,10 +203,17 @@ function ConditionBreakdownSection({ pluginKey }: { pluginKey: string }) {
       )}
 
       {data && data.totalEvaluated > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <BreakdownTable title="パターン別" rows={data.byPattern} />
-          <BreakdownTable title="Symbol / TF 別" rows={data.bySymbolTf} />
-          <BreakdownTable title="方向別" rows={data.byDirection} />
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <BreakdownTable title="パターン別"    rows={data.byPattern} />
+            <BreakdownTable title="Symbol / TF 別" rows={data.bySymbolTf} />
+            <BreakdownTable title="方向別"         rows={data.byDirection} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-slate-700/50">
+            <BreakdownTable title="セッション別"   rows={data.bySession ?? []} />
+            <BreakdownTable title="トレンド別"     rows={data.byTrend ?? []} />
+            <BreakdownTable title="ATR Regime別"   rows={data.byAtrRegime ?? []} />
+          </div>
         </div>
       )}
     </div>

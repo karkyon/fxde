@@ -16,22 +16,7 @@ import type {
   PluginReliabilityItem,
   PluginRankingHistoryItem,
 } from '@fxde/types';
-import type { PluginConditionBreakdown, ConditionBreakdownRow } from '../lib/api';
-
-// ── 型 ───────────────────────────────────────────────────────────────────────
-
-interface PluginEventRow {
-  id:          string;
-  symbol:      string;
-  timeframe:   string;
-  direction:   string | null;
-  price:       number | null;
-  confidence:  number | null;
-  patternType: string | null;
-  returnPct:   number | null;
-  evaluated:   boolean;
-  emittedAt:   string;
-}
+import type { PluginConditionBreakdown, ConditionBreakdownRow, PluginEventRow } from '../lib/api';
 
 // ── Query Keys ────────────────────────────────────────────────────────────────
 
@@ -176,6 +161,9 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
             <th className="text-left px-2 py-2">Pattern</th>
             <th className="text-left px-2 py-2">Symbol/TF</th>
             <th className="text-center px-2 py-2">Dir</th>
+            <th className="text-center px-2 py-2">Session</th>
+            <th className="text-center px-2 py-2">Trend</th>
+            <th className="text-center px-2 py-2">ATR</th>
             <th className="text-right px-2 py-2">Conf</th>
             <th className="text-right px-2 py-2">Return%</th>
             <th className="text-center px-2 py-2">Eval</th>
@@ -195,6 +183,15 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
               </td>
               <td className="px-2 py-1.5 text-slate-400">
                 {ev.symbol}/{ev.timeframe}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
+                {ev.session ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
+                {ev.currentTrend ?? '—'}
+              </td>
+              <td className="px-2 py-1.5 text-center text-slate-500 font-mono text-[10px]">
+                {ev.atrRegime ?? '—'}
               </td>
               <td className="px-2 py-1.5 text-center">
                 <span className={
@@ -333,10 +330,17 @@ export default function PluginDrilldown() {
         {bLoading ? (
           <p className="text-xs text-slate-500">Loading...</p>
         ) : breakdown ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <BreakdownTable title="パターン別" rows={breakdown.byPattern} />
-            <BreakdownTable title="Symbol / TF 別" rows={breakdown.bySymbolTf} />
-            <BreakdownTable title="方向別"    rows={breakdown.byDirection} />
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <BreakdownTable title="パターン別"    rows={breakdown.byPattern} />
+              <BreakdownTable title="Symbol / TF 別" rows={breakdown.bySymbolTf} />
+              <BreakdownTable title="方向別"         rows={breakdown.byDirection} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-3 border-t border-slate-700/50">
+              <BreakdownTable title="セッション別"   rows={breakdown.bySession   ?? []} />
+              <BreakdownTable title="トレンド別"     rows={breakdown.byTrend     ?? []} />
+              <BreakdownTable title="ATR Regime別"   rows={breakdown.byAtrRegime ?? []} />
+            </div>
           </div>
         ) : (
           <p className="text-xs text-slate-600 italic">データなし</p>

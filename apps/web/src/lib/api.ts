@@ -71,16 +71,19 @@ export interface ScoreBandStats {
 }
 
 export interface PluginEventRow {
-  id:          string;
-  symbol:      string;
-  timeframe:   string;
-  direction:   string | null;
-  price:       number | null;
-  confidence:  number | null;
-  patternType: string | null;
-  returnPct:   number | null;
-  evaluated:   boolean;
-  emittedAt:   string;
+  id:           string;
+  symbol:       string;
+  timeframe:    string;
+  direction:    string | null;
+  price:        number | null;
+  confidence:   number | null;
+  patternType:  string | null;
+  returnPct:    number | null;
+  evaluated:    boolean;
+  emittedAt:    string;
+  session:      string | null;
+  currentTrend: string | null;
+  atrRegime:    string | null;
 }
 
 // ── ページネーション補助型 ────────────────────────────────────────────────
@@ -94,8 +97,13 @@ export interface ConditionBreakdownRow {
 }
 
 export interface PluginConditionBreakdown {
-  pluginKey: string;
-  byPattern: ConditionBreakdownRow[]; bySymbolTf: ConditionBreakdownRow[]; byDirection: ConditionBreakdownRow[];
+  pluginKey:      string;
+  byPattern:      ConditionBreakdownRow[];
+  bySymbolTf:     ConditionBreakdownRow[];
+  byDirection:    ConditionBreakdownRow[];
+  bySession:      ConditionBreakdownRow[];
+  byTrend:        ConditionBreakdownRow[];
+  byAtrRegime:    ConditionBreakdownRow[];
   totalEvaluated: number;
 }
 
