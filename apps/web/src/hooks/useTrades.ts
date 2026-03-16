@@ -24,6 +24,7 @@ import {
 } from '@tanstack/react-query';
 import { tradesApi } from '../lib/api';
 import type { PaginationParams } from '../lib/api';
+import type { HourlyStats, ConsecutiveLossStats, ScoreBandStats } from '../lib/api';
 import type {
   EquityCurveResponse,
   TradeSummaryResponse,
@@ -41,6 +42,9 @@ export const tradeKeys = {
   review:   (id: string)      => ['trades', 'review', id] as const,
   equity:   (period: string)  => ['trades', 'equity-curve', period] as const,
   summary:  ()                => ['trades', 'stats', 'summary'] as const,
+  hourly:            ()       => ['trades', 'stats', 'hourly'] as const,
+  consecutiveLoss:   ()       => ['trades', 'stats', 'consecutive-loss'] as const,
+  byScoreBand:       ()       => ['trades', 'stats', 'by-score-band'] as const,
 };
 
 /**
@@ -175,6 +179,48 @@ export function useTradeSummary() {
   return useQuery<TradeSummaryResponse>({
     queryKey: tradeKeys.summary(),
     queryFn:  () => tradesApi.summary(),
+    retry:    false,
+  });
+}
+/**
+ * useStatsHourly
+ * GET /api/v1/trades/stats/hourly
+ * 時間帯別成績（JST 3時間帯区切り）
+ * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4①
+ */
+
+export function useStatsHourly() {
+  return useQuery<HourlyStats[]>({
+    queryKey: tradeKeys.hourly(),
+    queryFn:  () => tradesApi.statsHourly(),
+    retry:    false,
+  });
+}
+
+/**
+ * useStatsConsecutiveLoss
+ * GET /api/v1/trades/stats/consecutive-loss
+ * 連敗後の勝率推移
+ * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4②
+ */
+export function useStatsConsecutiveLoss() {
+  return useQuery<ConsecutiveLossStats[]>({
+    queryKey: tradeKeys.consecutiveLoss(),
+    queryFn:  () => tradesApi.statsConsecutiveLoss(),
+    retry:    false,
+  });
+}
+
+/**
+ * useStatsByScoreBand
+ * GET /api/v1/trades/stats/by-score-band
+ * スコア帯別損益（TradeReview.scoreAtEntry ベース）
+ * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4③
+ */
+export function useStatsByScoreBand() {
+  return useQuery<ScoreBandStats[]>({
+    queryKey: tradeKeys.byScoreBand(),
+    queryFn:  () => tradesApi.statsByScoreBand(),
     retry:    false,
   });
 }

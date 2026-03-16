@@ -41,7 +41,32 @@ import type {
   PluginReliabilityItem,
   PluginRankingItem,
 } from '@fxde/types';
+// ── Trades 集計系レスポンス型 ──────────────────────────────────────────────
+// 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4
 
+/** GET /api/v1/trades/stats/hourly */
+export interface HourlyStats {
+  hour:    string;   // 例: "9-12時"
+  winRate: number;
+  pnl:     number;
+  count:   number;
+}
+
+/** GET /api/v1/trades/stats/consecutive-loss */
+export interface ConsecutiveLossStats {
+  streak:      number;
+  winRate:     number;
+  sampleCount: number;
+}
+
+/** GET /api/v1/trades/stats/by-score-band */
+export interface ScoreBandStats {
+  band:       string;    // 例: "75-79"
+  scoreBand:  'HIGH' | 'MID' | 'LOW';
+  avgPnl:     number;
+  winRate:    number;
+  tradeCount: number;
+}
 // ── ページネーション補助型 ────────────────────────────────────────────────
 export interface PaginationParams {
   page?: number;
@@ -217,6 +242,30 @@ export const tradesApi = {
     api.get<EquityCurveResponse>('/trades/equity-curve', { params: { period } }).then((r) => r.data),
   summary:      () =>
     api.get<TradeSummaryResponse>('/trades/stats/summary').then((r) => r.data),
+  
+  /**
+   * GET /api/v1/trades/stats/hourly
+   * 時間帯別成績（JST 3時間帯区切り）
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4①
+   */
+  statsHourly: (): Promise<HourlyStats[]> =>
+    api.get<HourlyStats[]>('/trades/stats/hourly').then((r) => r.data),
+
+  /**
+   * GET /api/v1/trades/stats/consecutive-loss
+   * 連敗後の勝率推移
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4②
+   */
+  statsConsecutiveLoss: (): Promise<ConsecutiveLossStats[]> =>
+    api.get<ConsecutiveLossStats[]>('/trades/stats/consecutive-loss').then((r) => r.data),
+
+  /**
+   * GET /api/v1/trades/stats/by-score-band
+   * スコア帯別損益
+   * 参照: SPEC_v51_part3 §11 / SPEC_v51_part7 §1.4③
+   */
+  statsByScoreBand: (): Promise<ScoreBandStats[]> =>
+    api.get<ScoreBandStats[]>('/trades/stats/by-score-band').then((r) => r.data),
 };
 
 // ── Snapshots API ─────────────────────────────────────────────────────────
