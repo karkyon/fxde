@@ -8,6 +8,8 @@
  *   [container（position:relative）]
  *     ├── LWC DOM（ローソク足 / MA / crosshair）
  *     └── OverlayLayer（position:absolute SVG、bridge座標同期）
+ *
+ * FIX-2: onVisibleRangeChange prop 追加（下部 info bar の可視範囲表示用）。
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -53,6 +55,8 @@ export interface LwcChartProps {
   runtimeSignals:    RuntimeSignal[];
   runtimeIndicators: RuntimeIndicator[];
   onCrosshairCandle: (candle: RawCandle | null) => void;
+  /** 可視範囲変化時に呼ばれる（下部 info bar 用）*/
+  onVisibleRangeChange?: (info: { from: string; to: string; visibleCount: number } | null) => void;
 }
 
 // ── MA 計算 ──────────────────────────────────────────────────────────────────
@@ -95,6 +99,7 @@ export function LwcChart({
   patternMarkers, showPatterns,
   runtimeOverlays, runtimeSignals, runtimeIndicators,
   onCrosshairCandle,
+  onVisibleRangeChange,
 }: LwcChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef     = useRef<IChartApi | null>(null);
@@ -137,14 +142,23 @@ export function LwcChart({
     });
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor:   '#2EC96A', downColor:   '#E05252',
+      upColor:       '#2EC96A', downColor:       '#E05252',
       borderUpColor: '#2EC96A', borderDownColor: '#E05252',
       wickUpColor:   '#2EC96A', wickDownColor:   '#E05252',
     });
 
     chartRef.current  = chart;
     seriesRef.current = series;
-    setBridge(createChartBridge(chart, series, el));
+
+    const b = createChartBridge(chart, series, el);
+    setBridge(b);
+
+    // 可視範囲変化 → onVisibleRangeChange callback（FIX-2）
+    if (onVisibleRangeChange) {
+      chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
+        onVisibleRangeChange(b.getVisibleTimeRange());
+      });
+    }
 
     // crosshair → OHLCOverlay
     chart.subscribeCrosshairMove((param) => {
@@ -166,7 +180,7 @@ export function LwcChart({
     return () => {
       ro.disconnect();
       chart.remove();
-      chartRef.current = null;
+      chartRef.current  = null;
       seriesRef.current = null;
       maSeriesRef.current.clear();
       setBridge(null);

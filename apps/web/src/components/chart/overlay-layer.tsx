@@ -4,6 +4,9 @@
  * Overlay Layer — ChartBridge 経由で座標変換し、
  * Plugin Runtime overlay / signal / pattern marker を SVG で描画する。
  * position: absolute で LWC container に重ねる。pointer-events: none。
+ *
+ * FIX-1: showPrediction / predictionData / candles / symbol を destructure に追加し、
+ *        Prediction overlay を描画するよう修正。
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
@@ -35,11 +38,15 @@ interface OverlayLayerProps {
 
 export function OverlayLayer({
   bridge,
+  candles,
+  symbol,
   runtimeOverlays,
   runtimeSignals,
   runtimeIndicators,
   patternMarkers,
   showPatterns,
+  showPrediction,
+  predictionData,
 }: OverlayLayerProps) {
   const [, setTick] = useState(0);
 
@@ -50,8 +57,41 @@ export function OverlayLayer({
   const w   = dim.width  || 800;
   const h   = dim.height || 430;
 
-  const tx = useCallback((iso: string)    => bridge.timeToX(iso),    [bridge]);
-  const py = useCallback((price: number)  => bridge.priceToY(price), [bridge]);
+  const tx = useCallback((iso: string)   => bridge.timeToX(iso),    [bridge]);
+  const py = useCallback((price: number) => bridge.priceToY(price), [bridge]);
+
+  // ── Prediction overlay 計算 ──────────────────────────────────────────────
+  const lastCandle  = candles.length > 0 ? candles[candles.length - 1] : null;
+  const predOriginX = lastCandle ? tx(lastCandle.time) : null;
+  const predOriginY = lastCandle ? py(lastCandle.close) : null;
+
+  type PredItem = { targetY: number | null; color: string; opacity: number; label: string };
+  const predItems: PredItem[] = [];
+  if (showPrediction && predictionData && lastCandle) {
+    const pip       = symbol.toUpperCase().includes('JPY') ? 0.01 : 0.0001;
+    const move      = predictionData.expectedMovePips;
+    const lastClose = lastCandle.close;
+    predItems.push(
+      {
+        targetY: py(lastClose + move * pip * predictionData.bullish),
+        color: '#2EC96A',
+        opacity: Math.max(0.3, predictionData.bullish  * 1.5),
+        label: `Bull ${Math.round(predictionData.bullish  * 100)}%`,
+      },
+      {
+        targetY: py(lastClose + move * pip * predictionData.neutral * 0.1),
+        color: '#E8B830',
+        opacity: Math.max(0.3, predictionData.neutral * 1.5),
+        label: `Neut ${Math.round(predictionData.neutral * 100)}%`,
+      },
+      {
+        targetY: py(lastClose - move * pip * predictionData.bearish),
+        color: '#E05252',
+        opacity: Math.max(0.3, predictionData.bearish  * 1.5),
+        label: `Bear ${Math.round(predictionData.bearish  * 100)}%`,
+      },
+    );
+  }
 
   return (
     <svg
@@ -62,9 +102,9 @@ export function OverlayLayer({
       {/* ── Plugin Runtime Overlays ─────────────────────────────────── */}
       {runtimeOverlays.map((overlay) => {
         const style       = (overlay.style ?? {}) as Record<string, unknown>;
-        const strokeColor = (style['color']    as string)  ?? '#4D9FFF';
-        const opacity     = (style['opacity']  as number)  ?? 0.8;
-        const lineWidth   = (style['lineWidth']as number)  ?? 1;
+        const strokeColor = (style['color']    as string) ?? '#4D9FFF';
+        const opacity     = (style['opacity']  as number) ?? 0.8;
+        const lineWidth   = (style['lineWidth'] as number) ?? 1;
         const dashStr     = style['lineStyle'] === 'dashed' ? '4 3' : 'none';
         const geo         = (overlay.geometry ?? {}) as Record<string, unknown>;
 
@@ -119,9 +159,11 @@ export function OverlayLayer({
           const shape = (geo['shape'] as string) ?? 'circle';
           return (
             <g key={overlay.id} opacity={opacity}>
-              {shape === 'circle'      ? <circle cx={x} cy={y} r={r} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />
-               : shape === 'triangle_up' ? <polygon points={`${x},${y-r} ${x+r},${y+r} ${x-r},${y+r}`} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />
-               : <polygon points={`${x},${y+r} ${x+r},${y-r} ${x-r},${y-r}`} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />}
+              {shape === 'circle'
+                ? <circle cx={x} cy={y} r={r} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />
+                : shape === 'triangle_up'
+                ? <polygon points={`${x},${y - r} ${x + r},${y + r} ${x - r},${y + r}`} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />
+                : <polygon points={`${x},${y + r} ${x + r},${y - r} ${x - r},${y - r}`} fill={fill} stroke={strokeColor} strokeWidth={lineWidth} />}
               {overlay.label && <text x={x} y={y - r - 3} fill={strokeColor} fontSize={7} fontFamily="monospace" textAnchor="middle">{overlay.label}</text>}
             </g>
           );
@@ -154,7 +196,7 @@ export function OverlayLayer({
         const color = bull ? '#2EC96A' : '#E05252';
         return (
           <g key={marker.id}>
-            <text x={x} y={bull ? y - 8 : y + 16}  fill={color} fontSize={9} fontFamily="monospace" textAnchor="middle" opacity={0.85}>{bull ? '▲' : '▼'}</text>
+            <text x={x} y={bull ? y - 8  : y + 16} fill={color} fontSize={9} fontFamily="monospace" textAnchor="middle" opacity={0.85}>{bull ? '▲' : '▼'}</text>
             <text x={x} y={bull ? y - 18 : y + 26} fill={color} fontSize={6} fontFamily="monospace" textAnchor="middle" opacity={0.7}>{marker.label.slice(0, 10)}</text>
           </g>
         );
@@ -166,6 +208,44 @@ export function OverlayLayer({
         const v = typeof ind.value === 'number' ? (Number.isInteger(ind.value) ? String(ind.value) : ind.value.toFixed(2)) : String(ind.value ?? '');
         return <text key={ind.id} x={8} y={h - 30 - i * 13} fill={c} fontSize={9} fontFamily="monospace" opacity={0.85}>{`${ind.label}: ${v}`}</text>;
       })}
+
+      {/* ── Prediction Overlay ────────────────────────────────────────── */}
+      {showPrediction && predOriginX != null && predOriginY != null && predItems.length > 0 && (
+        <g>
+          {/* 起点の垂直ガイド線 */}
+          <line
+            x1={predOriginX} y1={0} x2={predOriginX} y2={h}
+            stroke="#B07EFF" strokeWidth={1} strokeOpacity={0.3} strokeDasharray="4 3"
+          />
+          {predItems.map(({ targetY, color, opacity, label }) => {
+            if (targetY == null) return null;
+            return (
+              <g key={label}>
+                <line
+                  x1={predOriginX} y1={predOriginY}
+                  x2={w - 4}       y2={targetY}
+                  stroke={color} strokeWidth={2} strokeOpacity={opacity} strokeDasharray="6 3"
+                />
+                <circle cx={w - 6} cy={targetY} r={3} fill={color} opacity={opacity} />
+                <text
+                  x={w - 8} y={targetY + 3.5}
+                  fill={color} fontSize={8} fontFamily="monospace"
+                  textAnchor="end" opacity={opacity}
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+          {/* mainScenario ラベル */}
+          <text
+            x={predOriginX + 4} y={14}
+            fill="#B07EFF" fontSize={9} fontFamily="monospace" opacity={0.8}
+          >
+            {predictionData!.mainScenario} · {predictionData!.confidence}
+          </text>
+        </g>
+      )}
     </svg>
   );
 }

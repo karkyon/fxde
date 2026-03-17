@@ -3,6 +3,8 @@
  *
  * Chart Bridge — LWC 座標系を Overlay Layer に露出する抽象層。
  * Chart engine を交換しても bridge interface を維持すれば overlay は無変更。
+ *
+ * FIX-4: getVisibleTimeRange() を追加（下部 info bar の可視範囲表示用）。
  */
 
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
@@ -16,6 +18,8 @@ export interface ChartBridge {
   subscribe(cb: () => void): () => void;
   /** container の現在サイズ */
   dimensions(): { width: number; height: number };
+  /** 現在の可視時刻範囲と可視本数。取得不能時は null */
+  getVisibleTimeRange(): { from: string; to: string; visibleCount: number } | null;
 }
 
 export function createChartBridge(
@@ -46,6 +50,21 @@ export function createChartBridge(
 
     dimensions(): { width: number; height: number } {
       return { width: container.clientWidth, height: container.clientHeight };
+    },
+
+    getVisibleTimeRange(): { from: string; to: string; visibleCount: number } | null {
+      const bars         = chart.timeScale().getVisibleRange();
+      const logicalRange = chart.timeScale().getVisibleLogicalRange();
+      if (!bars) return null;
+      const fromSec = bars.from as unknown as number;
+      const toSec   = bars.to   as unknown as number;
+      return {
+        from:         new Date(fromSec * 1000).toISOString(),
+        to:           new Date(toSec   * 1000).toISOString(),
+        visibleCount: logicalRange
+          ? Math.max(0, Math.round(logicalRange.to - logicalRange.from))
+          : 0,
+      };
     },
   };
 }
