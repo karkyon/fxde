@@ -79,6 +79,7 @@ export interface PluginEventRow {
   confidence:   number | null;
   patternType:  string | null;
   returnPct:    number | null;
+  resultPips:   number | null;
   evaluated:    boolean;
   emittedAt:    string;
   session:      string | null;
@@ -101,6 +102,7 @@ export interface PaginationParams {
 
 export interface ConditionBreakdownRow {
   key: string; sampleSize: number; winRate: number; avgReturn: number;
+  avgPips: number;
 }
 
 export interface PluginConditionBreakdown {

@@ -116,6 +116,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: ConditionBreakdo
             <th className="text-right py-0.5">N</th>
             <th className="text-right py-0.5">Win%</th>
             <th className="text-right py-0.5">AvgReturn</th>
+            <th className="text-right py-0.5">AvgPips</th>
           </tr>
         </thead>
         <tbody>
@@ -135,6 +136,11 @@ function BreakdownTable({ title, rows }: { title: string; rows: ConditionBreakdo
                 row.avgReturn > 0 ? 'text-green-400' : 'text-red-400'
               }`}>
                 {row.avgReturn.toFixed(4)}
+              </td>
+              <td className={`py-1 text-right ${
+                row.avgPips > 0 ? 'text-green-400' : row.avgPips < 0 ? 'text-red-400' : 'text-slate-500'
+              }`}>
+                {row.avgPips > 0 ? '+' : ''}{row.avgPips.toFixed(1)}
               </td>
             </tr>
           ))}
@@ -172,6 +178,7 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
             <th className="text-center px-2 py-2 whitespace-nowrap">DOW</th>
             <th className="text-center px-2 py-2 whitespace-nowrap">Market</th>
             <th className="text-right px-2 py-2 whitespace-nowrap">Conf</th>
+            <th className="text-right px-2 py-2 whitespace-nowrap">Pips</th>
             <th className="text-right px-2 py-2 whitespace-nowrap">Return%</th>
             <th className="text-center px-2 py-2 whitespace-nowrap">Eval</th>
           </tr>
@@ -232,6 +239,15 @@ function EventsTable({ events }: { events: PluginEventRow[] }) {
               </td>
               <td className="px-2 py-1.5 text-right text-slate-400 text-[10px] whitespace-nowrap">
                 {ev.confidence !== null ? (ev.confidence * 100).toFixed(0) + '%' : '—'}
+              </td>
+              <td className="px-2 py-1.5 text-right text-[10px] whitespace-nowrap">
+                {ev.resultPips !== null ? (
+                  <span className={ev.resultPips > 0 ? 'text-green-400' : ev.resultPips < 0 ? 'text-red-400' : 'text-slate-500'}>
+                    {ev.resultPips > 0 ? '+' : ''}{ev.resultPips.toFixed(1)}
+                  </span>
+                ) : (
+                  <span className="text-slate-600">—</span>
+                )}
               </td>
               <td className="px-2 py-1.5 text-right text-[10px] whitespace-nowrap">
                 {ev.returnPct !== null ? (

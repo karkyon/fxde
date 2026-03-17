@@ -15,6 +15,11 @@ import { PrismaService }      from '../../../prisma/prisma.service';
 
 const EVAL_OFFSETS = [1, 3, 5, 10, 20] as const;
 
+/** pip サイズ取得（JPY ペア = 0.01、それ以外 = 0.0001）*/
+function getPipSize(symbol: string): number {
+  return symbol.toUpperCase().endsWith('JPY') ? 0.01 : 0.0001;
+}
+
 /** Prisma Timeframe enum の有効値セット */
 const VALID_TIMEFRAMES: ReadonlySet<string> = new Set<Timeframe>([
   'M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'H8', 'D1', 'W1', 'MN',
@@ -115,6 +120,7 @@ export class PluginEventEvaluationService {
       returnPct:    number;
       mfe:          number;
       mae:          number;
+      resultPips:   number;
     }[] = [];
 
     for (const offset of EVAL_OFFSETS) {
@@ -149,6 +155,7 @@ export class PluginEventEvaluationService {
         returnPct,
         mfe:  Math.max(0, mfe),
         mae:  Math.max(0, mae),
+        resultPips: Math.round((priceChange / getPipSize(event.symbol)) * 10) / 10,
       });
     }
 

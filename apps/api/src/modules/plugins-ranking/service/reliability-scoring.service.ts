@@ -17,6 +17,7 @@ export interface ConditionBreakdownRow {
   sampleSize: number;
   winRate:    number;
   avgReturn:  number;
+  avgPips:    number;
 }
 
 export interface PluginConditionBreakdown {
@@ -172,7 +173,7 @@ export class ReliabilityScoringService {
         direction: true,
         metadata:  true,
         results: {
-          select:  { returnPct: true, candleOffset: true },
+          select:  { returnPct: true, resultPips: true, candleOffset: true },
           orderBy: { candleOffset: 'asc' },
           take: 1,
         },
@@ -183,7 +184,8 @@ export class ReliabilityScoringService {
       .map((e) => {
         const meta        = e.metadata as Record<string, unknown> | null;
         const patternType = (meta?.['patternType'] as string) ?? 'unknown';
-        const returnPct   = e.results[0]?.returnPct ?? null;
+        const returnPct   = e.results[0]?.returnPct  ?? null;
+        const resultPips  = e.results[0]?.resultPips ?? null;
         const context     = meta?.['context'] as Record<string, unknown> | null;
         const timeCtx     = context?.['time']       as Record<string, unknown> | null;
         const trendCtx    = context?.['trend']      as Record<string, unknown> | null;
@@ -196,6 +198,7 @@ export class ReliabilityScoringService {
           direction:       e.direction ?? 'NEUTRAL',
           patternType,
           returnPct,
+          resultPips,
           session:         (timeCtx?.['session']          as string)  ?? 'unknown',
           hourOfDay:       (timeCtx?.['hourOfDay']         as number)  ?? -1,
           dayOfWeek:       (timeCtx?.['dayOfWeek']         as number)  ?? -1,
@@ -245,22 +248,25 @@ export class ReliabilityScoringService {
 
   // ── 内部ヘルパー ─────────────────────────────────────────────────────────
 
-  private _groupAndCalc<T extends { returnPct: number }>(
+  private _groupAndCalc<T extends { returnPct: number; resultPips?: number | null }>(
     items:  T[],
     keyFn:  (item: T) => string,
   ): ConditionBreakdownRow[] {
-    const groups = new Map<string, number[]>();
+    const groups = new Map<string, { returns: number[]; pips: number[] }>();
     for (const item of items) {
       const key = keyFn(item);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(item.returnPct);
+      if (!groups.has(key)) groups.set(key, { returns: [], pips: [] });
+      const g = groups.get(key)!;
+      g.returns.push(item.returnPct);
+      if (item.resultPips != null) g.pips.push(item.resultPips);
     }
     return [...groups.entries()]
-      .map(([key, returns]) => ({
+      .map(([key, { returns, pips }]) => ({
         key,
         sampleSize: returns.length,
         winRate:    returns.filter((r) => r > 0).length / returns.length,
         avgReturn:  this._avg(returns),
+        avgPips:    pips.length > 0 ? Math.round(this._avg(pips) * 10) / 10 : 0,
       }))
       .sort((a, b) => b.sampleSize - a.sampleSize);
   }
@@ -336,7 +342,7 @@ export class ReliabilityScoringService {
         metadata:   true,
         emittedAt:  true,
         results: {
-          select:  { returnPct: true, candleOffset: true },
+          select:  { returnPct: true, resultPips: true, candleOffset: true },
           orderBy: { candleOffset: 'asc' },
           take: 1,
         },
@@ -373,6 +379,7 @@ export class ReliabilityScoringService {
         confidence:      e.confidence,
         patternType,
         returnPct,
+        resultPips:      e.results[0]?.resultPips ?? null,
         evaluated:       returnPct !== null,
         emittedAt:       e.emittedAt.toISOString(),
         session,

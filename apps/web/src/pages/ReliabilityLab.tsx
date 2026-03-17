@@ -146,6 +146,7 @@ function BreakdownTable({ title, rows }: { title: string; rows: ConditionBreakdo
             <th className="text-right py-0.5">N</th>
             <th className="text-right py-0.5">Win%</th>
             <th className="text-right py-0.5">AvgReturn</th>
+            <th className="text-right py-0.5">AvgPips</th>
           </tr>
         </thead>
         <tbody>
@@ -165,6 +166,11 @@ function BreakdownTable({ title, rows }: { title: string; rows: ConditionBreakdo
                 row.avgReturn > 0 ? 'text-green-400' : 'text-red-400'
               }`}>
                 {row.avgReturn.toFixed(4)}
+              </td>
+              <td className={`py-0.5 text-right ${
+                row.avgPips > 0 ? 'text-green-400' : row.avgPips < 0 ? 'text-red-400' : 'text-slate-500'
+              }`}>
+                {row.avgPips > 0 ? '+' : ''}{row.avgPips.toFixed(1)}
               </td>
             </tr>
           ))}

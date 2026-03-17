@@ -700,6 +700,7 @@ model PluginEventResult {
   returnPct    Float    @map("return_pct")
   mfe          Float                            // Maximum Favorable Excursion
   mae          Float                            // Maximum Adverse Excursion
+  resultPips   Float?   @map("result_pips")
   evaluatedAt  DateTime @default(now()) @map("evaluated_at")
 
   event PluginEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
