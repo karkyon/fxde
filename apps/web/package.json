@@ -10,13 +10,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fxde/types": "workspace:*",
     "@fxde/config": "workspace:*",
-    "@fxde/ui": "workspace:*",
     "@fxde/shared": "workspace:*",
+    "@fxde/types": "workspace:*",
+    "@fxde/ui": "workspace:*",
     "@tanstack/react-query": "^5.35.1",
     "@tanstack/react-query-devtools": "^5.35.1",
     "axios": "^1.6.8",
+    "lightweight-charts": "^5.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.23.1",

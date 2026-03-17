@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { LwcChart } from '../components/chart/LwcChart';
 import { useNavigate } from 'react-router-dom';
 import {
   useChartMeta,
@@ -1189,14 +1190,8 @@ export default function ChartPage() {
   });
   const [notes, setNotes] = useState({ setup: '', invalidation: '', memo: '' });
 
-  // ── visible range ─────────────────────────────────────────────────────
-  const [visibleRange, setVisibleRange] = useState<VisibleRange>({ start: 0, end: 0 });
-  const rangeInitializedRef = useRef(false);
-
   // ── crosshair ─────────────────────────────────────────────────────────
-  const [crosshair, setCrosshair] = useState<CrosshairState>({
-    visible: false, snapX: 0, rawY: 0, price: 0, index: 0,
-  });
+  const [ohlcCandle, setOhlcCandle] = useState<RawCandle | null>(null);
 
   // ── fullscreen ────────────────────────────────────────────────────────
   /**
@@ -1256,24 +1251,7 @@ export default function ChartPage() {
   const allCandles  = candles.data?.candles ?? [];
  
   // candles / symbol / timeframe 変化 → visible range 再初期化
-  useEffect(() => {
-    if (total > 0) {
-      setVisibleRange(initVisibleRange(total));
-      rangeInitializedRef.current = true;
-    }
-  }, [total, symbol, timeframe]);
 
-  // ── zoom / pan handlers ───────────────────────────────────────────────
-  const handleZoomIn    = useCallback(() => setVisibleRange((r) => zoomIn(r, total)), [total]);
-  const handleZoomOut   = useCallback(() => setVisibleRange((r) => zoomOut(r, total)), [total]);
-  const handleZoomReset = useCallback(() => setVisibleRange(initVisibleRange(total)), [total]);
-  const handlePanLeft   = useCallback(() => setVisibleRange((r) => pan(r, total, -Math.max(5, Math.floor((r.end - r.start) * 0.2)))), [total]);
-  const handlePanRight  = useCallback(() => setVisibleRange((r) => pan(r, total,  Math.max(5, Math.floor((r.end - r.start) * 0.2)))), [total]);
-  const handlePanDelta  = useCallback((delta: number) => setVisibleRange((r) => pan(r, total, delta)), [total]);
-  const handleWheelZoom = useCallback(
-    (factor: number, pivotFrac: number) => setVisibleRange((r) => zoomAroundX(r, total, factor, pivotFrac)),
-    [total],
-  );
 
   // ── toggles ───────────────────────────────────────────────────────────
   const toggleInd = (k: IndicatorToggle) => setIndToggles((p) => ({ ...p, [k]: !p[k] }));
@@ -1297,20 +1275,6 @@ export default function ChartPage() {
       mainScenario:     prediction.data.mainScenario,
     };
   }, [prediction.data]);
-
-  // OHLC 用 candle: hover 中はその candle、それ以外は最新 visible candle
-  const visibleCandles = useMemo(
-    () => allCandles.slice(visibleRange.start, visibleRange.end + 1),
-    [allCandles, visibleRange],
-  );
-  const ohlcCandle: RawCandle | null =
-    crosshair.visible && visibleCandles[crosshair.index]
-      ? visibleCandles[crosshair.index]
-      : visibleCandles.length > 0
-        ? visibleCandles[visibleCandles.length - 1]
-        : null;
-
-  const visibleCount = visibleRange.end - visibleRange.start + 1;
 
   // ── Fullscreen スタイル ───────────────────────────────────────────────
   // chartWorkspace: fullscreen 時は 100vw × 100vh の flex column
@@ -1418,26 +1382,15 @@ export default function ChartPage() {
           </div>
 
           {/* zoom / pan / fullscreen */}
+          <button
+            style={{ ...s.toolBtn, ...(isFullscreen ? s.toolBtnActive : {}) }}
+            onClick={toggleFullscreen}
+            title={isFullscreen ? 'Exit Fullscreen (ESC)' : 'Fullscreen'}>
+            {isFullscreen ? '⊠' : '⛶'}
+          </button>
           <div style={s.toolbarGroup}>
             <span style={s.toolbarLabel}>View</span>
-            <button style={s.toolBtn} onClick={handlePanLeft}   title="Pan Left">◀</button>
-            <button style={s.toolBtn} onClick={handleZoomIn}    title="Zoom In">＋</button>
-            <button style={s.toolBtn} onClick={handleZoomOut}   title="Zoom Out">－</button>
-            <button style={s.toolBtn} onClick={handlePanRight}  title="Pan Right">▶</button>
-            <button style={{ ...s.toolBtn, fontSize: 10 }} onClick={handleZoomReset}>Reset</button>
-            <button
-              style={{ ...s.toolBtn, ...(isFullscreen ? s.toolBtnActive : {}) }}
-              onClick={toggleFullscreen}
-              title={isFullscreen ? 'Exit Fullscreen (ESC)' : 'Fullscreen'}>
-              {isFullscreen ? '⊠' : '⛶'}
-            </button>
-            {total > 0 && (
-              <span style={{ ...s.toolbarLabel, fontFamily: 'monospace', fontSize: 10 }}>
-                {visibleCount}/{total}
-              </span>
-            )}
           </div>
-
           {/* indicator toggles */}
           <div style={s.toolbarGroup}>
             <span style={s.toolbarLabel}>Ind</span>
@@ -1521,11 +1474,10 @@ export default function ChartPage() {
           )}
 
           {/* chart SVG + crosshair layer */}
-          {total > 0 && rangeInitializedRef.current && (
+          {total > 0 && (
             <>
-              <CandleChart
+             <LwcChart
                 candles={allCandles}
-                visibleRange={visibleRange}
                 symbol={symbol}
                 timeframe={timeframe}
                 maToggles={maToggles}
@@ -1533,40 +1485,19 @@ export default function ChartPage() {
                 predictionData={predChartData}
                 patternMarkers={patterns.data?.markers ?? []}
                 showPatterns={ovToggles.pattern_labels}
-                onPanDelta={handlePanDelta}
-                onWheelZoom={handleWheelZoom}
-                onCrosshairChange={setCrosshair}
                 runtimeOverlays={filteredOverlays}
                 runtimeSignals={filteredSignals}
                 runtimeIndicators={filteredIndicators}
-              />
-              <CrosshairLayer
-                crosshair={crosshair}
-                visibleCandles={visibleCandles}
-                symbol={symbol}
-                timeframe={timeframe}
+                onCrosshairCandle={setOhlcCandle}
               />
             </>
           )}
         </div>
-
-        {/* ── navigator ── */}
-        {total > 0 && (
-          <Navigator
-            candles={allCandles}
-            visibleRange={visibleRange}
-            onRangeChange={(r) => setVisibleRange(clampVisibleRange(r, total))}
-          />
-        )}
-
         {/* ── lower info bar（通常時のみ） ── */}
         {!isFullscreen && (
           <div style={s.lowerPane}>
             <span style={s.muted}>
               Candles: {total} bars
-              {visibleRange.start !== 0 || visibleRange.end !== total - 1
-                ? ` — 表示: ${visibleCount} 本`
-                : ''}
               {total > 0 && (
                 <>
                   {' '}— 最終:{' '}

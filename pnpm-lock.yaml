@@ -39,6 +39,9 @@ importers:
       '@fxde/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@fxde/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@fxde/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -172,6 +175,9 @@ importers:
       '@fxde/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@fxde/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@fxde/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -187,6 +193,9 @@ importers:
       axios:
         specifier: ^1.6.8
         version: 1.13.6
+      lightweight-charts:
+        specifier: ^5.1.0
+        version: 5.1.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -229,6 +238,16 @@ importers:
         version: 5.4.21(@types/node@20.19.37)(terser@5.46.0)
 
   packages/config:
+    devDependencies:
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/shared:
+    dependencies:
+      '@fxde/types':
+        specifier: workspace:*
+        version: link:../types
     devDependencies:
       typescript:
         specifier: ^5.4.5
@@ -2228,6 +2247,9 @@ packages:
     resolution: {integrity: sha512-hMQ4CX1p1izmuLYyZqLMO/qGNw10wSv9QDCPfzXfyFrOaCSSoRfqE1Kf1s5an66J5JZC62NewG+mK49jOCtQew==}
     engines: {node: '>=4'}
 
+  fancy-canvas@2.1.0:
+    resolution: {integrity: sha512-nifxXJ95JNLFR2NgRV4/MxVP45G9909wJTEKz5fg/TZS20JJZA6hfgRVh/bC9bwl2zBtBNcYPjiBE4njQHVBwQ==}
+
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
@@ -2816,6 +2838,9 @@ packages:
 
   libphonenumber-js@1.12.39:
     resolution: {integrity: sha512-MW79m7HuOqBk8mwytiXYTMELJiBbV3Zl9Y39dCCn1yC8K+WGNSq1QGvzywbylp5vGShEztMScCWHX/XFOS0rXg==}
+
+  lightweight-charts@5.1.0:
+    resolution: {integrity: sha512-jEAYR4ODYeyNZcWUigsoLTl52rbPmgXnvd5FLIv/ZoA/2sSDw63YKnef8n4yhzum7W926yHeFwlm7ididKb7YQ==}
 
   lines-and-columns@1.2.4:
     resolution: {integrity: sha512-7ylylesZQ/PV29jhEDl3Ufjo6ZX7gCqJr5F7PKrqc93v7fzSymt1BpwEU8nAUXs8qzzvqhbjhK5QZg6Mt/HkBg==}
@@ -6076,6 +6101,8 @@ snapshots:
       iconv-lite: 0.4.24
       tmp: 0.0.33
 
+  fancy-canvas@2.1.0: {}
+
   fast-deep-equal@3.1.3: {}
 
   fast-glob@3.3.3:
@@ -6939,6 +6966,10 @@ snapshots:
       type-check: 0.4.0
 
   libphonenumber-js@1.12.39: {}
+
+  lightweight-charts@5.1.0:
+    dependencies:
+      fancy-canvas: 2.1.0
 
   lines-and-columns@1.2.4: {}
 
