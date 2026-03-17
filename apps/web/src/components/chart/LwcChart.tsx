@@ -224,6 +224,18 @@ export function LwcChart({
     });
   }, [candles, maToggles]);
 
+  // ── 初回 visible range 通知 ────────────────────────────────
+  // bridge 生成後 + candles セット後に必ず1回 onVisibleRangeChange を発火させる。
+  // requestAnimationFrame で LWC の描画完了を待ってから取得する。
+  useEffect(() => {
+    if (!bridge || candles.length === 0 || !onVisibleRangeChange) return;
+    const id = requestAnimationFrame(() => {
+      onVisibleRangeChange(bridge.getVisibleTimeRange());
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [bridge, candles, onVisibleRangeChange]);
+  
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
