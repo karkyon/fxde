@@ -29,7 +29,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService }       from '../../prisma/prisma.service';
 import { ProviderRegistry }    from './provider.registry';
-import type { CanonicalTimeframe } from '@fxde/types';
+import type { CanonicalTimeframe, CanonicalCandle } from '@fxde/types';
 
 // ── バックフィル対象（維持）──────────────────────────────────────────────
 const BACKFILL_SYMBOLS    = ['EURUSD', 'USDJPY', 'GBPUSD'];
@@ -235,6 +235,41 @@ export class MarketDataService {
     }
 
     this.logger.log(`[${provider.providerId}] バックフィル完了`);
+  }
+
+    /**
+   * Chart API 向け candle 取得
+   * active provider から直接 fetchRange() してレスポンス用データを返す
+   * DBを経由しない（provider → chart の直接ルート）
+   * シグネチャ: (symbol, timeframe, limit) => Promise<CanonicalCandle[]>
+   */
+  async getCandles(
+    symbol:    string,
+    timeframe: string,
+    limit:     number,
+  ): Promise<CanonicalCandle[]> {
+    const provider = this.registry.getActive();
+
+    if (!provider.isConfigured()) {
+      this.logger.debug(
+        `[${provider.providerId}] 未設定 → getCandles skip ${symbol}/${timeframe}`,
+      );
+      return [];
+    }
+
+    const now  = new Date().toISOString();
+    const from = calcFrom(timeframe, limit);
+
+    const candles = await provider.fetchRange({
+      symbol,
+      timeframe: timeframe as CanonicalTimeframe,
+      from,
+      to:    now,
+      limit,
+    });
+
+    // isComplete === false のバーは除外（未確定足をチャートに出さない）
+    return candles.filter((c) => c.isComplete !== false);
   }
 
   /**

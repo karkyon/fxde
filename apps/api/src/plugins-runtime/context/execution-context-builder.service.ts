@@ -61,7 +61,7 @@ export class ExecutionContextBuilderService {
         });
         higherCandles = htfResponse.candles;
         this.logger.debug(
-          `[ExecutionContextBuilder] HTF candles fetched: ${symbol}/${htf} n=${higherCandles.length}`,
+          `[ExecutionContextBuilder] HTF candles fetched: ${symbol}/${htf} n=${higherCandles?.length}`,
         );
       } catch (err) {
         // 上位足取得失敗は higherTrend=unknown に自然に落ちる。runtime を止めない。

@@ -20,6 +20,7 @@
 
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MarketDataService } from '../market-data/market-data.service';
 import type {
   ChartMetaQuery,
   ChartCandlesQuery,
@@ -97,7 +98,10 @@ const STUB_PREDICTION_OVERLAY = {
 
 @Injectable()
 export class ChartService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma:      PrismaService,
+    private readonly marketData:  MarketDataService,
+  ) {}
 
   // ── GET /api/v1/chart/meta ──────────────────────────────────────────────
   // SPEC_v51_part11 §3.1
@@ -114,31 +118,24 @@ export class ChartService {
 
   // ── GET /api/v1/chart/candles ───────────────────────────────────────────
   // SPEC_v51_part11 §3.2
-  // market_candles テーブルから取得。空の場合は空配列。
   async getCandles(query: ChartCandlesQuery) {
-    const candles = await this.prisma.marketCandle.findMany({
-      where: {
-        symbol:    query.symbol,
-        timeframe: query.timeframe as never,
-        ...(query.before ? { time: { lt: new Date(query.before) } } : {}),
-      },
-      orderBy: { time: 'desc' },
-      take:    query.limit,
-    });
+    const candles = await this.marketData.getCandles(
+      query.symbol,
+      query.timeframe,
+      query.limit,
+    );
 
     return {
       symbol:    query.symbol,
       timeframe: query.timeframe,
-      candles:   candles
-        .sort((a, b) => a.time.getTime() - b.time.getTime())
-        .map((c) => ({
-          time:   c.time.toISOString(),
-          open:   Number(c.open),
-          high:   Number(c.high),
-          low:    Number(c.low),
-          close:  Number(c.close),
-          volume: Number(c.volume),
-        })),
+      candles:   candles.map((c) => ({
+        time:   c.time,
+        open:   c.open,
+        high:   c.high,
+        low:    c.low,
+        close:  c.close,
+        volume: c.volume ?? 0,
+      })),
       cachedAt: null,
     };
   }

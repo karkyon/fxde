@@ -202,7 +202,13 @@ async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
       `&count=${count}`;
 
     const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
+      headers: {
+        'Accept':          'application/json, text/plain, */*',
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer':         'https://www.dukascopy.com/',
+        'Origin':          'https://www.dukascopy.com',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
     });
 
     if (!res.ok) {
