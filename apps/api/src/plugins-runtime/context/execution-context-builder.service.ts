@@ -79,7 +79,7 @@ export class ExecutionContextBuilderService {
       nowIso:            new Date().toISOString(),
       candles:           candlesResponse.candles,
       higherCandles,
-      indicators:        indicatorsResponse.indicators as Record<string, unknown>,
+      indicators:        indicatorsResponse.indicators as unknown as Record<string, unknown> | null,
       patternMarkers:    [],
       activeTrades:      [],
       predictionOverlay: null,
