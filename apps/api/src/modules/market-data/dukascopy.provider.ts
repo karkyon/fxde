@@ -28,6 +28,7 @@
  *   - service 層・chart 層への Dukascopy 固有処理の漏洩
  *   - class-validator 使用
  *   - OandaProvider のロジックコピー
+ *   - lastOneMinuteCandles / start / end / jsonp / &_ パラメータの使用
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -40,18 +41,19 @@ import type {
 } from './market-data-provider.interface';
 
 // ── Dukascopy granularity 変換テーブル ────────────────────────────────────
-// Dukascopy free service の granularity は分単位（minutes per bar）
-const PATH_MAP: Record<string, string> = {
-  M1:  'api/lastOneMinuteCandles',
-  M5:  'api/lastOneMinuteCandles',
-  M15: 'api/lastOneMinuteCandles',
-  M30: 'api/lastOneMinuteCandles',
-  H1:  'api/hourly',
-  H4:  'api/hourly',
-  H8:  'api/hourly',
-  D1:  'api/daily',
-  W1:  'api/daily',
-  MN:  'api/daily',
+// chart.json の granularity は分単位整数（minutes per bar）
+// 禁止: lastOneMinuteCandles / hourly / daily の旧 path は使用しない
+const GRANULARITY_MAP: Record<string, number> = {
+  M1:   1,
+  M5:   5,
+  M15:  15,
+  M30:  30,
+  H1:   60,
+  H4:   240,
+  H8:   480,
+  D1:   1440,
+  W1:   10080,
+  MN:   43200,
 };
 
 // ── 時間足 1 本あたりのミリ秒 ─────────────────────────────────────────────
@@ -119,7 +121,7 @@ export class DukascopyProvider implements MarketDataProvider {
 
   // ── MarketDataProvider: supportsTimeframe ─────────────────────────────
   supportsTimeframe(tf: CanonicalTimeframe): boolean {
-    return tf in PATH_MAP;
+    return tf in GRANULARITY_MAP;
   }
 
   // ── MarketDataProvider: backfillCount ─────────────────────────────────
@@ -159,13 +161,13 @@ export class DukascopyProvider implements MarketDataProvider {
 
   // ── MarketDataProvider: fetchRange ────────────────────────────────────
   /**
-   * 指定 date-range のローソク足を取得する
+   * 最新 count 本のローソク足を取得する（chart.json エンドポイント使用）
    *
-   * Dukascopy は from/to ネイティブ対応。
-   * MarketDataService の calcFrom() が生成した from/to をそのまま使用できる。
-   * （calcFrom() は OANDA 用近似計算だが、渡された from/to の解釈は provider 非依存）
+   * 使用 API: chart.json + time_direction=P + count
+   * 禁止: start / end / lastOneMinuteCandles / jsonp / &_
    *
-   * SPEC_NOTES §2.5: Dukascopy は「from/to 正本」
+   * chart.json は time_direction=P（Past）+ count で末尾 count 本を返す。
+   * start/end を付与すると count が無視され空レスポンスになるケースがある。
    */
   async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
     if (!this.isConfigured()) {
@@ -176,20 +178,26 @@ export class DukascopyProvider implements MarketDataProvider {
       return [];
     }
 
-    const path = PATH_MAP[input.timeframe];
-    if (!path) {
+    const granularity = GRANULARITY_MAP[input.timeframe];
+    if (granularity === undefined) {
       this.logger.warn(`[Dukascopy] 未対応 timeframe: ${input.timeframe}`);
       return [];
     }
 
-    const instrument = input.symbol.toUpperCase(); // EURUSD のまま使用
+    const instrument = this.toInstrument(input.symbol); // EURUSD → EUR/USD
     const count      = input.limit ?? 500;
 
+    // chart.json + count + time_direction=P のみ使用
+    // 禁止: &start= / &end= / &jsonp= / &_
     const url =
-      `${this.baseUrl}/?path=${path}` +
-      `&instrument=${instrument}` +
+      `${this.baseUrl}/?path=chart.json` +
+      `&instrument=${encodeURIComponent(instrument)}` +
       `&offer_side=B` +
+      `&granularity=${granularity}` +
+      `&time_direction=P` +
       `&count=${count}`;
+
+    this.logger.debug(`[Dukascopy] fetchRange URL: ${url}`);
 
     const res = await fetch(url, {
       headers: {
@@ -208,7 +216,7 @@ export class DukascopyProvider implements MarketDataProvider {
 
     // 空レスポンス防御
     const text = await res.text();
-    if (!text || text.length === 0) {
+    if (!text || text.trim().length === 0) {
       this.logger.warn(`[Dukascopy] 空レスポンス: ${url}`);
       return [];
     }
@@ -217,7 +225,7 @@ export class DukascopyProvider implements MarketDataProvider {
     try {
       json = JSON.parse(text);
     } catch {
-      this.logger.warn(`[Dukascopy] JSON parse失敗: ${text.slice(0, 100)}`);
+      this.logger.warn(`[Dukascopy] JSON parse 失敗: ${text.slice(0, 100)}`);
       return [];
     }
 
@@ -227,6 +235,8 @@ export class DukascopyProvider implements MarketDataProvider {
       );
       return [];
     }
+
+    this.logger.debug(`[Dukascopy] 取得本数: ${json.length}`);
 
     // isComplete 判定の基準時刻は fetch 開始時点で固定（ループ内でズレない）
     const now = Date.now();
@@ -250,7 +260,7 @@ export class DukascopyProvider implements MarketDataProvider {
         timeframe: 'H1',
         from:      new Date(Date.now() - 7 * 24 * 3_600_000).toISOString(),
         to:        new Date().toISOString(),
-        limit:     1,
+        limit:     5,
       });
       return result.length > 0 ? 'healthy' : 'degraded';
     } catch (err) {
