@@ -648,6 +648,11 @@ export type CanonicalTimeframe = Timeframe
  * CanonicalCandle
  * 全 provider のレスポンスを正規化した内部共通形式
  * volume は provider によって取得不能な場合があるため null 許容
+ * isComplete: 確定済みバーか否か。
+ *   - OANDA: complete フラグ由来（fetchCandles 内でフィルタ後に true 固定）
+ *   - Dukascopy: bar.time + tfMs < now で判定（Provider 内責務）
+ *   - 省略時は true 扱い（後方互換）
+ *   研究用途・バックフィルでは isComplete !== false のバーのみ DB 保存すること
  */
 export interface CanonicalCandle {
   provider:        MarketProviderId
@@ -659,5 +664,6 @@ export interface CanonicalCandle {
   low:             number
   close:           number
   volume:          number | null
+  isComplete?:     boolean         // 確定済みバーか（省略時 = true 扱い）
   sourceTimeRaw?:  string | null   // provider 独自の生タイムスタンプ（任意）
 }

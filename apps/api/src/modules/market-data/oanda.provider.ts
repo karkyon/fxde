@@ -18,7 +18,13 @@
  *   - MarketDataProvider interface を implements
  *   - providerId / supportsTimeframe / fetchLatestBar / fetchRange / healthCheck を追加
  *   - fetchLatestBar / fetchRange は既存 fetchCandles を内部利用（重複ロジック禁止）
- *   - 既存メソッド（fetchCandles / backfillCount / toInstrument / isConfigured）は全て維持
+ *   - 既存メソッド（fetchCandles / toInstrument / isConfigured）は全て維持
+ *
+ * Phase 1.5 変更:
+ *   - backfillCount のシグネチャを interface に合わせる（string → CanonicalTimeframe）
+ *     CanonicalTimeframe = Timeframe なので実行時互換あり
+ *   - toCanonical に isComplete: true を付与
+ *     fetchCandles は .filter((c) => c.complete) 済みのため常に確定足
  */
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -44,11 +50,12 @@ const GRANULARITY_MAP: Record<string, string> = {
   MN:  'M',
 };
 
-// ── バックフィル本数 ──────────────────────────────────────────────────────
+// ── バックフィル本数（時間足別・OANDA特性に合わせた値）──────────────────
 const BACKFILL_COUNT: Record<string, number> = {
-  M5: 500, M15: 500, M30: 500,
-  H1: 500, H4:  500, H8:  500,
-  D1: 500, W1:  300, MN:  200,
+  M1:  500,
+  M5:  500, M15: 500, M30: 500,
+  H1:  500, H4:  500, H8:  500,
+  D1:  500, W1:  300, MN:  200,
 };
 
 // ── 既存 OandaCandle 型（内部利用・後方互換維持）──────────────────────────
@@ -95,7 +102,8 @@ export class OandaProvider implements MarketDataProvider {
 
   /**
    * candles 取得（最新 count 本）
-   * 既存メソッド維持。MarketDataService / バックフィル / fetchLatestBar / fetchRange から利用する。
+   * 既存メソッド維持。fetchLatestBar / fetchRange の内部利用元。
+   * .filter((c) => c.complete) 済み → 返却は全て確定足
    */
   async fetchCandles(
     symbol:    string,
@@ -139,7 +147,7 @@ export class OandaProvider implements MarketDataProvider {
     };
 
     return (json.candles ?? [])
-      .filter((c) => c.complete)
+      .filter((c) => c.complete)          // 確定足のみ
       .map((c) => ({
         time:   c.time,
         open:   parseFloat(c.mid.o),
@@ -150,16 +158,20 @@ export class OandaProvider implements MarketDataProvider {
       }));
   }
 
-  /** バックフィル用の本数を返す（既存メソッド維持）*/
-  backfillCount(timeframe: string): number {
-    return BACKFILL_COUNT[timeframe] ?? 500;
-  }
-
-  // ── MarketDataProvider interface 実装（Phase 1 追加）──────────────────
+  // ── MarketDataProvider interface 実装 ─────────────────────────────────
 
   /** MarketDataProvider: timeframe サポート確認 */
   supportsTimeframe(tf: CanonicalTimeframe): boolean {
     return tf in GRANULARITY_MAP;
+  }
+
+  /**
+   * MarketDataProvider.backfillCount（Phase 1.5: interface 実装として整合）
+   * シグネチャを string → CanonicalTimeframe に変更。CanonicalTimeframe = Timeframe なので互換あり。
+   * OANDA の特性（count ベース API）に合わせた時間足別本数を返す
+   */
+  backfillCount(timeframe: CanonicalTimeframe): number {
+    return BACKFILL_COUNT[timeframe] ?? 500;
   }
 
   /**
@@ -169,7 +181,7 @@ export class OandaProvider implements MarketDataProvider {
   async fetchLatestBar(input: FetchLatestBarInput): Promise<CanonicalCandle | null> {
     const candles = await this.fetchCandles(input.symbol, input.timeframe, 1);
     if (candles.length === 0) return null;
-    // complete フィルタ済み配列の最後の1本が最新
+    // complete フィルタ済み配列の最後の1本が最新確定足
     const c = candles[candles.length - 1];
     return this.toCanonical(input.symbol, input.timeframe, c);
   }
@@ -177,7 +189,7 @@ export class OandaProvider implements MarketDataProvider {
   /**
    * MarketDataProvider.fetchRange
    * fetchCandles を内部利用（重複ロジック禁止）
-   * OANDA は count ベース取得のため、limit で count を指定し from/to でフィルタする
+   * OANDA は count ベース取得のため limit で count を指定し from/to でフィルタする
    */
   async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
     const count   = input.limit ?? 500;
@@ -210,22 +222,27 @@ export class OandaProvider implements MarketDataProvider {
 
   // ── private helper ────────────────────────────────────────────────────
 
-  /** OandaCandle → CanonicalCandle 変換 */
+  /**
+   * OandaCandle → CanonicalCandle 変換
+   * Phase 1.5: isComplete: true を付与
+   * 根拠: fetchCandles が .filter((c) => c.complete) 済みのため常に確定足
+   */
   private toCanonical(
     symbol:    string,
     timeframe: string,
     c:         OandaCandle,
   ): CanonicalCandle {
     return {
-      provider:  this.providerId,
+      provider:   this.providerId,
       symbol,
-      timeframe: timeframe as CanonicalTimeframe,
-      time:      c.time,
-      open:      c.open,
-      high:      c.high,
-      low:       c.low,
-      close:     c.close,
-      volume:    c.volume,
+      timeframe:  timeframe as CanonicalTimeframe,
+      time:       c.time,
+      open:       c.open,
+      high:       c.high,
+      low:        c.low,
+      close:      c.close,
+      volume:     c.volume,
+      isComplete: true,   // Phase 1.5 追加: OANDA は complete フィルタ済みなので常に true
     };
   }
 }

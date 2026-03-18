@@ -13,7 +13,13 @@
  *   - OandaProvider 直接依存を削除
  *   - ProviderRegistry 経由で active provider を取得するよう変更
  *   - syncCandles / runBackfill / checkConnection のシグネチャは維持
- *   - upsert の source カラムは provider.providerId を使用（'oanda' 固定から汎用化）
+ *   - upsert の source カラムは provider.providerId を使用
+ *
+ * Phase 1.5 変更:
+ *   - runBackfill の count 固定 500 を provider.backfillCount(timeframe) 経由に変更
+ *   - syncCandles の count も syncCount 定数で明示（意図を明確化）
+ *   - isComplete !== false の確認を upsert 前に追加
+ *     （CanonicalCandle.isComplete が明示的に false のバーは保存しない）
  *
  * 変更禁止:
  *   - メソッドシグネチャ（syncCandles / runBackfill / checkConnection）
@@ -27,11 +33,16 @@ import type { CanonicalTimeframe } from '@fxde/types';
 
 // ── バックフィル対象（維持）──────────────────────────────────────────────
 const BACKFILL_SYMBOLS    = ['EURUSD', 'USDJPY', 'GBPUSD'];
-const BACKFILL_TIMEFRAMES = ['M5', 'M15', 'M30', 'H1', 'H4', 'H8', 'D1', 'W1', 'MN'];
+const BACKFILL_TIMEFRAMES: CanonicalTimeframe[] = [
+  'M5', 'M15', 'M30', 'H1', 'H4', 'H8', 'D1', 'W1', 'MN',
+];
+
+/** 定期同期（syncCandles）での取得本数 */
+const SYNC_COUNT = 100;
 
 /**
  * 時間足 1 本あたりのミリ秒
- * fetchRange の from 計算（最新 N 本相当）に使用する
+ * syncCandles の fetchRange.from 計算に使用する
  */
 const TF_MS: Record<string, number> = {
   M1:  60_000,
@@ -46,7 +57,12 @@ const TF_MS: Record<string, number> = {
   MN:  30  * 24 * 60 * 60_000,
 };
 
-/** 「最新 count 本」相当の from（余裕係数 1.5 で過去を広めに取る）*/
+/**
+ * 「最新 count 本」相当の from を計算する
+ * 余裕係数 1.5: 週末・祝日・データ欠損を考慮した過去方向への余裕
+ * OANDA は count ベース API のため本関数で range 変換する
+ * Dukascopy（Phase 2）は date-range native なので本関数は不要になる
+ */
 function calcFrom(timeframe: string, count: number): string {
   const msPerBar = TF_MS[timeframe] ?? TF_MS['H1'];
   return new Date(Date.now() - msPerBar * count * 1.5).toISOString();
@@ -76,16 +92,15 @@ export class MarketDataService {
       return 0;
     }
 
-    const count = 100; // 定期同期は最新100本
-    const now   = new Date().toISOString();
-    const from  = calcFrom(timeframe, count);
+    const now  = new Date().toISOString();
+    const from = calcFrom(timeframe, SYNC_COUNT);
 
     const candles = await provider.fetchRange({
       symbol,
       timeframe: timeframe as CanonicalTimeframe,
       from,
       to:    now,
-      limit: count,
+      limit: SYNC_COUNT,
     });
 
     if (candles.length === 0) {
@@ -95,6 +110,9 @@ export class MarketDataService {
 
     let upserted = 0;
     for (const c of candles) {
+      // Phase 1.5: isComplete が明示的に false のバーは保存しない
+      if (c.isComplete === false) continue;
+
       await this.prisma.marketCandle.upsert({
         where: {
           symbol_timeframe_time: {
@@ -135,6 +153,9 @@ export class MarketDataService {
    * 3ペア × 9時間足 を順次実行
    * アプリ起動時 or 手動コマンドから呼び出す
    * シグネチャ維持: () => Promise<void>
+   *
+   * Phase 1.5 変更:
+   *   count を 500 固定 → provider.backfillCount(timeframe) 経由に変更
    */
   async runBackfill(): Promise<void> {
     const provider = this.registry.getActive();
@@ -149,15 +170,14 @@ export class MarketDataService {
     for (const symbol of BACKFILL_SYMBOLS) {
       for (const timeframe of BACKFILL_TIMEFRAMES) {
         try {
-          // バックフィル本数: OandaProvider の既存 backfillCount() に相当する値を TF_MS で計算
-          // Phase 2 以降は provider ごとに backfillCount を持たせることを検討する
-          const count = 500; // バックフィルはデフォルト500本
+          // Phase 1.5: provider の特性に応じた本数を取得（固定 500 廃止）
+          const count = provider.backfillCount(timeframe);
           const now   = new Date().toISOString();
           const from  = calcFrom(timeframe, count);
 
           const candles = await provider.fetchRange({
             symbol,
-            timeframe: timeframe as CanonicalTimeframe,
+            timeframe,
             from,
             to:    now,
             limit: count,
@@ -165,6 +185,9 @@ export class MarketDataService {
 
           let upserted = 0;
           for (const c of candles) {
+            // Phase 1.5: isComplete が明示的に false のバーは保存しない
+            if (c.isComplete === false) continue;
+
             await this.prisma.marketCandle.upsert({
               where: {
                 symbol_timeframe_time: {
@@ -196,7 +219,9 @@ export class MarketDataService {
             upserted++;
           }
 
-          this.logger.log(`[${provider.providerId}] バックフィル ${symbol}/${timeframe}: ${upserted}本`);
+          this.logger.log(
+            `[${provider.providerId}] バックフィル ${symbol}/${timeframe}: ${upserted}本 (count=${count})`,
+          );
 
           // レート制限対策: 100ms待機
           await new Promise((r) => setTimeout(r, 100));
