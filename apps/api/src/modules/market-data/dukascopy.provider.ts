@@ -41,17 +41,17 @@ import type {
 
 // ── Dukascopy granularity 変換テーブル ────────────────────────────────────
 // Dukascopy free service の granularity は分単位（minutes per bar）
-const GRANULARITY_MAP: Record<string, number> = {
-  M1:   1,
-  M5:   5,
-  M15:  15,
-  M30:  30,
-  H1:   60,
-  H4:   240,
-  H8:   480,
-  D1:   1440,
-  W1:   10080,
-  MN:   43200,
+const PATH_MAP: Record<string, string> = {
+  M1:  'api/lastOneMinuteCandles',
+  M5:  'api/lastOneMinuteCandles',
+  M15: 'api/lastOneMinuteCandles',
+  M30: 'api/lastOneMinuteCandles',
+  H1:  'api/hourly',
+  H4:  'api/hourly',
+  H8:  'api/hourly',
+  D1:  'api/daily',
+  W1:  'api/daily',
+  MN:  'api/daily',
 };
 
 // ── 時間足 1 本あたりのミリ秒 ─────────────────────────────────────────────
@@ -119,7 +119,7 @@ export class DukascopyProvider implements MarketDataProvider {
 
   // ── MarketDataProvider: supportsTimeframe ─────────────────────────────
   supportsTimeframe(tf: CanonicalTimeframe): boolean {
-    return tf in GRANULARITY_MAP;
+    return tf in PATH_MAP;
   }
 
   // ── MarketDataProvider: backfillCount ─────────────────────────────────
@@ -167,7 +167,7 @@ export class DukascopyProvider implements MarketDataProvider {
    *
    * SPEC_NOTES §2.5: Dukascopy は「from/to 正本」
    */
-async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
+  async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
     if (!this.isConfigured()) {
       this.logger.warn(
         'DUKASCOPY_ENABLED 未設定 → skip。' +
@@ -176,29 +176,19 @@ async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
       return [];
     }
 
-    const granularity = GRANULARITY_MAP[input.timeframe];
-    if (granularity === undefined) {
+    const path = PATH_MAP[input.timeframe];
+    if (!path) {
       this.logger.warn(`[Dukascopy] 未対応 timeframe: ${input.timeframe}`);
       return [];
     }
 
-    const instrument = this.toInstrument(input.symbol);
-    const startMs    = new Date(input.from).getTime();
-    const endMs      = new Date(input.to).getTime();
+    const instrument = input.symbol.toUpperCase(); // EURUSD のまま使用
     const count      = input.limit ?? 500;
 
-    // Note: &jsonp= および &_ は使用しない
-    // - chart.json エンドポイントはパラメータ無しで純 JSON 配列を返す
-    // - &jsonp= は JSONP ラッパーを誘発するリスクがあり res.json() が失敗する
-    // - &_ はサーバーサイドでは不要（ブラウザキャッシュバスターパターン）
     const url =
-      `${this.baseUrl}/?path=chart.json` +
-      `&instrument=${encodeURIComponent(instrument)}` +
+      `${this.baseUrl}/?path=${path}` +
+      `&instrument=${instrument}` +
       `&offer_side=B` +
-      `&granularity=${granularity}` +
-      `&time_direction=P` +
-      `&start=${startMs}` +
-      `&end=${endMs}` +
       `&count=${count}`;
 
     const res = await fetch(url, {
@@ -216,8 +206,20 @@ async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
       throw new Error(`Dukascopy API error ${res.status}: ${body}`);
     }
 
-    // レスポンス: [[timestamp_ms, open, high, low, close, volume], ...]
-    const json = await res.json() as DukascopyRawCandle[];
+    // 空レスポンス防御
+    const text = await res.text();
+    if (!text || text.length === 0) {
+      this.logger.warn(`[Dukascopy] 空レスポンス: ${url}`);
+      return [];
+    }
+
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      this.logger.warn(`[Dukascopy] JSON parse失敗: ${text.slice(0, 100)}`);
+      return [];
+    }
 
     if (!Array.isArray(json)) {
       this.logger.warn(
