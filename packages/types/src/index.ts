@@ -622,3 +622,42 @@ export interface PatternEventContext {
     qualityScore: number | null
   }
 }
+
+// ══════════════════════════════════════════
+// Market Data Provider 型
+// Provider Adapter 構造
+// 参照: FXDE_OANDA_TO_PROVIDER_ADAPTER_DETAILED_DESIGN §5
+// ══════════════════════════════════════════
+
+/**
+ * Market Provider ID
+ * 将来: 'twelve_data' | 'alpha_vantage' | 'stooq' を追加する
+ */
+export type MarketProviderId =
+  | 'oanda'
+  | 'dukascopy'
+
+/**
+ * CanonicalTimeframe
+ * 既存 Timeframe の alias。新規 enum を作らない。
+ * 外部 provider ごとのフォーマット差異は各 Provider 内部で吸収する。
+ */
+export type CanonicalTimeframe = Timeframe
+
+/**
+ * CanonicalCandle
+ * 全 provider のレスポンスを正規化した内部共通形式
+ * volume は provider によって取得不能な場合があるため null 許容
+ */
+export interface CanonicalCandle {
+  provider:        MarketProviderId
+  symbol:          string
+  timeframe:       CanonicalTimeframe
+  time:            string          // ISO8601 UTC
+  open:            number
+  high:            number
+  low:             number
+  close:           number
+  volume:          number | null
+  sourceTimeRaw?:  string | null   // provider 独自の生タイムスタンプ（任意）
+}

@@ -29,6 +29,7 @@ import type { Timeframe } from '@fxde/types';
 import type { PatternMarker } from '../lib/api';
 import { useChartPluginRuntime } from '../hooks/useChartPluginRuntime';
 import type { RuntimeOverlay, RuntimeSignal, RuntimeIndicator } from '@fxde/types';
+import { IndicatorPickerModal } from '../components/chart/IndicatorPickerModal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Format utilities
@@ -156,6 +157,7 @@ export default function ChartPage() {
     entry_sl_tp: true, prediction: false, trade_markers: false, pattern_labels: true,
   });
   const [pluginVisibility, setPluginVisibility] = useState<Record<string, boolean>>({});
+  const [isIndicatorModalOpen, setIndicatorModalOpen] = useState(false);
   const togglePlugin = useCallback((key: string) => {
     setPluginVisibility(prev => ({ ...prev, [key]: prev[key] !== false ? false : true }));
   }, []);
@@ -398,6 +400,28 @@ export default function ChartPage() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Indicators / Plugins モーダル開閉 */}
+          <div style={s.toolbarGroup}>
+            <button
+              style={{
+                ...s.toolBtn,
+                ...((pluginRuntime.data?.pluginStatuses ?? []).length > 0
+                  ? { color: '#60a5fa', borderColor: '#60a5fa66', background: 'rgba(96,165,250,0.06)' }
+                  : {}),
+              }}
+              onClick={() => setIndicatorModalOpen(true)}
+              title="Indicators & Plugins">
+              📐 Indicators
+              {(pluginRuntime.data?.pluginStatuses ?? []).length > 0 && (
+                <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.75 }}>
+                  ({(pluginRuntime.data?.pluginStatuses ?? []).filter(
+                    (ps) => pluginVisibility[ps.pluginKey] !== false
+                  ).length}/{(pluginRuntime.data?.pluginStatuses ?? []).length})
+                </span>
+              )}
+            </button>
           </div>
         </section>
 

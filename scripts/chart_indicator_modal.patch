@@ -1,0 +1,61 @@
+--- a/apps/web/src/pages/Chart.tsx
++++ b/apps/web/src/pages/Chart.tsx
+@@ -30,6 +30,7 @@ import { useChartPluginRuntime } from '../hooks/useChartPluginRuntime';
+ import type { RuntimeOverlay, RuntimeSignal, RuntimeIndicator } from '@fxde/types';
++import { IndicatorPickerModal } from '../components/chart/IndicatorPickerModal';
+ 
+ // ─────────────────────────────────────────────────────────────────────────────
+ // Format utilities
+@@ -48,6 +49,7 @@ export default function ChartPage() {
+   const [pluginVisibility, setPluginVisibility] = useState<Record<string, boolean>>({});
+   const togglePlugin = useCallback((key: string) => {
+     setPluginVisibility(prev => ({ ...prev, [key]: prev[key] !== false ? false : true }));
+   }, []);
++  const [isIndicatorModalOpen, setIndicatorModalOpen] = useState(false);
+   const [maToggles, setMAToggles] = useState<Record<MAToggle, boolean>>({
+     SMA5: false, SMA20: true, SMA50: false, EMA20: false, EMA200: false, BB20: false,
+   });
+@@ -133,6 +135,23 @@ export default function ChartPage() {
+                     : 'Patterns'}
+                 </button>
+               );
+             })}
+           </div>
++
++          {/* Indicators / Plugins モーダル開閉 */}
++          <div style={s.toolbarGroup}>
++            <button
++              style={{
++                ...s.toolBtn,
++                ...((pluginRuntime.data?.pluginStatuses ?? []).length > 0
++                  ? { color: '#60a5fa', borderColor: '#60a5fa66', background: 'rgba(96,165,250,0.06)' }
++                  : {}),
++              }}
++              onClick={() => setIndicatorModalOpen(true)}
++              title="Indicators & Plugins">
++              📐 Indicators
++              {(pluginRuntime.data?.pluginStatuses ?? []).length > 0 && (
++                <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.75 }}>
++                  ({(pluginRuntime.data?.pluginStatuses ?? []).filter(
++                    (ps) => pluginVisibility[ps.pluginKey] !== false
++                  ).length}/{(pluginRuntime.data?.pluginStatuses ?? []).length})
++                </span>
++              )}
++            </button>
++          </div>
+         </section>
+ 
+         {/* main plot area */}
+@@ -200,6 +219,14 @@ export default function ChartPage() {
+       </div>{/* end chartWorkspace */}
+ 
++      {/* Indicator Picker Modal */}
++      <IndicatorPickerModal
++        open={isIndicatorModalOpen}
++        onClose={() => setIndicatorModalOpen(false)}
++        pluginStatuses={pluginRuntime.data?.pluginStatuses ?? []}
++        pluginVisibility={pluginVisibility}
++        onTogglePlugin={togglePlugin}
++      />
++
+       <PluginRuntimeStatusBar statuses={pluginRuntime.data?.pluginStatuses ?? []} />
