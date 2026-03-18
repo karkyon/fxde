@@ -19,15 +19,14 @@
  *   - runBackfill の count 固定 500 を provider.backfillCount(timeframe) 経由に変更
  *   - syncCandles の count も syncCount 定数で明示（意図を明確化）
  *   - isComplete !== false の確認を upsert 前に追加
- *     （CanonicalCandle.isComplete が明示的に false のバーは保存しない）
  *
- * Phase 2 変更（Task2-1 対応）:
+ * STEP 3 変更（2026-03-19）:
  *   - IndicatorEngineService を inject
  *   - syncIndicators(symbol, timeframe) を追加
- *     → market_candles テーブルから最新 250 本を取得
- *     → IndicatorEngineService.calculate() で計算
- *     → indicator_cache テーブルに upsert
- *   - 既存の public method シグネチャ（syncCandles / runBackfill / checkConnection / getCandles）は変更しない
+ *     取得順: orderBy time DESC + take N → reverse() で昇順変換
+ *     理由: ASC + take N では最古 N 本を取得してしまう。
+ *           DESC で最新 N 本を取得してから reverse() で昇順にして
+ *           indicator-engine に渡すことで「最新 N 本での計算」を保証する。
  *
  * 変更禁止:
  *   - メソッドシグネチャ（syncCandles / runBackfill / checkConnection / getCandles）
@@ -49,13 +48,13 @@ const BACKFILL_TIMEFRAMES: CanonicalTimeframe[] = [
 /** 定期同期（syncCandles）での取得本数 */
 const SYNC_COUNT = 100;
 
-/** indicator 計算に使用する market_candles 取得本数 */
+/**
+ * indicator 計算に使用する market_candles 取得本数
+ * MA200 に 200 本 + 余裕 50 本 = 250 本
+ */
 const INDICATOR_CANDLE_COUNT = 250;
 
-/**
- * 時間足 1 本あたりのミリ秒
- * syncCandles の fetchRange.from 計算に使用する
- */
+/** 時間足 1 本あたりのミリ秒 */
 const TF_MS: Record<string, number> = {
   M1:  60_000,
   M5:  5   * 60_000,
@@ -72,8 +71,6 @@ const TF_MS: Record<string, number> = {
 /**
  * 「最新 count 本」相当の from を計算する
  * 余裕係数 1.5: 週末・祝日・データ欠損を考慮した過去方向への余裕
- * OANDA は count ベース API のため本関数で range 変換する
- * Dukascopy（Phase 2）は date-range native なので本関数は不要になる
  */
 function calcFrom(timeframe: string, count: number): string {
   const msPerBar = TF_MS[timeframe] ?? TF_MS['H1'];
@@ -87,10 +84,12 @@ export class MarketDataService {
   private readonly logger = new Logger(MarketDataService.name);
 
   constructor(
-    private readonly prisma:           PrismaService,
-    private readonly registry:         ProviderRegistry,
-    private readonly indicatorEngine:  IndicatorEngineService,  // Phase 2 追加
+    private readonly prisma:          PrismaService,
+    private readonly registry:        ProviderRegistry,
+    private readonly indicatorEngine: IndicatorEngineService,
   ) {}
+
+  // ── syncCandles ──────────────────────────────────────────────────────────
 
   /**
    * 指定シンボル・時間足の最新 candles を active provider から取得して upsert
@@ -123,7 +122,6 @@ export class MarketDataService {
 
     let upserted = 0;
     for (const c of candles) {
-      // Phase 1.5: isComplete が明示的に false のバーは保存しない
       if (c.isComplete === false) continue;
 
       await this.prisma.marketCandle.upsert({
@@ -161,28 +159,31 @@ export class MarketDataService {
     return upserted;
   }
 
+  // ── syncIndicators ───────────────────────────────────────────────────────
+
   /**
    * 指定シンボル・時間足の indicator を計算して indicator_cache に upsert
    *
-   * Phase 2 新規追加（Task2-1 対応）
+   * STEP 3 修正内容（candle 取得順バグ修正）:
    *
-   * 流れ:
-   *   1. market_candles から最新 INDICATOR_CANDLE_COUNT 本を DB から取得（時系列昇順）
-   *   2. IndicatorEngineService.calculate() で計算
-   *   3. indicator_cache テーブルに upsert（1 symbol×timeframe に 1 レコード）
+   *   旧（バグあり）:
+   *     orderBy: { time: 'asc' }, take: N
+   *     → DB の最古 N 本を取得してしまう
+   *     → MA200 計算に最新データが使われず、indicator が全て過去データベースになる
    *
-   * 設計原則:
-   *   - provider は呼ばない（DB の確定済みデータのみ使用）
-   *   - indicator 計算ロジックはこの関数に書かない（IndicatorEngineService に委譲）
-   *   - candles が INDICATOR_CANDLE_COUNT に満たない場合も計算する（指標値が 0 になるだけ）
+   *   新（正）:
+   *     orderBy: { time: 'desc' }, take: N → reverse()
+   *     → DB の最新 N 本を DESC で取得
+   *     → reverse() で昇順（古→新）に並び替えて indicator-engine に渡す
+   *     → MA200・RSI・MACD・ATR・BB が全て「最新 N 本」で計算される
    *
    * シグネチャ: (symbol: string, timeframe: string) => Promise<void>
    */
   async syncIndicators(symbol: string, timeframe: string): Promise<void> {
-    // 1. market_candles から最新 N 本を取得（時系列昇順）
+    // DESC で最新 N 本を取得 → reverse() で昇順（古→新）に変換
     const dbCandles = await this.prisma.marketCandle.findMany({
       where:   { symbol, timeframe: timeframe as never },
-      orderBy: { time: 'asc' },
+      orderBy: { time: 'desc' },   // ← 最新側から取得
       take:    INDICATOR_CANDLE_COUNT,
     });
 
@@ -191,8 +192,12 @@ export class MarketDataService {
       return;
     }
 
-    // 2. 計算（DB の Decimal を number に変換）
-    const inputCandles = dbCandles.map((c) => ({
+    // reverse(): DESC で取得した配列を昇順（古→新）に変換
+    // indicator-engine は昇順データを期待する（最後の要素が最新）
+    const ascCandles = [...dbCandles].reverse();
+
+    // Prisma Decimal → number 変換
+    const inputCandles = ascCandles.map((c) => ({
       open:  Number(c.open),
       high:  Number(c.high),
       low:   Number(c.low),
@@ -201,11 +206,9 @@ export class MarketDataService {
 
     const indicators = this.indicatorEngine.calculate(inputCandles);
 
-    // 3. indicator_cache upsert（symbol × timeframe で 1 レコードを維持）
-    //    IndicatorCache に unique constraint が無いため findFirst → update or create
-    const now      = new Date();
-    const provider = this.registry.getActive();
-    const source   = provider.providerId;
+    // indicator_cache upsert（symbol × timeframe で 1 レコードを維持）
+    const now    = new Date();
+    const source = this.registry.getActive().providerId;
 
     const existing = await this.prisma.indicatorCache.findFirst({
       where:   { symbol, timeframe: timeframe as never },
@@ -234,19 +237,19 @@ export class MarketDataService {
     }
 
     this.logger.debug(
-      `[IndicatorSync] ${symbol}/${timeframe}: RSI=${indicators.rsi.value.toFixed(1)} ` +
-      `MA=${indicators.ma.status} MACD=${indicators.macd.crossStatus}`,
+      `[IndicatorSync] ${symbol}/${timeframe}: ` +
+      `RSI=${indicators.rsi.value.toFixed(1)} ` +
+      `MA=${indicators.ma.status} ` +
+      `MACD=${indicators.macd.crossStatus} ` +
+      `(n=${inputCandles.length}本)`,
     );
   }
 
+  // ── runBackfill ──────────────────────────────────────────────────────────
+
   /**
    * 初回バックフィル
-   * 3ペア × 9時間足 を順次実行
-   * アプリ起動時 or 手動コマンドから呼び出す
    * シグネチャ維持: () => Promise<void>
-   *
-   * Phase 1.5 変更:
-   *   count を 500 固定 → provider.backfillCount(timeframe) 経由に変更
    */
   async runBackfill(): Promise<void> {
     const provider = this.registry.getActive();
@@ -261,7 +264,6 @@ export class MarketDataService {
     for (const symbol of BACKFILL_SYMBOLS) {
       for (const timeframe of BACKFILL_TIMEFRAMES) {
         try {
-          // Phase 1.5: provider の特性に応じた本数を取得（固定 500 廃止）
           const count = provider.backfillCount(timeframe);
           const now   = new Date().toISOString();
           const from  = calcFrom(timeframe, count);
@@ -276,7 +278,6 @@ export class MarketDataService {
 
           let upserted = 0;
           for (const c of candles) {
-            // Phase 1.5: isComplete が明示的に false のバーは保存しない
             if (c.isComplete === false) continue;
 
             await this.prisma.marketCandle.upsert({
@@ -314,7 +315,6 @@ export class MarketDataService {
             `[${provider.providerId}] バックフィル ${symbol}/${timeframe}: ${upserted}本 (count=${count})`,
           );
 
-          // レート制限対策: 100ms待機
           await new Promise((r) => setTimeout(r, 100));
 
         } catch (err) {
@@ -328,11 +328,11 @@ export class MarketDataService {
     this.logger.log(`[${provider.providerId}] バックフィル完了`);
   }
 
+  // ── getCandles ───────────────────────────────────────────────────────────
+
   /**
    * Chart API 向け candle 取得
-   * active provider から直接 fetchRange() してレスポンス用データを返す
-   * DBを経由しない（provider → chart の直接ルート）
-   * シグネチャ: (symbol, timeframe, limit) => Promise<CanonicalCandle[]>
+   * シグネチャ維持: (symbol, timeframe, limit) => Promise<CanonicalCandle[]>
    */
   async getCandles(
     symbol:    string,
@@ -359,12 +359,12 @@ export class MarketDataService {
       limit,
     });
 
-    // isComplete === false のバーは除外（未確定足をチャートに出さない）
     return candles.filter((c) => c.isComplete !== false);
   }
 
+  // ── checkConnection ──────────────────────────────────────────────────────
+
   /**
-   * Active provider の接続確認（connectors/status 用）
    * シグネチャ維持: () => Promise<{ ok: boolean; error?: string }>
    */
   async checkConnection(): Promise<{ ok: boolean; error?: string }> {

@@ -8,19 +8,18 @@
  *   SPEC_v51_part4 §5.1「キュー一覧: SNAPSHOT_CAPTURE」
  *
  * 役割:
- *   - SNAPSHOT_CAPTURE キューからジョブを取り出す
+ *   - SNAPSHOT_CAPTURE キューから { userId, symbol, timeframe } を受け取る
  *   - SnapshotsService.capture() を呼んで snapshot を生成・保存する
- *   - 非同期経路での snapshot 生成を担当
- *     （同期経路: POST /api/v1/snapshots/capture → controller → service 直接）
- *
- * v5.1 実装範囲:
- *   - キューからの { userId, symbol, timeframe } を受け取り capture() を実行
- *   - 生成された snapshot ID をジョブログに記録
- *   - 失敗時は BullMQ リトライに委ねる
+ *   - indicator_cache が存在すれば実値スコアが計算される
+ *     （snapshots.service 側で indicator_cache を読む責務を持つ）
  *
  * 設計原則:
- *   - indicator 計算はここで行わない（SnapshotsService → indicator_cache 経由）
+ *   - indicator 計算はここで行わない（indicator_cache 経由で読む）
  *   - provider はここから呼ばない
+ *   - processor の責務はキュー受信と SnapshotsService への委譲のみ
+ *
+ * enqueue 元:
+ *   price-sync.processor.ts の Step 3（H4/D1 のみ）
  */
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
@@ -51,11 +50,11 @@ export class SnapshotCaptureProcessor extends WorkerHost {
 
       this.logger.log(
         `snapshot-capture 完了: job=${job.id} snapshotId=${snapshot.id} ` +
-        `score=${snapshot.scoreTotal} entryState=${snapshot.entryState}`,
+        `score=${snapshot.scoreTotal} state=${snapshot.entryState}`,
       );
     } catch (err) {
       this.logger.error(
-        `snapshot-capture 失敗: job=${job.id} userId=${userId} ${symbol}/${timeframe}: ${String(err)}`,
+        `snapshot-capture 失敗: job=${job.id} ${symbol}/${timeframe}: ${String(err)}`,
       );
       throw err; // BullMQ retry へ
     }

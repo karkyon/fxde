@@ -1,5 +1,5 @@
 /**
- * apps/api/src/chart/chart.service.ts
+ * apps/api/src/modules/chart/chart.service.ts
  *
  * Chart API ビジネスロジック
  *
@@ -11,16 +11,25 @@
  *   SPEC_v51_part8 §9.3「STUB_PREDICTION_RESULT」
  *
  * v5.1 実装方針:
- *   - meta / indicators / prediction-overlay: スタブ固定値を返す
+ *   - meta: 最新 candle から currentPrice 取得、UTC 時刻からセッション計算
+ *   - indicators: indicator_cache を参照。存在しない場合は null を返す（stub禁止）
  *   - candles: market_candles テーブルを参照（空の場合は空配列）
  *   - trades: trades テーブルの OPEN レコードを参照
  *   - pattern-markers: pattern_detections テーブルを参照 + ロール別 RBAC
+ *   - prediction-overlay: v5.1 stub のまま（許容範囲）
  *   - Redis キャッシュは v5.1 ではスキップ（cachedAt: null で返却）
+ *
+ * STEP 1+2 変更（2026-03-19）:
+ *   - STUB_META 定数を削除、getMeta() を動的値のみで構成
+ *   - STUB_INDICATORS 定数を削除、getIndicators() は cache なし時 null 返却
+ *   - IndicatorCacheShape import 追加
+ *   - CanonicalCandle import 追加（map の implicit any 解消）
  */
 
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { MarketDataService } from '../market-data/market-data.service';
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService }      from '../../prisma/prisma.service';
+import { MarketDataService }  from '../market-data/market-data.service';
+import type { IndicatorCacheShape } from '../market-data/indicator-engine.service';
 import type {
   ChartMetaQuery,
   ChartCandlesQuery,
@@ -28,58 +37,12 @@ import type {
   ChartTradesQuery,
   ChartPatternMarkersQuery,
   ChartPredictionOverlayQuery,
+  CanonicalCandle,
+  UserRole,
 } from '@fxde/types';
-import type { UserRole } from '@fxde/types';
 
-// ── スタブ定数（SPEC_v51_part8 §9.3 STUB_PREDICTION_RESULT 準拠） ──────────
-const STUB_META = {
-  currentPrice:  1.0842,
-  spread:        0.3,
-  marketStatus:  'open'  as const,
-  sessionLabel:  'London Open',
-  trendBias:     'bullish' as const,
-};
-
-const STUB_INDICATORS = {
-  ma: {
-    value:       1.0820,
-    crossStatus: 'bullish' as const,
-    slope:       0.0003,
-    status:      'bullish' as const,
-  },
-  rsi: {
-    value:      58.3,
-    divergence: false,
-    status:     'neutral' as const,
-  },
-  macd: {
-    macd:        0.0012,
-    signal:      0.0008,
-    histogram:   0.0004,
-    crossStatus: 'bullish' as const,
-    status:      'bullish' as const,
-  },
-  atr: {
-    value:  12.4,
-    ratio:  1.0,
-    status: 'normal' as 'normal' | 'high' | 'low',
-  },
-  bb: {
-    upper:    1.0912,
-    middle:   1.0842,
-    lower:    1.0772,
-    position: 'upper-middle' as const,
-    status:   'neutral' as const,
-  },
-  bias: {
-    direction: 'buy'      as const,
-    strength:  'moderate' as const,
-    label:     'Bias: buy moderate',
-    status:    'bullish'  as const,
-  },
-};
-
-// SPEC_v51_part11 §3.6 STUB_PREDICTION_RESULT → mapStubToOverlay 変換
+// ── prediction-overlay スタブ定数（v5.1 許容：SPEC_v51_part8 §9.3）────────
+// STUB_META / STUB_INDICATORS は削除済み
 const STUB_PREDICTION_OVERLAY = {
   mainScenario:     'Bullish Continuation',
   altScenario:      'Range Consolidation',
@@ -94,25 +57,76 @@ const STUB_PREDICTION_OVERLAY = {
   stub:             true     as const,
 };
 
+// ── セッション判定（UTC 時刻ベース）─────────────────────────────────────────
+function getSessionLabel(utcHour: number): string {
+  if (utcHour >= 0  && utcHour < 7)  return 'Asia Session';
+  if (utcHour >= 7  && utcHour < 13) return 'London Open';
+  if (utcHour >= 13 && utcHour < 17) return 'London/NY Overlap';
+  if (utcHour >= 17 && utcHour < 21) return 'New York Session';
+  return 'Off Hours';
+}
+
+// ── 市場ステータス判定（FX は月〜金 UTC が基準）────────────────────────────
+function getMarketStatus(utcDay: number): 'open' | 'closed' {
+  return (utcDay === 0 || utcDay === 6) ? 'closed' : 'open';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
 export class ChartService {
+  private readonly logger = new Logger(ChartService.name);
+
   constructor(
-    private readonly prisma:      PrismaService,
-    private readonly marketData:  MarketDataService,
+    private readonly prisma:     PrismaService,
+    private readonly marketData: MarketDataService,
   ) {}
 
   // ── GET /api/v1/chart/meta ──────────────────────────────────────────────
   // SPEC_v51_part11 §3.1
+  //
+  // STEP 1: STUB_META 完全排除
+  //   currentPrice  → 最新 candle の close（取得できなければ null）
+  //   sessionLabel  → UTC 時刻から計算
+  //   marketStatus  → UTC 曜日から計算
+  //   trendBias     → indicator_cache の bias.status（なければ 'neutral'）
+  //   spread        → v5.1 は静的 0.3（実 spread 取得は v6 以降）
   async getMeta(query: ChartMetaQuery) {
-    const now = new Date().toISOString();
+    const now    = new Date();
+    const utcH   = now.getUTCHours();
+    const utcDay = now.getUTCDay();
+
+    // currentPrice: 最新確定足の close を使用
+    const candles = await this.marketData.getCandles(
+      query.symbol,
+      query.timeframe,
+      1,
+    );
+    const currentPrice: number | null =
+      candles.length > 0
+        ? (candles[candles.length - 1] as CanonicalCandle).close
+        : null;
+
+    // trendBias: indicator_cache の bias.status を使用
+    const cached = await this.prisma.indicatorCache.findFirst({
+      where:   { symbol: query.symbol, timeframe: query.timeframe as never },
+      orderBy: { calculatedAt: 'desc' },
+    });
+    const ind       = cached
+      ? (cached.indicators as unknown as IndicatorCacheShape)
+      : null;
+    const trendBias = ind?.bias?.status ?? 'neutral';
+
     return {
       symbol:       query.symbol,
       timeframe:    query.timeframe,
-      ...STUB_META,
-      cachedAt:     null,
-      updatedAt:    now,
+      currentPrice,
+      spread:       0.3,
+      marketStatus: getMarketStatus(utcDay),
+      sessionLabel: getSessionLabel(utcH),
+      trendBias,
+      cachedAt:     cached ? cached.calculatedAt.toISOString() : null,
+      updatedAt:    now.toISOString(),
     };
   }
 
@@ -128,7 +142,7 @@ export class ChartService {
     return {
       symbol:    query.symbol,
       timeframe: query.timeframe,
-      candles:   candles.map((c) => ({
+      candles:   (candles as CanonicalCandle[]).map((c) => ({
         time:   c.time,
         open:   c.open,
         high:   c.high,
@@ -142,37 +156,45 @@ export class ChartService {
 
   // ── GET /api/v1/chart/indicators ────────────────────────────────────────
   // SPEC_v51_part11 §3.3
-  // v5.1: indicator_cache の最新レコードを参照。存在しなければスタブ固定値。
+  //
+  // STEP 2: STUB_INDICATORS 完全排除
+  //   cache あり → cache データを返す
+  //   cache なし → indicators: null（stub 禁止）
+  //   フロント側: null 判定して「データ準備中」表示を行うこと
   async getIndicators(query: ChartIndicatorsQuery) {
-    const now = new Date().toISOString();
+    const now    = new Date().toISOString();
     const cached = await this.prisma.indicatorCache.findFirst({
       where:   { symbol: query.symbol, timeframe: query.timeframe as never },
       orderBy: { calculatedAt: 'desc' },
     });
 
-    const indicators = cached
-      ? (cached.indicators as typeof STUB_INDICATORS)
-      : STUB_INDICATORS;
+    if (!cached) {
+      this.logger.warn(
+        `[Chart] indicator_cache 未存在 ${query.symbol}/${query.timeframe}`,
+      );
+      return {
+        symbol:     query.symbol,
+        timeframe:  query.timeframe,
+        indicators: null,
+        cachedAt:   null,
+        updatedAt:  now,
+      };
+    }
 
     return {
       symbol:     query.symbol,
       timeframe:  query.timeframe,
-      indicators,
-      cachedAt:   cached ? cached.calculatedAt.toISOString() : null,
+      indicators: cached.indicators as unknown as IndicatorCacheShape,
+      cachedAt:   cached.calculatedAt.toISOString(),
       updatedAt:  now,
     };
   }
 
   // ── GET /api/v1/chart/trades ────────────────────────────────────────────
   // SPEC_v51_part11 §3.4
-  // trades テーブルの status=OPEN かつ symbol 一致の最新レコードを返す
   async getTrades(userId: string, query: ChartTradesQuery) {
     const trade = await this.prisma.trade.findFirst({
-      where: {
-        userId,
-        symbol: query.symbol,
-        status: 'OPEN',
-      },
+      where:   { userId, symbol: query.symbol, status: 'OPEN' },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -181,17 +203,15 @@ export class ChartService {
     }
 
     const entry = Number(trade.entryPrice);
-    const sl    = trade.sl    != null ? Number(trade.sl)    : null;
-    const tp    = trade.tp    != null ? Number(trade.tp)    : null;
+    const sl    = trade.sl != null ? Number(trade.sl) : null;
+    const tp    = trade.tp != null ? Number(trade.tp) : null;
     const lot   = Number(trade.size);
 
-    // RR 計算
     let rrRatio: number | null = null;
     if (sl != null && tp != null && Math.abs(entry - sl) > 0) {
       rrRatio = Math.abs(tp - entry) / Math.abs(entry - sl);
     }
 
-    // 期待損益（円換算スタブ: 1pip ≈ ¥100 × lot として近似）
     const pipValue     = 100 * lot;
     const expectedLoss = sl != null ? -Math.abs(entry - sl) * 10000 * pipValue : null;
     const expectedGain = tp != null ?  Math.abs(tp - entry) * 10000 * pipValue : null;
@@ -215,12 +235,10 @@ export class ChartService {
 
   // ── GET /api/v1/chart/pattern-markers ──────────────────────────────────
   // SPEC_v51_part11 §3.5 / §10.3
-  // ロール別 RBAC: FREE → CANDLESTICK のみ / BASIC 以上 → 全 12 種
-  // フロント側フィルタ禁止（SPEC_v51_part1 §0-16 準拠）
   async getPatternMarkers(
-    userId: string,
+    userId:   string,
     userRole: UserRole,
-    query: ChartPatternMarkersQuery,
+    query:    ChartPatternMarkersQuery,
   ) {
     const allowedCategories: string[] =
       userRole === 'FREE'
@@ -257,8 +275,7 @@ export class ChartService {
 
   // ── GET /api/v1/chart/prediction-overlay ───────────────────────────────
   // SPEC_v51_part11 §3.6
-  // 権限チェック: RolesGuard で FREE | BASIC に 403（controller で実施）
-  // v5.1: STUB_PREDICTION_RESULT 固定値を返す
+  // v5.1: STUB_PREDICTION_RESULT 固定値（v5.1 許容範囲）
   async getPredictionOverlay(query: ChartPredictionOverlayQuery) {
     return {
       symbol:    query.symbol,
