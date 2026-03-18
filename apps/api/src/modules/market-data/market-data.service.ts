@@ -21,14 +21,23 @@
  *   - isComplete !== false の確認を upsert 前に追加
  *     （CanonicalCandle.isComplete が明示的に false のバーは保存しない）
  *
+ * Phase 2 変更（Task2-1 対応）:
+ *   - IndicatorEngineService を inject
+ *   - syncIndicators(symbol, timeframe) を追加
+ *     → market_candles テーブルから最新 250 本を取得
+ *     → IndicatorEngineService.calculate() で計算
+ *     → indicator_cache テーブルに upsert
+ *   - 既存の public method シグネチャ（syncCandles / runBackfill / checkConnection / getCandles）は変更しない
+ *
  * 変更禁止:
- *   - メソッドシグネチャ（syncCandles / runBackfill / checkConnection）
+ *   - メソッドシグネチャ（syncCandles / runBackfill / checkConnection / getCandles）
  *   - 戻り値の型
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService }       from '../../prisma/prisma.service';
 import { ProviderRegistry }    from './provider.registry';
+import { IndicatorEngineService } from './indicator-engine.service';
 import type { CanonicalTimeframe, CanonicalCandle } from '@fxde/types';
 
 // ── バックフィル対象（維持）──────────────────────────────────────────────
@@ -39,6 +48,9 @@ const BACKFILL_TIMEFRAMES: CanonicalTimeframe[] = [
 
 /** 定期同期（syncCandles）での取得本数 */
 const SYNC_COUNT = 100;
+
+/** indicator 計算に使用する market_candles 取得本数 */
+const INDICATOR_CANDLE_COUNT = 250;
 
 /**
  * 時間足 1 本あたりのミリ秒
@@ -75,8 +87,9 @@ export class MarketDataService {
   private readonly logger = new Logger(MarketDataService.name);
 
   constructor(
-    private readonly prisma:    PrismaService,
-    private readonly registry:  ProviderRegistry,
+    private readonly prisma:           PrismaService,
+    private readonly registry:         ProviderRegistry,
+    private readonly indicatorEngine:  IndicatorEngineService,  // Phase 2 追加
   ) {}
 
   /**
@@ -146,6 +159,84 @@ export class MarketDataService {
 
     this.logger.log(`[${provider.providerId}] ${symbol}/${timeframe}: ${upserted}本 upsert 完了`);
     return upserted;
+  }
+
+  /**
+   * 指定シンボル・時間足の indicator を計算して indicator_cache に upsert
+   *
+   * Phase 2 新規追加（Task2-1 対応）
+   *
+   * 流れ:
+   *   1. market_candles から最新 INDICATOR_CANDLE_COUNT 本を DB から取得（時系列昇順）
+   *   2. IndicatorEngineService.calculate() で計算
+   *   3. indicator_cache テーブルに upsert（1 symbol×timeframe に 1 レコード）
+   *
+   * 設計原則:
+   *   - provider は呼ばない（DB の確定済みデータのみ使用）
+   *   - indicator 計算ロジックはこの関数に書かない（IndicatorEngineService に委譲）
+   *   - candles が INDICATOR_CANDLE_COUNT に満たない場合も計算する（指標値が 0 になるだけ）
+   *
+   * シグネチャ: (symbol: string, timeframe: string) => Promise<void>
+   */
+  async syncIndicators(symbol: string, timeframe: string): Promise<void> {
+    // 1. market_candles から最新 N 本を取得（時系列昇順）
+    const dbCandles = await this.prisma.marketCandle.findMany({
+      where:   { symbol, timeframe: timeframe as never },
+      orderBy: { time: 'asc' },
+      take:    INDICATOR_CANDLE_COUNT,
+    });
+
+    if (dbCandles.length === 0) {
+      this.logger.debug(`[IndicatorSync] ${symbol}/${timeframe}: candles 0件 → skip`);
+      return;
+    }
+
+    // 2. 計算（DB の Decimal を number に変換）
+    const inputCandles = dbCandles.map((c) => ({
+      open:  Number(c.open),
+      high:  Number(c.high),
+      low:   Number(c.low),
+      close: Number(c.close),
+    }));
+
+    const indicators = this.indicatorEngine.calculate(inputCandles);
+
+    // 3. indicator_cache upsert（symbol × timeframe で 1 レコードを維持）
+    //    IndicatorCache に unique constraint が無いため findFirst → update or create
+    const now      = new Date();
+    const provider = this.registry.getActive();
+    const source   = provider.providerId;
+
+    const existing = await this.prisma.indicatorCache.findFirst({
+      where:   { symbol, timeframe: timeframe as never },
+      orderBy: { calculatedAt: 'desc' },
+    });
+
+    if (existing) {
+      await this.prisma.indicatorCache.update({
+        where: { id: existing.id },
+        data: {
+          calculatedAt: now,
+          indicators:   indicators as never,
+          source,
+        },
+      });
+    } else {
+      await this.prisma.indicatorCache.create({
+        data: {
+          symbol,
+          timeframe:    timeframe as never,
+          calculatedAt: now,
+          indicators:   indicators as never,
+          source,
+        },
+      });
+    }
+
+    this.logger.debug(
+      `[IndicatorSync] ${symbol}/${timeframe}: RSI=${indicators.rsi.value.toFixed(1)} ` +
+      `MA=${indicators.ma.status} MACD=${indicators.macd.crossStatus}`,
+    );
   }
 
   /**
@@ -237,7 +328,7 @@ export class MarketDataService {
     this.logger.log(`[${provider.providerId}] バックフィル完了`);
   }
 
-    /**
+  /**
    * Chart API 向け candle 取得
    * active provider から直接 fetchRange() してレスポンス用データを返す
    * DBを経由しない（provider → chart の直接ルート）
