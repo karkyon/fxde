@@ -30,6 +30,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { MarketProviderId } from '@fxde/types';
 import type { MarketDataProvider } from './market-data-provider.interface';
 import { OandaProvider }           from './oanda.provider';
+import { DukascopyProvider }       from './dukascopy.provider';
 
 @Injectable()
 export class ProviderRegistry {
@@ -39,13 +40,12 @@ export class ProviderRegistry {
   private readonly providers: Map<MarketProviderId, MarketDataProvider>;
 
   constructor(
-    private readonly oanda: OandaProvider,
-    // Phase 2: DukascopyProvider を追加する
-    // private readonly dukascopy: DukascopyProvider,
+    private readonly oanda:      OandaProvider,
+    private readonly dukascopy:  DukascopyProvider,   // Phase 2: 追加
   ) {
     this.providers = new Map<MarketProviderId, MarketDataProvider>([
-      ['oanda', oanda],
-      // Phase 2: ['dukascopy', dukascopy],
+      ['oanda',      oanda],
+      ['dukascopy',  dukascopy],   // Phase 2: 追加
     ]);
   }
 

@@ -8,21 +8,24 @@
  */
 import { Module }            from '@nestjs/common';
 import { PrismaModule }      from '../../prisma/prisma.module';
-import { OandaProvider }     from './oanda.provider';
-import { ProviderRegistry }  from './provider.registry';
-import { MarketDataService } from './market-data.service';
+import { OandaProvider }       from './oanda.provider';
+import { DukascopyProvider }   from './dukascopy.provider';
+import { ProviderRegistry }    from './provider.registry';
+import { MarketDataService }   from './market-data.service';
 
 @Module({
   imports:   [PrismaModule],
   providers: [
-    OandaProvider,      // ProviderRegistry が inject するため必須
-    ProviderRegistry,   // Phase 1 追加: active provider 管理
+    OandaProvider,
+    DukascopyProvider,
+    ProviderRegistry,
     MarketDataService,
   ],
   exports: [
     MarketDataService,
-    OandaProvider,      // 既存 export 維持（ConnectorsModule 等が参照している可能性があるため）
-    ProviderRegistry,   // Phase 1 追加: 将来 ConnectorsModule から health 取得に使う
+    OandaProvider,
+    DukascopyProvider,
+    ProviderRegistry,
   ],
 })
 export class MarketDataModule {}
