@@ -55,12 +55,12 @@ echo "  postgres is ready."
 # ─── Prisma migrate + generate ──────────────────────────────
 echo "[5/6] Running Prisma migrate and generate..."
 pnpm --filter @fxde/api prisma:generate
-DATABASE_URL="postgresql://fxde:fxde_password@localhost:5432/fxde_db" \
+DATABASE_URL="postgresql://fxde:fxde_password@localhost:5436/fxde_db" \
   pnpm --filter @fxde/api exec prisma migrate dev --name init --schema=../../prisma/schema.prisma
 
 # ─── Seed ───────────────────────────────────────────────────
 echo "[6/6] Seeding database..."
-DATABASE_URL="postgresql://fxde:fxde_password@localhost:5432/fxde_db" \
+DATABASE_URL="postgresql://fxde:fxde_password@localhost:5436/fxde_db" \
   pnpm --filter @fxde/api prisma:seed
 
 echo ""

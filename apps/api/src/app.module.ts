@@ -28,6 +28,7 @@ import { ChartModule }        from './modules/chart/chart.module';
 import { AiSummaryModule }    from './ai-summary/ai-summary.module';
 import { ConnectorsModule }   from './modules/connectors/connectors.module';
 import { MarketDataModule }   from './modules/market-data/market-data.module';
+import { MarketDataJobsModule } from './jobs/market-data-jobs.module';
 import { PluginsRankingModule } from './modules/plugins-ranking/plugins-ranking.module';
 import { PluginsModule }      from './modules/plugins/plugins.module';
 import { PluginsRuntimeModule } from './plugins-runtime/plugins-runtime.module';
@@ -60,6 +61,7 @@ import { HttpLoggerMiddleware } from './common/middleware/http-logger.middleware
     AiSummaryModule,
     ConnectorsModule,
     MarketDataModule,
+    MarketDataJobsModule,
     PluginsRankingModule,  // PluginsModule より前（ルート解決順）
     PluginsModule,
     PluginsRuntimeModule,
