@@ -34,6 +34,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo "  Created .env from .env.example"
   echo "  IMPORTANT: Edit .env and set JWT_SECRET before production use."
+  echo "  INFO: MARKET_DATA_ACTIVE_PROVIDER=oanda (default). Dukascopy に切り替える場合は DUKASCOPY_ENABLED=true も設定すること"
 else
   echo "  .env already exists — skipping"
 fi

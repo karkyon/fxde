@@ -74,6 +74,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
       CALENDAR_PROVIDER: ${CALENDAR_PROVIDER:-stooq}
+      MARKET_DATA_ACTIVE_PROVIDER: ${MARKET_DATA_ACTIVE_PROVIDER:-oanda}
+      DUKASCOPY_ENABLED: ${DUKASCOPY_ENABLED:-false}
+      DUKASCOPY_BASE_URL: ${DUKASCOPY_BASE_URL:-https://freeserv.dukascopy.com/2.0}
     depends_on:
       postgres:
         condition: service_healthy
