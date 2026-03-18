@@ -167,7 +167,7 @@ export class DukascopyProvider implements MarketDataProvider {
    *
    * SPEC_NOTES §2.5: Dukascopy は「from/to 正本」
    */
-  async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
+async fetchRange(input: FetchRangeInput): Promise<CanonicalCandle[]> {
     if (!this.isConfigured()) {
       this.logger.warn(
         'DUKASCOPY_ENABLED 未設定 → skip。' +
@@ -187,6 +187,10 @@ export class DukascopyProvider implements MarketDataProvider {
     const endMs      = new Date(input.to).getTime();
     const count      = input.limit ?? 500;
 
+    // Note: &jsonp= および &_ は使用しない
+    // - chart.json エンドポイントはパラメータ無しで純 JSON 配列を返す
+    // - &jsonp= は JSONP ラッパーを誘発するリスクがあり res.json() が失敗する
+    // - &_ はサーバーサイドでは不要（ブラウザキャッシュバスターパターン）
     const url =
       `${this.baseUrl}/?path=chart.json` +
       `&instrument=${encodeURIComponent(instrument)}` +
@@ -195,9 +199,7 @@ export class DukascopyProvider implements MarketDataProvider {
       `&time_direction=P` +
       `&start=${startMs}` +
       `&end=${endMs}` +
-      `&count=${count}` +
-      `&jsonp=` +
-      `&_=${Date.now()}`;
+      `&count=${count}`;
 
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
