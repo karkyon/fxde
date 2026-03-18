@@ -3,11 +3,30 @@
  *
  * 役割: Snapshots API のビジネスロジック
  *
- * STEP 2 変更（2026-03-19）:
- *   - STUB_INDICATORS を完全排除
- *   - indicator_cache から実値を取得して calculateScore() に渡す
- *   - indicator_cache が存在しない場合のみ FALLBACK_INDICATORS（全ゼロ）使用
- *   - indicator 計算はこのサービスに書かない（IndicatorEngineService の責務）
+ * Task1〜3 変更（2026-03-19）:
+ *   - FALLBACK_ENTRY_CONTEXT を廃止
+ *   - entryContext の各項目を実データから構成:
+ *
+ *     rr:             OPEN trade の sl/tp から計算（trade なし or sl/tp なし = 0）
+ *     lotSize:        OPEN trade の size（trade なし = 0）
+ *     maxLot:         0 固定のまま（口座残高情報が DB 上に存在しないため v5.1 では計算不能）
+ *     isEventWindow:  EconomicEvent テーブルから symbol 通貨の HIGH/CRITICAL イベントを
+ *                     現在時刻 ±30分 で判定
+ *     isCooldown:     最後の CLOSED trade の exitTime + settings.cooldownMin > now で判定
+ *     isDailyLimit:   本日の trade 数（OPEN + CLOSED）>= settings.maxTrades で判定
+ *
+ *   - patterns: PatternDetection テーブルから直近 5 件を取得して ScorePattern[] に変換
+ *
+ * v5.1 範囲の確認:
+ *   - maxLot: 口座残高なし → 0 固定（v6 で実装）
+ *   - isCooldown: cooldownMin 経過後の再エントリー制御（settings 依存）
+ *   - isDailyLimit: 1日あたりのトレード上限（settings.maxTrades 依存）
+ *   - isEventWindow: EconomicEvent テーブルのデータが入っている前提
+ *
+ * 変更禁止:
+ *   - public メソッドシグネチャ（capture / evaluate / getLatest / getById / getList）
+ *   - indicator 計算をここに書く
+ *   - v6 機能（DTW / HMM / WFV）に触れる
  */
 
 import {
@@ -20,11 +39,11 @@ import {
 } from '@fxde/types';
 import type { EntryState }                   from '@fxde/types';
 import { calculateScore, evaluateEntryDecision } from '@fxde/shared';
-import type { ScoreIndicators, MtfAlignment }    from '@fxde/shared';
+import type { ScoreIndicators, MtfAlignment, ScorePattern } from '@fxde/shared';
 import { SettingsService }                   from '../settings/settings.service';
 import type { IndicatorCacheShape }          from '../market-data/indicator-engine.service';
 
-// ── FALLBACK（indicator_cache 未存在時のみ）───────────────────────────────────
+// ── FALLBACK_INDICATORS（indicator_cache 未存在時のみ）────────────────────────
 const FALLBACK_INDICATORS: IndicatorCacheShape = {
   ma:   { ma50: 0, ma200: 0, slope: 0, crossStatus: 'NONE', value: 0, status: 'neutral' },
   rsi:  { value: 50, divergence: false, status: 'neutral' },
@@ -34,8 +53,30 @@ const FALLBACK_INDICATORS: IndicatorCacheShape = {
   bias: { direction: 'neutral', strength: 'weak', label: 'Bias: neutral weak', status: 'neutral' },
 };
 
-const FALLBACK_ENTRY_CONTEXT = {
-  rr: 0, lotSize: 0, isEventWindow: false, isCooldown: false, forceLock: false,
+// ── EventWindow 判定用の時間幅（分）─────────────────────────────────────────
+// 指標発表前後 30 分を安全圏外とする（仕様 §7）
+const EVENT_WINDOW_MINUTES = 30;
+
+// ── 日次トレード上限デフォルト（settings 未設定時）──────────────────────────
+const DEFAULT_MAX_TRADES   = 5;
+const DEFAULT_COOLDOWN_MIN = 60;
+
+// ── pattern_detections → ScorePattern 変換用定数 ────────────────────────────
+// SPEC_v51_part6 §1.0 正式名称から bonus 値のデフォルトマッピング
+const PATTERN_BONUS_MAP: Record<string, number> = {
+  HeadAndShoulders:        12,
+  InverseHeadAndShoulders: 12,
+  DoubleTop:               10,
+  DoubleBottom:            10,
+  Triangle:                 8,
+  Channel:                  8,
+  // candlestick
+  PinBar:                   6,
+  Engulfing:                7,
+  Doji:                     5,
+  MorningStar:              9,
+  ShootingStar:             8,
+  ThreeSoldiers:           10,
 };
 
 // ── 変換ヘルパー ──────────────────────────────────────────────────────────────
@@ -70,6 +111,14 @@ function buildEntryDecision(entryState: EntryState) {
   }
 }
 
+// ── symbol から通貨ペア文字列を抽出（例: EURUSD → ['EUR', 'USD']）──────────────
+function extractCurrencies(symbol: string): string[] {
+  const s = symbol.toUpperCase();
+  if (s.length === 6) return [s.slice(0, 3), s.slice(3)];
+  // XAUUSD 等の 6 文字以外も念のため対応
+  return [s];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -81,7 +130,7 @@ export class SnapshotsService {
     private readonly settings: SettingsService,
   ) {}
 
-  // ── 内部共通 ────────────────────────────────────────────────────────────
+  // ── 内部: indicator_cache 読み込み ──────────────────────────────────────
 
   private async loadIndicators(symbol: string, timeframe: string) {
     const cached = await this.prisma.indicatorCache.findFirst({
@@ -95,17 +144,173 @@ export class SnapshotsService {
     return { ind: cached.indicators as unknown as IndicatorCacheShape, isFallback: false };
   }
 
+  // ── 内部: ユーザー設定読み込み ──────────────────────────────────────────
+
   private async loadUserSettings(userId: string) {
-    let scoreThreshold = 75;
-    let forceLock = false;
+    let scoreThreshold  = 75;
+    let forceLock       = false;
     let featureSwitches: { patternBonus?: boolean } = { patternBonus: false };
+    let cooldownMin     = DEFAULT_COOLDOWN_MIN;
+    let maxTrades       = DEFAULT_MAX_TRADES;
     try {
       const s = await this.settings.getSettings(userId);
       scoreThreshold  = s.scoreThreshold;
       forceLock       = s.forceLock;
       featureSwitches = (s.featureSwitches as { patternBonus?: boolean }) ?? {};
+      const rp = s.riskProfile as {
+        cooldownMin?: number;
+        maxTrades?:   number;
+      } | null;
+      if (rp) {
+        cooldownMin = rp.cooldownMin ?? DEFAULT_COOLDOWN_MIN;
+        maxTrades   = rp.maxTrades   ?? DEFAULT_MAX_TRADES;
+      }
     } catch { /* SETTINGS_NOT_FOUND: デフォルト値で続行 */ }
-    return { scoreThreshold, forceLock, featureSwitches };
+    return { scoreThreshold, forceLock, featureSwitches, cooldownMin, maxTrades };
+  }
+
+  // ── 内部: entryContext を実データから構成 ────────────────────────────────
+
+  /**
+   * entryContext の各項目を DB から取得して構成する。
+   *
+   * Task1〜3 実データ化内容:
+   *   rr / lotSize    → OPEN trade の sl/tp/size から計算
+   *   isEventWindow   → EconomicEvent テーブルの ±30 分 HIGH/CRITICAL 判定
+   *   isCooldown      → 最後の CLOSED trade の exitTime + cooldownMin > now
+   *   isDailyLimit    → 本日の trade 数 >= maxTrades
+   *
+   * 残る v5.1 限界:
+   *   maxLot = 0 固定: 口座残高が DB に存在しないため正確な maxLot は計算不能
+   */
+  private async buildEntryContext(
+    userId:     string,
+    symbol:     string,
+    cooldownMin: number,
+    maxTrades:  number,
+    forceLock:  boolean,
+  ) {
+    const now = new Date();
+
+    // ── rr / lotSize: OPEN trade の sl/tp/size から計算 ──────────────────
+    let rr      = 0;
+    let lotSize = 0;
+    const openTrade = await this.prisma.trade.findFirst({
+      where:   { userId, symbol, status: 'OPEN' },
+      orderBy: { entryTime: 'desc' },
+      select:  { entryPrice: true, sl: true, tp: true, size: true },
+    });
+    if (openTrade) {
+      lotSize = Number(openTrade.size);
+      const entry = Number(openTrade.entryPrice);
+      const sl    = openTrade.sl != null ? Number(openTrade.sl) : null;
+      const tp    = openTrade.tp != null ? Number(openTrade.tp) : null;
+      if (sl != null && tp != null && Math.abs(entry - sl) > 0) {
+        rr = Math.abs(tp - entry) / Math.abs(entry - sl);
+        rr = Math.round(rr * 100) / 100;
+      }
+    }
+
+    // ── isEventWindow: EconomicEvent ±30分 HIGH/CRITICAL 判定 ────────────
+    let isEventWindow = false;
+    try {
+      const currencies  = extractCurrencies(symbol);
+      const windowStart = new Date(now.getTime() - EVENT_WINDOW_MINUTES * 60_000);
+      const windowEnd   = new Date(now.getTime() + EVENT_WINDOW_MINUTES * 60_000);
+      const upcoming    = await this.prisma.economicEvent.findFirst({
+        where: {
+          currency:    { in: currencies },
+          scheduledAt: { gte: windowStart, lte: windowEnd },
+          importance:  { in: ['HIGH', 'CRITICAL'] as never[] },
+        },
+      });
+      isEventWindow = upcoming != null;
+    } catch (err) {
+      this.logger.warn(`[Snapshot] isEventWindow 判定失敗: ${String(err)}`);
+    }
+
+    // ── isCooldown: 最後の CLOSED trade の exitTime + cooldownMin > now ──
+    let isCooldown = false;
+    try {
+      const lastClosed = await this.prisma.trade.findFirst({
+        where:   { userId, status: 'CLOSED', exitTime: { not: null } },
+        orderBy: { exitTime: 'desc' },
+        select:  { exitTime: true },
+      });
+      if (lastClosed?.exitTime) {
+        const cooldownEnd = new Date(
+          lastClosed.exitTime.getTime() + cooldownMin * 60_000,
+        );
+        isCooldown = cooldownEnd > now;
+      }
+    } catch (err) {
+      this.logger.warn(`[Snapshot] isCooldown 判定失敗: ${String(err)}`);
+    }
+
+    // ── isDailyLimit: 本日の trade 数（OPEN + CLOSED）>= maxTrades ────────
+    let isDailyLimit = false;
+    try {
+      const dayStart   = new Date(now);
+      dayStart.setUTCHours(0, 0, 0, 0);
+      const todayCount = await this.prisma.trade.count({
+        where: {
+          userId,
+          createdAt: { gte: dayStart },
+          status:    { in: ['OPEN', 'CLOSED'] as never[] },
+        },
+      });
+      isDailyLimit = todayCount >= maxTrades;
+    } catch (err) {
+      this.logger.warn(`[Snapshot] isDailyLimit 判定失敗: ${String(err)}`);
+    }
+
+    return {
+      rr,
+      lotSize,
+      maxLot:       0,   // 口座残高なし → v5.1 では 0 固定
+      isEventWindow,
+      isCooldown,
+      isDailyLimit,
+      forceLock,
+    };
+  }
+
+  // ── 内部: patterns を PatternDetection から取得 ──────────────────────────
+
+  /**
+   * Task3: PatternDetection テーブルから直近 5 件を取得して ScorePattern[] に変換。
+   * 新規に pattern 検出器を実装しない。
+   * DB に記録がなければ空配列を返す。
+   */
+  private async loadPatterns(
+    userId:    string,
+    symbol:    string,
+    timeframe: string,
+  ): Promise<ScorePattern[]> {
+    try {
+      const detections = await this.prisma.patternDetection.findMany({
+        where:   { userId, symbol, timeframe: timeframe as never },
+        orderBy: { detectedAt: 'desc' },
+        take:    5,
+        select: {
+          patternName: true,
+          direction:   true,
+          confidence:  true,
+        },
+      });
+
+      return detections.map((d) => ({
+        name:       d.patternName,
+        direction:  (d.direction === 'BUY' || d.direction === 'SELL')
+                      ? d.direction
+                      : 'BUY',  // 'NEUTRAL' 等は BUY にフォールバック
+        confidence: Number(d.confidence),
+        bonus:      PATTERN_BONUS_MAP[d.patternName] ?? 5,
+      }));
+    } catch (err) {
+      this.logger.warn(`[Snapshot] patterns 取得失敗: ${String(err)}`);
+      return [];
+    }
   }
 
   // ── POST /api/v1/snapshots/capture ───────────────────────────────────────
@@ -114,27 +319,51 @@ export class SnapshotsService {
     const { symbol, timeframe, asOf } = dto;
     const capturedAt = asOf ? new Date(asOf) : new Date();
 
-    const { scoreThreshold, forceLock, featureSwitches } = await this.loadUserSettings(userId);
+    const { scoreThreshold, forceLock, featureSwitches, cooldownMin, maxTrades } =
+      await this.loadUserSettings(userId);
+
     const { ind, isFallback } = await this.loadIndicators(symbol, timeframe);
 
     if (isFallback) {
       this.logger.warn(`[Snapshot.capture] ${symbol}/${timeframe}: FALLBACK スコア使用`);
     }
 
+    // entryContext: 実データから構成
+    const entryCtx = await this.buildEntryContext(
+      userId, symbol, cooldownMin, maxTrades, forceLock,
+    );
+
+    // patterns: PatternDetection から取得
+    const patterns = await this.loadPatterns(userId, symbol, timeframe);
+
     const scoreResult = calculateScore({
       indicators:      toScoreIndicators(ind),
-      patterns:        [],
+      patterns,
       mtfAlignment:    {} as MtfAlignment,
-      rr:              FALLBACK_ENTRY_CONTEXT.rr,
+      rr:              entryCtx.rr,
       featureSwitches,
     });
 
     const decision = evaluateEntryDecision({
-      score: scoreResult.total, rr: FALLBACK_ENTRY_CONTEXT.rr,
-      lotSize: FALLBACK_ENTRY_CONTEXT.lotSize, maxLot: 0,
-      isEventWindow: false, isCooldown: false, isDailyLimit: false,
-      forceLock, scoreThreshold,
+      score:          scoreResult.total,
+      rr:             entryCtx.rr,
+      lotSize:        entryCtx.lotSize,
+      maxLot:         entryCtx.maxLot,
+      isEventWindow:  entryCtx.isEventWindow,
+      isCooldown:     entryCtx.isCooldown,
+      isDailyLimit:   entryCtx.isDailyLimit,
+      forceLock,
+      scoreThreshold,
     });
+
+    // DB 保存用 entryContext（isDailyLimit は SnapshotIndicators スキーマ外 → 除外）
+    const storedEntryContext = {
+      rr:            entryCtx.rr,
+      lotSize:       entryCtx.lotSize,
+      isEventWindow: entryCtx.isEventWindow,
+      isCooldown:    entryCtx.isCooldown,
+      forceLock,
+    };
 
     try {
       const snapshot = await this.prisma.snapshot.create({
@@ -143,12 +372,12 @@ export class SnapshotsService {
           timeframe:      timeframe as never,
           capturedAt,
           indicators:     toSnapshotIndicators(ind) as never,
-          patterns:       [],
+          patterns:       patterns as never,
           mtfAlignment:   {},
           scoreTotal:     scoreResult.total,
           scoreBreakdown: scoreResult.breakdown,
           entryState:     decision.status as never,
-          entryContext:   FALLBACK_ENTRY_CONTEXT,
+          entryContext:   storedEntryContext,
         },
       });
       return this.formatSnapshot(snapshot);
@@ -164,27 +393,53 @@ export class SnapshotsService {
     const { symbol, timeframe, asOf } = dto;
     const capturedAt = asOf ? new Date(asOf) : new Date();
 
-    const { scoreThreshold, forceLock, featureSwitches } = await this.loadUserSettings(userId);
+    const { scoreThreshold, forceLock, featureSwitches, cooldownMin, maxTrades } =
+      await this.loadUserSettings(userId);
+
     const { ind } = await this.loadIndicators(symbol, timeframe);
 
+    const entryCtx = await this.buildEntryContext(
+      userId, symbol, cooldownMin, maxTrades, forceLock,
+    );
+
+    const patterns = await this.loadPatterns(userId, symbol, timeframe);
+
     const scoreResult = calculateScore({
-      indicators: toScoreIndicators(ind), patterns: [],
-      mtfAlignment: {} as MtfAlignment, rr: FALLBACK_ENTRY_CONTEXT.rr, featureSwitches,
+      indicators:   toScoreIndicators(ind),
+      patterns,
+      mtfAlignment: {} as MtfAlignment,
+      rr:           entryCtx.rr,
+      featureSwitches,
     });
 
     const decision = evaluateEntryDecision({
-      score: scoreResult.total, rr: FALLBACK_ENTRY_CONTEXT.rr,
-      lotSize: FALLBACK_ENTRY_CONTEXT.lotSize, maxLot: 0,
-      isEventWindow: false, isCooldown: false, isDailyLimit: false,
-      forceLock, scoreThreshold,
+      score:         scoreResult.total,
+      rr:            entryCtx.rr,
+      lotSize:       entryCtx.lotSize,
+      maxLot:        entryCtx.maxLot,
+      isEventWindow: entryCtx.isEventWindow,
+      isCooldown:    entryCtx.isCooldown,
+      isDailyLimit:  entryCtx.isDailyLimit,
+      forceLock,
+      scoreThreshold,
     });
 
     return this.formatSnapshotRaw({
       id: crypto.randomUUID(), userId, symbol,
       timeframe: timeframe as string, capturedAt,
-      indicators: toSnapshotIndicators(ind), patterns: [], mtfAlignment: {},
-      scoreTotal: scoreResult.total, scoreBreakdown: scoreResult.breakdown,
-      entryState: decision.status, entryContext: FALLBACK_ENTRY_CONTEXT,
+      indicators:     toSnapshotIndicators(ind),
+      patterns,
+      mtfAlignment:   {},
+      scoreTotal:     scoreResult.total,
+      scoreBreakdown: scoreResult.breakdown,
+      entryState:     decision.status,
+      entryContext: {
+        rr:            entryCtx.rr,
+        lotSize:       entryCtx.lotSize,
+        isEventWindow: entryCtx.isEventWindow,
+        isCooldown:    entryCtx.isCooldown,
+        forceLock,
+      },
       createdAt: capturedAt,
     });
   }
