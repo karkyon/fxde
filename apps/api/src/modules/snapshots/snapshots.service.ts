@@ -3,25 +3,35 @@
  *
  * 役割: Snapshots API のビジネスロジック
  *
- * Task1〜3 変更（2026-03-19）:
+ * Task1〜3 変更（2026-03-19 前回）:
  *   - FALLBACK_ENTRY_CONTEXT を廃止
- *   - entryContext の各項目を実データから構成:
+ *   - rr / lotSize / isEventWindow / isCooldown / isDailyLimit を実データから構成
+ *   - patterns を PatternDetection テーブルから直近5件取得
  *
- *     rr:             OPEN trade の sl/tp から計算（trade なし or sl/tp なし = 0）
- *     lotSize:        OPEN trade の size（trade なし = 0）
- *     maxLot:         0 固定のまま（口座残高情報が DB 上に存在しないため v5.1 では計算不能）
- *     isEventWindow:  EconomicEvent テーブルから symbol 通貨の HIGH/CRITICAL イベントを
- *                     現在時刻 ±30分 で判定
- *     isCooldown:     最後の CLOSED trade の exitTime + settings.cooldownMin > now で判定
- *     isDailyLimit:   本日の trade 数（OPEN + CLOSED）>= settings.maxTrades で判定
+ * STEP2〜5 変更（2026-03-19 今回）:
+ *   STEP2: getList() capturedAt 条件バグ修正
+ *     from と to を別々にスプレッドすると両方指定時に後者が前者を上書きする。
+ *     capturedAt オブジェクトをひとつにまとめて渡すよう修正。
  *
- *   - patterns: PatternDetection テーブルから直近 5 件を取得して ScorePattern[] に変換
+ *   STEP3: loadPatterns() direction fallback 修正
+ *     PatternDetection.direction は VarChar(10) = String 型（enum なし）。
+ *     実際に格納される値: 'BUY' | 'SELL' | 'NEUTRAL'（plugin-runtime より）。
+ *     ScorePattern.direction は 'BUY' | 'SELL' のみ（score-engine 正本）。
+ *     'NEUTRAL' 等の BUY/SELL 以外を 'BUY' に変換するのは意味を壊す。
+ *     → BUY/SELL 以外は filter で除外する（score に影響させない）。
  *
- * v5.1 範囲の確認:
- *   - maxLot: 口座残高なし → 0 固定（v6 で実装）
- *   - isCooldown: cooldownMin 経過後の再エントリー制御（settings 依存）
- *   - isDailyLimit: 1日あたりのトレード上限（settings.maxTrades 依存）
- *   - isEventWindow: EconomicEvent テーブルのデータが入っている前提
+ *   STEP4: FALLBACK_INDICATORS 使用条件の明文化
+ *     fallback は「indicator_cache が DB に存在しない場合の最後の安全網」に限定。
+ *     通常の price-sync → syncIndicators() 経路が動いていれば使用されないはず。
+ *     fallback 使用時は warn ログを出してスコアが 0 に近い旨を明示済み。
+ *
+ *   STEP5: maxLot の一貫性整理
+ *     maxLot は v5.1 仕様境界として 0 固定。
+ *     理由: 口座残高・証拠金情報が DB に存在しないため計算不能。
+ *     evaluateEntryDecision は maxLot=0 かつ lotSize>0 でも RISK_NG にならない
+ *     （entry-decision.ts: maxLot > 0 && lotSize > maxLot の場合のみ RISK_NG）。
+ *     → lotSize <= maxLot(=0) は常に false なので RISK_NG にはならない。正しい動作。
+ *     将来 v6 で account API と接続する際はここを差し替える。
  *
  * 変更禁止:
  *   - public メソッドシグネチャ（capture / evaluate / getLatest / getById / getList）
@@ -37,13 +47,18 @@ import {
   GetSnapshotsQuery, GetSnapshotsLatestQuery,
   CaptureSnapshotDto, EvaluateSnapshotDto,
 } from '@fxde/types';
-import type { EntryState }                   from '@fxde/types';
+import type { EntryState }                       from '@fxde/types';
 import { calculateScore, evaluateEntryDecision } from '@fxde/shared';
 import type { ScoreIndicators, MtfAlignment, ScorePattern } from '@fxde/shared';
-import { SettingsService }                   from '../settings/settings.service';
-import type { IndicatorCacheShape }          from '../market-data/indicator-engine.service';
+import { SettingsService }                       from '../settings/settings.service';
+import type { IndicatorCacheShape }              from '../market-data/indicator-engine.service';
 
-// ── FALLBACK_INDICATORS（indicator_cache 未存在時のみ）────────────────────────
+// ── FALLBACK_INDICATORS ───────────────────────────────────────────────────────
+// 使用条件: indicator_cache テーブルに指定 symbol×timeframe のレコードが存在しない時のみ。
+// 通常は price-sync → syncIndicators() が動いていれば indicator_cache に書き込まれるため
+// このフォールバックは「初回起動直後」か「provider 未設定時」のみ発動する。
+// fallback 使用時はスコアが 0 に近い値（全ゼロ指標のため）になる。これは意図的。
+// → dashboard / chart が「データ未準備」を示す機会になる。
 const FALLBACK_INDICATORS: IndicatorCacheShape = {
   ma:   { ma50: 0, ma200: 0, slope: 0, crossStatus: 'NONE', value: 0, status: 'neutral' },
   rsi:  { value: 50, divergence: false, status: 'neutral' },
@@ -54,12 +69,25 @@ const FALLBACK_INDICATORS: IndicatorCacheShape = {
 };
 
 // ── EventWindow 判定用の時間幅（分）─────────────────────────────────────────
-// 指標発表前後 30 分を安全圏外とする（仕様 §7）
 const EVENT_WINDOW_MINUTES = 30;
 
-// ── 日次トレード上限デフォルト（settings 未設定時）──────────────────────────
+// ── 設定デフォルト値（settings 未設定時）────────────────────────────────────
 const DEFAULT_MAX_TRADES   = 5;
 const DEFAULT_COOLDOWN_MIN = 60;
+
+// ── maxLot: v5.1 仕様境界で 0 固定 ──────────────────────────────────────────
+// 口座残高・証拠金情報が DB に存在しないため計算不能。
+// evaluateEntryDecision は (maxLot > 0 && lotSize > maxLot) のみ RISK_NG にする仕様のため
+// maxLot=0 は lotSize がいくらあっても RISK_NG にならない。これは v5.1 仕様境界として正しい動作。
+// v6 で account API と接続する際はここを差し替えること。
+const MAX_LOT_V51 = 0;
+
+// ── PatternDetection.direction の正式な取りうる値 ────────────────────────────
+// schema.prisma: direction String @db.VarChar(10) → enum なし / String 型
+// plugin-runtime で格納される値: 'BUY' | 'SELL' | 'NEUTRAL'
+// score-engine の ScorePattern.direction: 'BUY' | 'SELL' のみ許容
+// → 'NEUTRAL' 等の BUY/SELL 以外は ScorePattern に変換できないため除外する（score に影響させない）
+const VALID_PATTERN_DIRECTIONS = new Set(['BUY', 'SELL'] as const);
 
 // ── pattern_detections → ScorePattern 変換用定数 ────────────────────────────
 // SPEC_v51_part6 §1.0 正式名称から bonus 値のデフォルトマッピング
@@ -70,7 +98,6 @@ const PATTERN_BONUS_MAP: Record<string, number> = {
   DoubleBottom:            10,
   Triangle:                 8,
   Channel:                  8,
-  // candlestick
   PinBar:                   6,
   Engulfing:                7,
   Doji:                     5,
@@ -111,11 +138,9 @@ function buildEntryDecision(entryState: EntryState) {
   }
 }
 
-// ── symbol から通貨ペア文字列を抽出（例: EURUSD → ['EUR', 'USD']）──────────────
 function extractCurrencies(symbol: string): string[] {
   const s = symbol.toUpperCase();
   if (s.length === 6) return [s.slice(0, 3), s.slice(3)];
-  // XAUUSD 等の 6 文字以外も念のため対応
   return [s];
 }
 
@@ -131,6 +156,8 @@ export class SnapshotsService {
   ) {}
 
   // ── 内部: indicator_cache 読み込み ──────────────────────────────────────
+  // STEP4: fallback 使用条件を明示
+  // fallback は「indicator_cache が DB に存在しない場合の最後の安全網」のみ
 
   private async loadIndicators(symbol: string, timeframe: string) {
     const cached = await this.prisma.indicatorCache.findFirst({
@@ -138,7 +165,11 @@ export class SnapshotsService {
       orderBy: { calculatedAt: 'desc' },
     });
     if (!cached) {
-      this.logger.warn(`[Snapshot] indicator_cache 未存在 ${symbol}/${timeframe} → FALLBACK`);
+      // fallback 使用: price-sync が未実行か provider 未設定の状態。スコアは 0 に近い値になる。
+      this.logger.warn(
+        `[Snapshot] indicator_cache 未存在 ${symbol}/${timeframe} → ` +
+        `FALLBACK 使用（price-sync / indicator-engine が動作していない可能性あり）`,
+      );
       return { ind: FALLBACK_INDICATORS, isFallback: true };
     }
     return { ind: cached.indicators as unknown as IndicatorCacheShape, isFallback: false };
@@ -157,10 +188,7 @@ export class SnapshotsService {
       scoreThreshold  = s.scoreThreshold;
       forceLock       = s.forceLock;
       featureSwitches = (s.featureSwitches as { patternBonus?: boolean }) ?? {};
-      const rp = s.riskProfile as {
-        cooldownMin?: number;
-        maxTrades?:   number;
-      } | null;
+      const rp = s.riskProfile as { cooldownMin?: number; maxTrades?: number } | null;
       if (rp) {
         cooldownMin = rp.cooldownMin ?? DEFAULT_COOLDOWN_MIN;
         maxTrades   = rp.maxTrades   ?? DEFAULT_MAX_TRADES;
@@ -171,18 +199,6 @@ export class SnapshotsService {
 
   // ── 内部: entryContext を実データから構成 ────────────────────────────────
 
-  /**
-   * entryContext の各項目を DB から取得して構成する。
-   *
-   * Task1〜3 実データ化内容:
-   *   rr / lotSize    → OPEN trade の sl/tp/size から計算
-   *   isEventWindow   → EconomicEvent テーブルの ±30 分 HIGH/CRITICAL 判定
-   *   isCooldown      → 最後の CLOSED trade の exitTime + cooldownMin > now
-   *   isDailyLimit    → 本日の trade 数 >= maxTrades
-   *
-   * 残る v5.1 限界:
-   *   maxLot = 0 固定: 口座残高が DB に存在しないため正確な maxLot は計算不能
-   */
   private async buildEntryContext(
     userId:     string,
     symbol:     string,
@@ -192,7 +208,7 @@ export class SnapshotsService {
   ) {
     const now = new Date();
 
-    // ── rr / lotSize: OPEN trade の sl/tp/size から計算 ──────────────────
+    // rr / lotSize: OPEN trade の sl/tp/size から計算
     let rr      = 0;
     let lotSize = 0;
     const openTrade = await this.prisma.trade.findFirst({
@@ -206,12 +222,11 @@ export class SnapshotsService {
       const sl    = openTrade.sl != null ? Number(openTrade.sl) : null;
       const tp    = openTrade.tp != null ? Number(openTrade.tp) : null;
       if (sl != null && tp != null && Math.abs(entry - sl) > 0) {
-        rr = Math.abs(tp - entry) / Math.abs(entry - sl);
-        rr = Math.round(rr * 100) / 100;
+        rr = Math.round((Math.abs(tp - entry) / Math.abs(entry - sl)) * 100) / 100;
       }
     }
 
-    // ── isEventWindow: EconomicEvent ±30分 HIGH/CRITICAL 判定 ────────────
+    // isEventWindow: EconomicEvent ±30分 HIGH/CRITICAL 判定
     let isEventWindow = false;
     try {
       const currencies  = extractCurrencies(symbol);
@@ -229,7 +244,7 @@ export class SnapshotsService {
       this.logger.warn(`[Snapshot] isEventWindow 判定失敗: ${String(err)}`);
     }
 
-    // ── isCooldown: 最後の CLOSED trade の exitTime + cooldownMin > now ──
+    // isCooldown: 最後の CLOSED trade exitTime + cooldownMin > now
     let isCooldown = false;
     try {
       const lastClosed = await this.prisma.trade.findFirst({
@@ -238,16 +253,14 @@ export class SnapshotsService {
         select:  { exitTime: true },
       });
       if (lastClosed?.exitTime) {
-        const cooldownEnd = new Date(
-          lastClosed.exitTime.getTime() + cooldownMin * 60_000,
-        );
+        const cooldownEnd = new Date(lastClosed.exitTime.getTime() + cooldownMin * 60_000);
         isCooldown = cooldownEnd > now;
       }
     } catch (err) {
       this.logger.warn(`[Snapshot] isCooldown 判定失敗: ${String(err)}`);
     }
 
-    // ── isDailyLimit: 本日の trade 数（OPEN + CLOSED）>= maxTrades ────────
+    // isDailyLimit: 本日の trade 数 >= maxTrades
     let isDailyLimit = false;
     try {
       const dayStart   = new Date(now);
@@ -267,7 +280,10 @@ export class SnapshotsService {
     return {
       rr,
       lotSize,
-      maxLot:       0,   // 口座残高なし → v5.1 では 0 固定
+      // STEP5: maxLot は v5.1 仕様境界で 0 固定（口座残高なし）
+      // evaluateEntryDecision は (maxLot > 0 && lotSize > maxLot) のみ RISK_NG にする。
+      // maxLot=0 は常に条件を満たさないため RISK_NG にならない。v5.1 で意図的な動作。
+      maxLot: MAX_LOT_V51,
       isEventWindow,
       isCooldown,
       isDailyLimit,
@@ -276,12 +292,13 @@ export class SnapshotsService {
   }
 
   // ── 内部: patterns を PatternDetection から取得 ──────────────────────────
+  // STEP3: direction fallback 修正
+  // PatternDetection.direction は String @db.VarChar(10)（enum なし）。
+  // 格納される値: 'BUY' | 'SELL' | 'NEUTRAL'。
+  // ScorePattern.direction は 'BUY' | 'SELL' のみ許容（score-engine 正本）。
+  // 'NEUTRAL' 等 BUY/SELL 以外 → ScorePattern に変換不能のため filter で除外する。
+  // 除外されたレコードは score に影響しない（patternBonus = 0 と同等）。
 
-  /**
-   * Task3: PatternDetection テーブルから直近 5 件を取得して ScorePattern[] に変換。
-   * 新規に pattern 検出器を実装しない。
-   * DB に記録がなければ空配列を返す。
-   */
   private async loadPatterns(
     userId:    string,
     symbol:    string,
@@ -299,11 +316,20 @@ export class SnapshotsService {
         },
       });
 
-      return detections.map((d) => ({
+      const valid = detections.filter((d) =>
+        VALID_PATTERN_DIRECTIONS.has(d.direction as 'BUY' | 'SELL'),
+      );
+
+      if (valid.length < detections.length) {
+        this.logger.debug(
+          `[Snapshot] loadPatterns: ${detections.length - valid.length} 件を除外 ` +
+          `(direction が BUY/SELL 以外)`,
+        );
+      }
+
+      return valid.map((d) => ({
         name:       d.patternName,
-        direction:  (d.direction === 'BUY' || d.direction === 'SELL')
-                      ? d.direction
-                      : 'BUY',  // 'NEUTRAL' 等は BUY にフォールバック
+        direction:  d.direction as 'BUY' | 'SELL',  // filter 済みのため安全
         confidence: Number(d.confidence),
         bonus:      PATTERN_BONUS_MAP[d.patternName] ?? 5,
       }));
@@ -325,15 +351,15 @@ export class SnapshotsService {
     const { ind, isFallback } = await this.loadIndicators(symbol, timeframe);
 
     if (isFallback) {
-      this.logger.warn(`[Snapshot.capture] ${symbol}/${timeframe}: FALLBACK スコア使用`);
+      this.logger.warn(
+        `[Snapshot.capture] ${symbol}/${timeframe}: indicator_cache 未存在のため FALLBACK スコア使用。` +
+        `scoreTotal が 0 に近い値になります。`,
+      );
     }
 
-    // entryContext: 実データから構成
     const entryCtx = await this.buildEntryContext(
       userId, symbol, cooldownMin, maxTrades, forceLock,
     );
-
-    // patterns: PatternDetection から取得
     const patterns = await this.loadPatterns(userId, symbol, timeframe);
 
     const scoreResult = calculateScore({
@@ -356,7 +382,6 @@ export class SnapshotsService {
       scoreThreshold,
     });
 
-    // DB 保存用 entryContext（isDailyLimit は SnapshotIndicators スキーマ外 → 除外）
     const storedEntryContext = {
       rr:            entryCtx.rr,
       lotSize:       entryCtx.lotSize,
@@ -397,11 +422,9 @@ export class SnapshotsService {
       await this.loadUserSettings(userId);
 
     const { ind } = await this.loadIndicators(symbol, timeframe);
-
     const entryCtx = await this.buildEntryContext(
       userId, symbol, cooldownMin, maxTrades, forceLock,
     );
-
     const patterns = await this.loadPatterns(userId, symbol, timeframe);
 
     const scoreResult = calculateScore({
@@ -470,20 +493,53 @@ export class SnapshotsService {
 
   // ── GET /api/v1/snapshots ─────────────────────────────────────────────────
 
+  /**
+   * STEP2 修正: capturedAt の from/to 条件をひとつのオブジェクトにまとめる。
+   *
+   * 旧実装の問題:
+   *   ...(from && { capturedAt: { gte: new Date(from) } }),
+   *   ...(to   && { capturedAt: { lte: new Date(to) } }),
+   *   → from と to を両方指定すると後者が前者を上書きする（Prisma where の Object.assign 相当）。
+   *   → from+to 両指定時に `{ capturedAt: { lte: to } }` のみが残り from 条件が消える静かなバグ。
+   *
+   * 新実装:
+   *   capturedAt オブジェクトをひとつにまとめてから where に渡す。
+   *   ケース別動作:
+   *     from のみ  → { capturedAt: { gte: from } }
+   *     to のみ    → { capturedAt: { lte: to } }
+   *     両方指定   → { capturedAt: { gte: from, lte: to } }
+   *     どちらもなし → capturedAt 条件なし
+   */
   async getList(userId: string, query: GetSnapshotsQuery) {
     const { symbol, timeframe, entryState, from, to, page, limit } = query;
+
+    // STEP2: capturedAt をひとつのオブジェクトにまとめる
+    const capturedAt =
+      from || to
+        ? {
+            ...(from ? { gte: new Date(from) } : {}),
+            ...(to   ? { lte: new Date(to) }   : {}),
+          }
+        : undefined;
+
     const where = {
       userId,
       ...(symbol     && { symbol }),
       ...(timeframe  && { timeframe: timeframe as never }),
       ...(entryState && { entryState: entryState as never }),
-      ...(from       && { capturedAt: { gte: new Date(from) } }),
-      ...(to         && { capturedAt: { lte: new Date(to) } }),
+      ...(capturedAt && { capturedAt }),
     };
+
     const [data, total] = await Promise.all([
-      this.prisma.snapshot.findMany({ where, orderBy: { capturedAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+      this.prisma.snapshot.findMany({
+        where,
+        orderBy: { capturedAt: 'desc' },
+        skip:    (page - 1) * limit,
+        take:    limit,
+      }),
       this.prisma.snapshot.count({ where }),
     ]);
+
     return { data: data.map((s) => this.formatSnapshot(s)), total, page, limit };
   }
 
