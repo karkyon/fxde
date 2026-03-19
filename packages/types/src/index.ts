@@ -150,11 +150,15 @@ export interface ScoreBreakdown {
 }
 
 // Snapshot.entryContext
+// v5.1: maxLot = 0 固定（口座残高なし）/ v6 で account API と接続予定
+// isDailyLimit: 当日 trade 数 >= settings.riskProfile.maxTrades
 export interface EntryContext {
   rr: number
   lotSize: number
+  maxLot: number
   isEventWindow: boolean
   isCooldown: boolean
+  isDailyLimit: boolean
   forceLock: boolean
 }
 
