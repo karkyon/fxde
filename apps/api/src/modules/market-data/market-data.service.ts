@@ -341,25 +341,38 @@ export class MarketDataService {
   ): Promise<CanonicalCandle[]> {
     const provider = this.registry.getActive();
 
-    if (!provider.isConfigured()) {
+    // Chart API 向け candle 取得は market_candles テーブルを参照する。
+    // 理由: Dukascopy 等 provider が空レスポンスを返す場合でも、
+    //       syncCandles() / runBackfill() によって既に DB に保存されたデータを返す。
+    // provider.fetchRange() の直接呼び出しは syncCandles / runBackfill でのみ行う。
+    const dbCandles = await this.prisma.marketCandle.findMany({
+      where:   { symbol, timeframe: timeframe as never },
+      orderBy: { time: 'desc' },
+      take:    limit,
+    });
+
+    if (dbCandles.length === 0) {
       this.logger.debug(
-        `[${provider.providerId}] 未設定 → getCandles skip ${symbol}/${timeframe}`,
+        `[${provider.providerId}] getCandles DB empty ${symbol}/${timeframe}`,
       );
       return [];
     }
 
-    const now  = new Date().toISOString();
-    const from = calcFrom(timeframe, limit);
+    // DESC で取得 → 昇順（古→新）に変換してから返す
+    const asc = [...dbCandles].reverse();
 
-    const candles = await provider.fetchRange({
+    return asc.map((c) => ({
+      provider:    provider.providerId,
       symbol,
-      timeframe: timeframe as CanonicalTimeframe,
-      from,
-      to:    now,
-      limit,
-    });
-
-    return candles.filter((c) => c.isComplete !== false);
+      timeframe:   timeframe as CanonicalTimeframe,
+      time:        c.time.toISOString(),
+      open:        Number(c.open),
+      high:        Number(c.high),
+      low:         Number(c.low),
+      close:       Number(c.close),
+      volume:      Number(c.volume),
+      isComplete:  true,
+    }));
   }
 
   // ── checkConnection ──────────────────────────────────────────────────────

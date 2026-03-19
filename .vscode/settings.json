@@ -1,0 +1,15 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5436,
+            "driver": "PostgreSQL",
+            "name": "fxde-local",
+            "database": "fxde_db",
+            "username": "fxde",
+            "password": "fxde_password"
+        }
+    ]
+}

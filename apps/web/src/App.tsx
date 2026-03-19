@@ -36,6 +36,9 @@ import PlanPage     from './pages/Plan';
 import ChartPage    from './pages/Chart';
 import NotFoundPage from './pages/NotFound';
 import ReliabilityLabPage from './pages/ReliabilityLab';
+import ResearchEventsPage      from './pages/ResearchEvents';
+import ResearchCombinationsPage from './pages/ResearchCombinations';
+import ResearchJobsPage        from './pages/ResearchJobs';
 
 // PRO | PRO_PLUS | ADMIN のみ（遅延ロード）
 const PredictionPage = lazy(() => import('./pages/Prediction'));
@@ -107,8 +110,11 @@ const router = createBrowserRouter([
       { path: '/chart',       element: <ChartPage /> },
       { path: '/settings',    element: <SettingsPage /> },
       { path: '/plan',        element: <PlanPage /> },
-      { path: '/research/plugins', element: <ReliabilityLabPage /> },
-      { path: '/research/plugins/:pluginKey',   element: <PluginDrilldownPage /> },
+      { path: '/research/plugins',             element: <ReliabilityLabPage /> },
+      { path: '/research/plugins/:pluginKey',  element: <PluginDrilldownPage /> },
+      { path: '/research/events',              element: <ResearchEventsPage /> },
+      { path: '/research/combinations',        element: <ResearchCombinationsPage /> },
+      { path: '/research/jobs',                element: <ResearchJobsPage /> },
       // PRO | PRO_PLUS | ADMIN のみ
       {
         element: <ProGuard />,

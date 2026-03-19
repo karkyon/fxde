@@ -35,7 +35,8 @@ import { IndicatorPickerModal } from '../components/chart/IndicatorPickerModal';
 // Format utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
-function formatPrice(price: number, symbol: string): string {
+function formatPrice(price: number | null, symbol: string): string {
+  if (price === null || price === undefined) return '—';
   const isJpy = symbol.toUpperCase().includes('JPY');
   return isJpy ? price.toFixed(3) : price.toFixed(5);
 }
