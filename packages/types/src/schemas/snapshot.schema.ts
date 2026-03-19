@@ -83,13 +83,17 @@ export const MtfAlignmentItemSchema = z.object({
 
 export const MtfAlignmentSchema = z.record(MtfAlignmentItemSchema);
 
-export const EntryContextSchema = z.object({
-  rr:            z.number(),
-  lotSize:       z.number(),
-  isEventWindow: z.boolean(),
-  isCooldown:    z.boolean(),
-  forceLock:     z.boolean(),
-});
+ export const EntryContextSchema = z.object({
+   rr:            z.number(),
+   lotSize:       z.number(),
+  // v5.1: 0 固定（口座残高なし）。entry-decision.ts: maxLot > 0 && lotSize > maxLot のみ RISK_NG
+  maxLot:        z.number(),
+   isEventWindow: z.boolean(),
+   isCooldown:    z.boolean(),
+  // 当日 trade 数 >= settings.maxTrades
+  isDailyLimit:  z.boolean(),
+   forceLock:     z.boolean(),
+ });
 
 // ── GET /snapshots クエリ ──────────────────────────────────────────────────
 

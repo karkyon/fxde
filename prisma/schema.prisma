@@ -300,7 +300,9 @@ model Snapshot {
 
   entryState EntryState @map("entry_state")
 
-  // entryContext 構造: { rr, lotSize, isEventWindow, isCooldown, forceLock }
+  // entryContext 構造: { rr, lotSize, maxLot, isEventWindow, isCooldown, isDailyLimit, forceLock }
+  // maxLot: v5.1 = 0 固定（口座残高なし）/ v6 で account API と接続予定
+  // isDailyLimit: 当日 trade 数 >= settings.riskProfile.maxTrades
   entryContext Json @map("entry_context")
 
   createdAt DateTime @default(now()) @map("created_at")
