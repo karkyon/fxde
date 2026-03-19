@@ -23,6 +23,7 @@ import { PluginsRuntimeAnalysisService }    from './plugins-runtime-analysis.ser
 import { PluginRuntimeCoordinatorService }  from './coordinator/plugin-runtime-coordinator.service';
 import { EnabledPluginsResolverService }    from './resolver/enabled-plugins-resolver.service';
 import { ExecutionContextBuilderService }   from './context/execution-context-builder.service';
+import { ConditionContextEngineService }    from './context/condition-context-engine.service';
 import { PluginExecutorService }            from './executor/plugin-executor.service';
 import { ResultNormalizerService }          from './normalizer/result-normalizer.service';
 import { PluginEventCaptureService }        from './event/plugin-event-capture.service';
@@ -31,7 +32,7 @@ import { PluginEventCaptureService }        from './event/plugin-event-capture.s
   imports: [
     PrismaModule,
     ChartModule,
-    PluginsRankingModule,  // 追加: AdaptiveRankingService を resolver に DI するために必要
+    PluginsRankingModule,  // AdaptiveRankingService を resolver に DI するために必要
   ],
   controllers: [PluginsRuntimeController],
   providers: [
@@ -40,12 +41,14 @@ import { PluginEventCaptureService }        from './event/plugin-event-capture.s
     PluginRuntimeCoordinatorService,
     EnabledPluginsResolverService,
     ExecutionContextBuilderService,
+    ConditionContextEngineService,   // 追加: adapter から利用。将来DI依存追加に備えて登録
     PluginExecutorService,
     ResultNormalizerService,
     PluginEventCaptureService,
   ],
   exports: [
     PluginEventCaptureService,
+    ConditionContextEngineService,   // 追加: 外部モジュールからの利用に備えて export
   ],
 })
 export class PluginsRuntimeModule {}
