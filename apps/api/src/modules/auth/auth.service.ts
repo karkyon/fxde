@@ -8,6 +8,7 @@ import { JwtService }    from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import * as argon2       from 'argon2';
+import type { Prisma }   from '@prisma/client';
 import type { Response, Request } from 'express';
 import type { RegisterDto, LoginDto } from '@fxde/types';
 import type { JwtPayload } from '../../common/decorators/current-user.decorator';
@@ -169,7 +170,7 @@ export class AuthService {
    * @param req  Express Request（userAgent / ipAddress 取得用）
    */
   private async _createSession(
-    tx: Parameters<Parameters<PrismaService['$transaction']>[0]>[0],
+    tx: Prisma.TransactionClient,
     user: { id: string; email: string; role: string },
     req: Request,
   ): Promise<{ session: { id: string }; rawRt: string }> {

@@ -543,7 +543,7 @@ export default function ChartPage() {
           <section style={s.card}>
             <h2 style={s.cardTitle}>Indicator Summary</h2>
             {indicators.isLoading && <p style={s.muted}>Loading…</p>}
-            {indicators.data && (
+            {indicators.data && indicators.data.indicators && (
               <div style={s.indGrid}>
                 <IndicatorCard id="ma"   label="MA"
                   value={`MA: ${indicators.data.indicators.ma.crossStatus}`}
