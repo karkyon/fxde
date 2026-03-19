@@ -4,6 +4,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ChartService } from '../../modules/chart/chart.service';
+import { ConditionContextEngineService } from './condition-context-engine.service';
 import type { UserRole, Timeframe } from '@fxde/types';
 import type { PluginExecutionContext } from '../types/plugin-execution-context';
 
@@ -25,7 +26,10 @@ const HTF_MAP: Record<string, string> = {
 export class ExecutionContextBuilderService {
   private readonly logger = new Logger(ExecutionContextBuilderService.name);
 
-  constructor(private readonly chartService: ChartService) {}
+  constructor(
+    private readonly chartService:            ChartService,
+    private readonly conditionContextEngine:  ConditionContextEngineService,
+  ) {}
 
   async build(params: {
     userId:    string;
@@ -76,13 +80,14 @@ export class ExecutionContextBuilderService {
       role,
       symbol,
       timeframe,
-      nowIso:            new Date().toISOString(),
-      candles:           candlesResponse.candles,
+      nowIso:                 new Date().toISOString(),
+      candles:                candlesResponse.candles,
       higherCandles,
-      indicators:        indicatorsResponse.indicators as unknown as Record<string, unknown> | null,
-      patternMarkers:    [],
-      activeTrades:      [],
-      predictionOverlay: null,
+      indicators:             indicatorsResponse.indicators as unknown as Record<string, unknown> | null,
+      patternMarkers:         [],
+      activeTrades:           [],
+      predictionOverlay:      null,
+      conditionContextEngine: this.conditionContextEngine,  // STEP2-4: DI統一
     };
   }
 }

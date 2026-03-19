@@ -8,12 +8,38 @@
  * 修正（Task E）:
  *   captureOverlayEvents()   — overlay イベントを PluginEvent に保存
  *   captureIndicatorEvents() — indicator イベントを PluginEvent に保存
+ *
+ * 追加（STEP2 Task2-3）:
+ *   capturePatternDetections() — auto-chart-pattern-engine の signal を
+ *     PatternDetection テーブルに保存。
+ *     snapshot.loadPatterns() がこのテーブルを参照するため、
+ *     これにより snapshot.patterns に pattern 検出結果が反映される。
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma }             from '@prisma/client';
+import { Prisma, Timeframe }  from '@prisma/client';
 import { PrismaService }      from '../../prisma/prisma.service';
 import type { RuntimeSignal, RuntimeOverlay, RuntimeIndicator } from '@fxde/types';
+
+// ── PatternDetection.patternName / patternCategory マッピング ─────────────
+// auto-chart-pattern-engine の signal.meta.pattern → DB 保存値
+// snapshots.service.ts の PATTERN_BONUS_MAP のキー名に合わせること
+const PATTERN_META: Record<string, { patternName: string; patternCategory: string }> = {
+  head_and_shoulders:         { patternName: 'HeadAndShoulders',        patternCategory: 'reversal'     },
+  inverse_head_and_shoulders: { patternName: 'InverseHeadAndShoulders', patternCategory: 'reversal'     },
+  double_top:                 { patternName: 'DoubleTop',               patternCategory: 'reversal'     },
+  double_bottom:              { patternName: 'DoubleBottom',            patternCategory: 'reversal'     },
+  triangle:                   { patternName: 'Triangle',                patternCategory: 'continuation' },
+  ascending_triangle:         { patternName: 'Triangle',                patternCategory: 'continuation' },
+  descending_triangle:        { patternName: 'Triangle',                patternCategory: 'continuation' },
+  symmetrical_triangle:       { patternName: 'Triangle',                patternCategory: 'continuation' },
+  channel:                    { patternName: 'Channel',                 patternCategory: 'continuation' },
+};
+
+/** Prisma Timeframe enum の有効値セット（文字列 → enum 変換用）*/
+const VALID_TF = new Set<string>([
+  'M1','M5','M15','M30','H1','H4','H8','D1','W1','MN',
+]);
 
 @Injectable()
 export class PluginEventCaptureService {
@@ -169,6 +195,93 @@ export class PluginEventCaptureService {
     } catch (err) {
       this.logger.warn(
         `[PluginEventCapture] failed to save indicator events for ${pluginKey}: ${String(err)}`,
+      );
+    }
+  }
+
+  // ── patternDetection ─────────────────────────────────────────────────────
+
+  /**
+   * auto-chart-pattern-engine の signals を PatternDetection テーブルに保存する。
+   *
+   * STEP2 Task2-3: snapshot.loadPatterns() は PatternDetection テーブルを参照する。
+   * このメソッドで保存することで「Pattern検出 → DB → snapshot.patterns 反映」が閉じる。
+   *
+   * 呼び出し条件:
+   *   coordinator で pluginKey === 'auto-chart-pattern-engine' の SUCCEEDED 時のみ。
+   *
+   * snapshots.service.ts の loadPatterns() が読み取るフィールド:
+   *   patternName / direction / confidence
+   *   where: { userId, symbol, timeframe }
+   *   orderBy: { detectedAt: 'desc' }
+   *   take: 5
+   *
+   * PatternDetection スキーマ必須フィールド:
+   *   userId / symbol / timeframe(Timeframe enum) / patternName / patternCategory
+   *   direction(VarChar10) / confidence(Decimal) / detectedAt / barIndex / price / label
+   */
+  async capturePatternDetections(
+    userId:    string,
+    symbol:    string,
+    timeframe: string,
+    signals:   RuntimeSignal[],
+  ): Promise<void> {
+    if (signals.length === 0) return;
+
+    if (!VALID_TF.has(timeframe)) {
+      this.logger.warn(
+        `[PatternDetectionCapture] invalid timeframe "${timeframe}" → skip`,
+      );
+      return;
+    }
+
+    const tf  = timeframe as Timeframe;
+    const now = new Date();
+
+    try {
+      for (const sig of signals) {
+        const sigMeta    = sig.meta as Record<string, unknown> | undefined;
+        const patternKey = (sigMeta?.['pattern'] as string | undefined) ?? '';
+        const mapped     = PATTERN_META[patternKey];
+
+        if (!mapped) {
+          this.logger.warn(
+            `[PatternDetectionCapture] unknown pattern key "${patternKey}" → skip`,
+          );
+          continue;
+        }
+
+        // barIndex: detector が headIdx / rightIdx / peakIdx 等を meta に格納する
+        const barIndex =
+          (sigMeta?.['headIdx']  as number | undefined) ??
+          (sigMeta?.['rightIdx'] as number | undefined) ??
+          (sigMeta?.['peakIdx']  as number | undefined) ??
+          0;
+
+        await this.prisma.patternDetection.create({
+          data: {
+            userId,
+            symbol,
+            timeframe:       tf,
+            patternName:     mapped.patternName,
+            patternCategory: mapped.patternCategory,
+            direction:       sig.direction ?? 'NEUTRAL',
+            confidence:      sig.confidence ?? 0.5,
+            detectedAt:      sig.timestamp ? new Date(sig.timestamp) : now,
+            barIndex,
+            price:           sig.price ?? 0,
+            label:           sig.label,
+          },
+        });
+      }
+
+      this.logger.debug(
+        `[PatternDetectionCapture] saved ${signals.length} detection(s) ` +
+        `for userId=${userId} ${symbol}/${timeframe}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[PatternDetectionCapture] failed for ${symbol}/${timeframe}: ${String(err)}`,
       );
     }
   }

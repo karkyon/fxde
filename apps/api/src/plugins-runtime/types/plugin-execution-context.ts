@@ -7,9 +7,15 @@
  *   fxde_plugin_runtime_完全設計書 §8.4「Execution Context」
  *
  * ⚠️ このファイルは API 内部型。@fxde/types には含めない。
+ *
+ * STEP2-4 追加:
+ *   conditionContextEngine を追加。
+ *   auto-chart-pattern-engine.adapter.ts が module-level new を使わず
+ *   DI 管理下の instance を ctx 経由で受け取るようにするための追加。
  */
 
 import type { UserRole } from '@fxde/types';
+import type { ConditionContextEngineService } from '../context/condition-context-engine.service';
 
 /** ローソク足 1 本 */
 export interface Candle {
@@ -49,6 +55,14 @@ export interface PluginExecutionContext {
 
   /** 予測オーバーレイ（v5.1 は stub、将来拡張用） */
   predictionOverlay?: unknown | null;
+
+  /**
+   * STEP2-4: DI統一のため追加。
+   * ExecutionContextBuilderService が NestJS DI 管理下の instance を注入する。
+   * auto-chart-pattern-engine.adapter.ts はこれを使って context を算出する。
+   * module-level `new ConditionContextEngineService()` は廃止。
+   */
+  conditionContextEngine?: ConditionContextEngineService;
 }
 
 /** plugin が実行時に返す生の出力型 */

@@ -153,20 +153,30 @@ export class PluginRuntimeCoordinatorService {
           timeframe,
           normalized.signals,
         );
-        // 追加（Task E）: overlay
+        // overlay
         void this.eventCapture.captureOverlayEvents(
           plugin.pluginKey,
           symbol,
           timeframe,
           normalized.overlays,
         );
-        // 追加（Task E）: indicator
+        // indicator
         void this.eventCapture.captureIndicatorEvents(
           plugin.pluginKey,
           symbol,
           timeframe,
           normalized.indicators,
         );
+        // STEP2 Task2-3: auto-chart-pattern-engine の signal を PatternDetection に保存
+        // snapshot.loadPatterns() が PatternDetection を参照するため、これで経路が閉じる
+        if (plugin.pluginKey === 'auto-chart-pattern-engine') {
+          void this.eventCapture.capturePatternDetections(
+            userId,
+            symbol,
+            timeframe,
+            normalized.signals,
+          );
+        }
 
       } else if (result.status === 'FAILED') {
         pluginStatuses.push({
