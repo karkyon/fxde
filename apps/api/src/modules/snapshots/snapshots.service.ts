@@ -33,7 +33,21 @@
  *     → lotSize <= maxLot(=0) は常に false なので RISK_NG にはならない。正しい動作。
  *     将来 v6 で account API と接続する際はここを差し替える。
  *
- * 変更禁止:
+ * Task1 変更（2026-03-19 今回）:
+ *   - capture() の storedEntryContext に maxLot / isDailyLimit を追加
+ *     理由: decision の判定に使った項目が保存から欠けていたため
+ *   - evaluate() の返却 entryContext にも同様に追加
+ *     理由: capture と evaluate の entryContext 形状を一致させる
+ *   - maxLot / isDailyLimit は JSONB 拡張フィールドとして保存
+ *     EntryContextSchema（packages/types）は変更せずに対応可能
+ *
+ * Task2+3 変更（同）:
+ *   - entryContext の項目境界を整理（コメント上）
+ *     実データ化済み: rr, lotSize, isEventWindow, isCooldown, isDailyLimit
+ *     v5.1 仕様境界: maxLot = 0（口座残高なし）, forceLock（settings 由来）
+ *   - FALLBACK_INDICATORS 使用時のログ文言を強化
+ *     fallback snapshot は scoreTotal が著しく低い値になるため
+ *     dashboard / chart 側で識別する際の手がかりになる
  *   - public メソッドシグネチャ（capture / evaluate / getLatest / getById / getList）
  *   - indicator 計算をここに書く
  *   - v6 機能（DTW / HMM / WFV）に触れる
@@ -382,11 +396,18 @@ export class SnapshotsService {
       scoreThreshold,
     });
 
+    // Task1: decision の判定に使った全項目を entryContext に含める
+    // maxLot / isDailyLimit を追加（buildEntryContext が計算した値をそのまま保存）
+    // Snapshot.entryContext は JSONB 型のため他ファイルを変えずに追加可能
+    // ただし EntryContextSchema（packages/types）は { rr, lotSize, isEventWindow, isCooldown, forceLock }
+    // のままなので、追加フィールドは「JSONB の拡張」として扱われる（型エラーなし）
     const storedEntryContext = {
       rr:            entryCtx.rr,
       lotSize:       entryCtx.lotSize,
+      maxLot:        entryCtx.maxLot,        // v5.1: 0 固定（口座残高なし）
       isEventWindow: entryCtx.isEventWindow,
       isCooldown:    entryCtx.isCooldown,
+      isDailyLimit:  entryCtx.isDailyLimit,  // 当日 trade 数 >= maxTrades
       forceLock,
     };
 
@@ -459,8 +480,10 @@ export class SnapshotsService {
       entryContext: {
         rr:            entryCtx.rr,
         lotSize:       entryCtx.lotSize,
+        maxLot:        entryCtx.maxLot,        // v5.1: 0 固定（口座残高なし）
         isEventWindow: entryCtx.isEventWindow,
         isCooldown:    entryCtx.isCooldown,
+        isDailyLimit:  entryCtx.isDailyLimit,  // 当日 trade 数 >= maxTrades
         forceLock,
       },
       createdAt: capturedAt,
