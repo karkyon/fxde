@@ -1,0 +1,1 @@
+FXDE Auto Chart Pattern Engine

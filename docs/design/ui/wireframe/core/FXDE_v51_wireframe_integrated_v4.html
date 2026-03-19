@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark" data-mode="beginner">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FXDE v5.1 — Integrated Wireframe (Spec-aligned)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: ['class', '[data-theme="dark"]'],
+      theme: {
+        extend: {
+          colors: {
+            shell: {
+              bg: '#0D0F14',
+              panel: '#161920',
+              border: '#252830',
+              text: '#E2E8F0',
+              muted: '#94A3B8',
+              accent: '#4D9FFF'
+            },
+            score: { high: '#2EC96A', mid: '#E8B830', low: '#E05252', bonus: '#F59E0B' }
+          },
+          boxShadow: { soft: '0 8px 24px rgba(0,0,0,.28)' }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --topbar-h: 56px;
+      --sidebar-w: 236px;
+      --ticker-h: 44px;
+    }
+    body { background:#0D0F14; color:#E2E8F0; }
+    [data-theme="light"] body, [data-theme="light"] { background:#F4F6FA; color:#18202b; }
+    .app-shell { display:grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: var(--topbar-h) var(--ticker-h) 1fr; grid-template-areas: "top top" "side ticker" "side main"; min-height:100vh; }
+    .topbar { grid-area: top; }
+    .sidebar { grid-area: side; height: calc(100vh - var(--topbar-h)); }
+    .ticker { grid-area: ticker; }
+    .main { grid-area: main; }
+    .page { display:none; }
+    .page.active { display:block; }
+    .nav-item.active { background: rgba(77,159,255,.12); color:#4D9FFF; border-left-color:#4D9FFF; }
+    .nav-item { border-left:3px solid transparent; }
+    .chip-entry-ok { background:#1A4A2E; color:#2EC96A; border-color:#2EC96A; }
+    .chip-score-low { background:#3A3010; color:#E8B830; border-color:#E8B830; }
+    .chip-risk-ng { background:#4A1010; color:#E05252; border-color:#E05252; }
+    .chip-locked { background:#1A1A2E; color:#4D9FFF; border-color:#4D9FFF; }
+    .chip-cooldown { background:#3A1A00; color:#FB923C; border-color:#FB923C; }
+    .score-ring { transform: rotate(-90deg); transform-origin: 60px 60px; }
+    .blur-lock { filter: blur(3px); opacity:.45; pointer-events:none; user-select:none; }
+    .locked-only[data-locked="true"] .lock-visible { display:flex; }
+    .locked-only[data-locked="true"] .lock-hidden { display:none; }
+    .locked-only[data-locked="false"] .lock-visible { display:none; }
+    .locked-only[data-locked="false"] .lock-hidden { display:block; }
+    .pro-toggle-disabled { opacity:.45; cursor:not-allowed; }
+    .modal-backdrop { display:none; }
+    .modal-backdrop.open { display:flex; }
+    .mini-scroll::-webkit-scrollbar { width:6px; height:6px; }
+    .mini-scroll::-webkit-scrollbar-thumb { background:#252830; border-radius:999px; }
+  </style>
+</head>
+<body class="font-sans">
+<div class="app-shell">
+  <header class="topbar sticky top-0 z-40 border-b border-shell-border bg-shell-panel/95 backdrop-blur">
+    <div class="h-14 px-4 flex items-center gap-3">
+      <div class="font-mono font-semibold tracking-wide text-shell-accent">FX<span class="text-score-high">DE</span> <span class="text-xs text-shell-muted">v5.1</span></div>
+      <div class="h-6 w-px bg-shell-border"></div>
+      <select id="selectedSymbol" class="bg-shell-bg border border-shell-border rounded px-3 py-1.5 text-sm">
+        <option>EURUSD</option><option>USDJPY</option><option>GBPUSD</option><option>USDCHF</option>
+        <option>AUDUSD</option><option>NZDUSD</option><option>USDCAD</option><option>XAUUSD</option>
+      </select>
+      <div class="inline-flex rounded border border-shell-border overflow-hidden text-xs">
+        <button id="mode-beginner" class="px-3 py-1.5 bg-shell-accent text-white" onclick="setMode('beginner')">beginner</button>
+        <button id="mode-pro" class="px-3 py-1.5 bg-transparent text-shell-muted" onclick="setMode('pro')">pro</button>
+      </div>
+      <button class="border border-shell-border rounded px-2 py-1.5 text-sm" onclick="toggleTheme()">🌓</button>
+      <div class="h-6 w-px bg-shell-border"></div>
+      <label class="text-xs text-shell-muted">Mock Role</label>
+      <select id="mockRole" class="bg-shell-bg border border-shell-border rounded px-3 py-1.5 text-sm" onchange="applyRole()">
+        <option>FREE</option><option>BASIC</option><option selected>PRO</option><option>PRO_PLUS</option><option>ADMIN</option>
+      </select>
+      <div class="ml-auto flex items-center gap-3 text-right">
+        <div class="text-xs leading-tight font-mono">
+          <div id="clockLocal">--:--:--</div>
+          <div id="clockUtc" class="text-shell-muted">UTC --:--:--</div>
+        </div>
+        <div class="flex items-center gap-2 border border-shell-border rounded-lg px-3 py-1.5 bg-shell-bg">
+          <div class="w-7 h-7 rounded-full bg-shell-accent text-white grid place-items-center text-xs font-bold">JD</div>
+          <div class="text-xs leading-tight">
+            <div>jadeworks@example.com</div>
+            <div id="topRoleBadge" class="text-score-mid font-semibold">PRO</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <aside class="sidebar overflow-y-auto mini-scroll border-r border-shell-border bg-shell-panel sticky top-14">
+    <div class="p-3 text-[10px] uppercase tracking-[0.18em] text-shell-muted">Navigation</div>
+    <nav class="pb-4">
+      <button class="nav-item active w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="dashboard" onclick="navigate('dashboard')">▦ <span>Dashboard</span></button>
+      <button class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="trades" onclick="navigate('trades')">◫ <span>Trades</span></button>
+      <button class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="strategy" onclick="navigate('strategy')">◭ <span>Strategy</span></button>
+      <button id="navPrediction" class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" onclick="handlePredictionNav()">◌ <span>Prediction</span><span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-gradient-to-r from-amber-500 to-rose-500 text-white">PRO</span></button>
+      <button class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="chart" onclick="navigate('chart')">◫ <span>Chart</span></button>
+      <button class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="settings" onclick="navigate('settings')">⚙ <span>Settings</span></button>
+      <button class="nav-item w-full text-left px-4 py-2.5 flex items-center gap-3 text-sm" data-page-btn="plan" onclick="navigate('plan')">★ <span>Plan</span></button>
+    </nav>
+    <div class="mt-auto p-4 border-t border-shell-border text-[11px] leading-5 text-shell-muted">
+      <div class="font-semibold text-score-low mb-1">※ 免責事項</div>
+      本ツールは情報提供のみを目的とし、投資助言ではありません。投資の最終判断は必ずご自身の責任で行ってください。
+    </div>
+  </aside>
+
+  <div class="ticker border-b border-shell-border bg-shell-panel/80 overflow-x-auto mini-scroll">
+    <div class="h-11 min-w-max px-4 flex items-center gap-3 text-xs">
+      <span class="uppercase tracking-[0.16em] text-shell-muted">Ticker</span>
+      <span class="px-2 py-1 rounded border border-shell-border font-mono">EURUSD 1.0842 <span class="text-score-high">+0.24%</span> <span class="text-score-mid">72</span></span>
+      <span class="px-2 py-1 rounded border border-shell-border font-mono">USDJPY 149.80 <span class="text-score-low">-0.18%</span> <span class="text-score-low">48</span></span>
+      <span class="px-2 py-1 rounded border border-shell-border font-mono">GBPUSD 1.2711 <span class="text-score-high">+0.12%</span> <span class="text-score-high">78</span></span>
+      <span class="px-2 py-1 rounded border border-shell-border font-mono">XAUUSD 2154.2 <span class="text-score-mid">+0.03%</span> <span class="text-score-mid">66</span></span>
+      <span class="text-shell-muted">Plan limits: FREE=1 / BASIC=4 / PRO=8</span>
+    </div>
+  </div>
+
+  <main class="main overflow-y-auto mini-scroll bg-shell-bg p-5">
+
+    <!-- PG-01 Dashboard -->
+    <section id="page-dashboard" class="page active space-y-4">
+      <div class="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-300 beg-only">💡 上の Command Bar が今すぐの答えです。緑のときだけエントリーを検討してください。</div>
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4 shadow-soft">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-mono chip-score-low">🟡 WAIT</span>
+          <span class="rounded-lg bg-shell-bg px-3 py-2 text-sm">Score <span class="font-mono text-score-mid">72</span></span>
+          <span class="rounded-lg bg-shell-bg px-3 py-2 text-sm">AI確率 <span class="font-mono">63%</span></span>
+          <span class="rounded-lg bg-shell-bg px-3 py-2 text-sm">方向 <span class="font-mono text-score-high">BUY</span></span>
+          <span class="rounded-lg bg-shell-bg px-3 py-2 text-sm">次の重要指標 <span class="font-mono text-score-mid">47:23</span></span>
+          <div class="ml-auto text-sm text-shell-muted">EntryState / Score / AI Probability / Direction / Event Timer</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-3 space-y-4">
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-4">ScorePanel</div>
+            <div class="grid place-items-center">
+              <div class="relative w-[120px] h-[120px]">
+                <svg viewBox="0 0 120 120" width="120" height="120">
+                  <circle cx="60" cy="60" r="44" stroke="#252830" stroke-width="8" fill="none"></circle>
+                  <circle class="score-ring" cx="60" cy="60" r="44" stroke="#E8B830" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="276.46" stroke-dashoffset="77.41"></circle>
+                </svg>
+                <div class="absolute inset-0 grid place-items-center text-center">
+                  <div class="font-mono text-3xl text-score-mid">72</div>
+                  <div class="text-[11px] text-shell-muted">MID</div>
+                </div>
+              </div>
+            </div>
+            <div class="mt-4 space-y-3 text-sm">
+              <div><div class="flex justify-between mb-1"><span>Technical</span><span class="font-mono">29/40</span></div><div class="h-2 bg-shell-border rounded"><div class="h-2 rounded bg-score-mid" style="width:72.5%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>Fundamental</span><span class="font-mono">22/30</span></div><div class="h-2 bg-shell-border rounded"><div class="h-2 rounded bg-score-mid" style="width:73.3%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>Market</span><span class="font-mono">7/10</span></div><div class="h-2 bg-shell-border rounded"><div class="h-2 rounded bg-score-mid" style="width:70%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>RR Ratio</span><span class="font-mono">8/10</span></div><div class="h-2 bg-shell-border rounded"><div class="h-2 rounded bg-score-high" style="width:80%"></div></div></div>
+              <div><div class="flex justify-between mb-1"><span>Pattern Bonus</span><span class="font-mono text-score-bonus">+6</span></div><div class="h-2 bg-shell-border rounded"><div class="h-2 rounded bg-score-bonus" style="width:40%"></div></div></div>
+            </div>
+            <button class="mt-4 w-full rounded-xl border border-score-mid bg-[#3A3010] px-4 py-3 font-mono text-score-mid">ENTRY LOCKED</button>
+          </div>
+
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">LimitPanel</div>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-shell-muted">残りトレード数</span><span class="font-mono">1 / 3</span></div>
+              <div class="flex justify-between"><span class="text-shell-muted">日次損失率</span><span class="font-mono">-1.2%</span></div>
+              <div class="flex justify-between"><span class="text-shell-muted">連敗数</span><span class="font-mono">2 / 3</span></div>
+              <div class="flex justify-between"><span class="text-shell-muted">規律スコア</span><span class="font-mono text-score-high">84</span></div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">PairsPanel</div>
+              <div class="text-xs text-shell-muted">2×4 / plan gated</div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-mono mb-1">EURUSD</div><div>1.0842 <span class="text-score-high">+0.24%</span></div><div class="mt-2 text-score-mid">Score 72</div><div class="mt-1">BUY / DB</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-mono mb-1">GBPUSD</div><div>1.2711 <span class="text-score-high">+0.12%</span></div><div class="mt-2 text-score-high">Score 78</div><div class="mt-1">BUY / Flag</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-mono mb-1">USDJPY</div><div>149.80 <span class="text-score-low">-0.18%</span></div><div class="mt-2 text-score-low">Score 48</div><div class="mt-1">WAIT</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-mono mb-1">XAUUSD</div><div>2154.2 <span class="text-score-mid">+0.03%</span></div><div class="mt-2 text-score-mid">Score 66</div><div class="mt-1">RANGE</div></div>
+              <div class="rounded-xl border border-dashed border-shell-border bg-shell-bg/50 p-3 blur-lock"><div class="font-mono mb-1">LOCKED SLOT</div><div>PRO / PRO_PLUS / ADMIN</div></div>
+              <div class="rounded-xl border border-dashed border-shell-border bg-shell-bg/50 p-3 blur-lock"><div class="font-mono mb-1">LOCKED SLOT</div><div>PRO / PRO_PLUS / ADMIN</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-5 space-y-4">
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">ChartSvg</div>
+              <div class="text-xs text-shell-muted">PG-01 簡易サマリーチャート / MainChart と別責務</div>
+            </div>
+            <div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-[320px] relative overflow-hidden">
+              <svg viewBox="0 0 700 320" class="w-full h-full">
+                <line x1="40" y1="40" x2="40" y2="280" stroke="#334155" />
+                <line x1="40" y1="280" x2="660" y2="280" stroke="#334155" />
+                <polyline points="60,220 100,180 140,190 180,150 220,160 260,120 300,130 340,90 380,100 420,70 460,80 500,55 540,62 580,48 620,58" fill="none" stroke="#4D9FFF" stroke-width="2" />
+                <line x1="60" y1="200" x2="640" y2="200" stroke="#2EC96A" stroke-width="2" />
+                <line x1="60" y1="245" x2="640" y2="245" stroke="#E05252" stroke-width="1.5" stroke-dasharray="6 3" />
+                <line x1="60" y1="145" x2="640" y2="145" stroke="#4D9FFF" stroke-width="1.5" stroke-dasharray="6 3" />
+                <line x1="60" y1="172" x2="640" y2="172" stroke="#B07EFF" stroke-width="1" stroke-dasharray="3 3" />
+                <rect x="255" y="110" width="95" height="115" fill="rgba(46,201,106,0.06)" stroke="#2EC96A" stroke-dasharray="8 4" />
+                <text x="268" y="105" fill="#2EC96A" font-size="12">DoubleBottom</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">IndicatorCards × 6</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>MA</strong><span class="text-score-high font-mono">8/10</span></div><div class="mt-1">GC確認 / MA50 &gt; MA200</div><div class="text-xs text-shell-muted mt-1">📈 上昇優位</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>RSI</strong><span class="text-score-mid font-mono">6/8</span></div><div class="mt-1">54.2</div><div class="text-xs text-shell-muted mt-1">中立〜やや強気</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>MACD</strong><span class="text-score-high font-mono">8/10</span></div><div class="mt-1">above signal</div><div class="text-xs text-shell-muted mt-1">ヒストグラム拡大</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>MTF</strong><span class="text-score-mid font-mono">7/12</span></div><div class="mt-1">D1/W1 aligned</div><div class="text-xs text-shell-muted mt-1">H1 も追従</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>BB</strong><span class="text-score-mid font-mono">—</span></div><div class="mt-1">upper-middle</div><div class="text-xs text-shell-muted mt-1">押し目候補</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="flex justify-between"><strong>ATR</strong><span class="text-score-mid font-mono">7/10</span></div><div class="mt-1">0.0082</div><div class="text-xs text-shell-muted mt-1">正常域</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-12 xl:col-span-4 space-y-4">
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">AiSummary</div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-4 text-sm leading-7">現在の相場は上昇優位ですが、スコアはまだ 72 点です。重要指標前に無理をせず、75 点以上になった時だけエントリーを検討してください。最終判断はご自身でお願いします。</div>
+            <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
+              <div class="rounded-lg border border-shell-border bg-shell-bg p-3"><div class="text-score-high font-semibold">強気 63%</div><div class="text-shell-muted mt-1">押し目買い継続</div></div>
+              <div class="rounded-lg border border-shell-border bg-shell-bg p-3"><div class="text-score-mid font-semibold">レンジ 22%</div><div class="text-shell-muted mt-1">指標待ち</div></div>
+              <div class="rounded-lg border border-shell-border bg-shell-bg p-3"><div class="text-score-low font-semibold">弱気 15%</div><div class="text-shell-muted mt-1">ダマシ警戒</div></div>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">EconomicCalendar</div>
+            <div class="space-y-2 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>CPI (US)</span><span class="font-mono text-score-mid">47:23</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>ECB Speech</span><span class="font-mono">03:10</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>NFP</span><span class="font-mono text-score-low">Fri</span></div>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">FundamentalPanel</div>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">金利差</div><div class="font-mono mt-1">EUR - USD = <span class="text-score-high">+0.75%</span></div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">NLP 感情</div><div class="font-mono mt-1">+0.34</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 col-span-2"><div class="text-shell-muted text-xs">要点</div><div class="mt-1">高金利通貨買い優位 / 重大ネガティブニュースなし</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PG-02 Trades -->
+    <section id="page-trades" class="page space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-xs text-shell-muted uppercase">Win Rate</div><div class="mt-2 text-3xl font-mono text-score-high">61.5%</div></div>
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-xs text-shell-muted uppercase">Average RR</div><div class="mt-2 text-3xl font-mono">2.1</div></div>
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-xs text-shell-muted uppercase">Total PnL</div><div class="mt-2 text-3xl font-mono text-score-high">+¥38,000</div></div>
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-xs text-shell-muted uppercase">Discipline Score</div><div class="mt-2 text-3xl font-mono">84</div></div>
+      </div>
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-8 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="flex items-center justify-between mb-3"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">EquityCurve</div><div class="text-xs text-shell-muted">1M / 3M / 1Y</div></div>
+          <div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-[280px] relative overflow-hidden">
+            <svg viewBox="0 0 900 280" class="w-full h-full">
+              <polyline points="30,220 90,210 150,190 210,200 270,170 330,155 390,160 450,135 510,125 570,115 630,105 690,98 750,86 810,78 870,68" fill="none" stroke="#2EC96A" stroke-width="3" />
+              <polyline points="30,240 90,246 150,238 210,244 270,229 330,222 390,226 450,210 510,202 570,194 630,188 690,181 750,173 810,166 870,160" fill="none" stroke="#E05252" stroke-width="2" stroke-dasharray="5 4" />
+            </svg>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">MonthlyStats</div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">総損益</div><div class="font-mono text-score-high mt-1">+¥38,000</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">勝率</div><div class="font-mono text-score-high mt-1">61.5%</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">取引回数</div><div class="font-mono mt-1">26</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">最大DD</div><div class="font-mono text-score-mid mt-1">-8.2%</div></div>
+          </div>
+          <div class="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">⚠️ 規律違反の損失は遵守時の 1.46 倍</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">PsychologyGraphs / Hourly</div><div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-56 grid place-items-center text-shell-muted">時間帯別成績グラフ Placeholder</div></div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">Consecutive Loss Impact</div><div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-56 grid place-items-center text-shell-muted">連敗後勝率崩壊グラフ Placeholder</div></div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">By Score Band</div><div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-56 grid place-items-center text-shell-muted">スコア帯別損益グラフ Placeholder</div></div>
+      </div>
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-8 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="flex items-center justify-between mb-3"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">TradeList</div><button class="rounded-lg border border-shell-border px-3 py-1.5 text-sm">新規記録</button></div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="text-shell-muted border-b border-shell-border"><tr><th class="text-left p-2">Date</th><th class="text-left p-2">Pair</th><th class="text-left p-2">Side</th><th class="text-left p-2">Score</th><th class="text-left p-2">Psychology</th><th class="text-right p-2">PnL</th></tr></thead>
+              <tbody>
+                <tr class="border-b border-shell-border/60"><td class="p-2">2026-03-08</td><td class="p-2 font-mono">EURUSD</td><td class="p-2 text-score-high">BUY</td><td class="p-2">78</td><td class="p-2">discipline / no FOMO</td><td class="p-2 text-right text-score-high">+¥6,820</td></tr>
+                <tr class="border-b border-shell-border/60"><td class="p-2">2026-03-07</td><td class="p-2 font-mono">USDJPY</td><td class="p-2 text-score-low">SELL</td><td class="p-2">52</td><td class="p-2">revenge warning</td><td class="p-2 text-right text-score-low">-¥3,100</td></tr>
+                <tr><td colspan="6" class="p-3 bg-shell-bg text-xs text-shell-muted">TradeReview は行クリックでインライン展開される前提のワイヤーフレーム</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">TradeReview</div>
+          <div class="space-y-3 text-sm">
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">entry reason</div><div class="mt-1">H1 MA cross / RSI divergence / RR 2.2</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">psychology tags</div><div class="mt-1">discipline / no FOMO / event-aware</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">review note</div><div class="mt-1">イベント前待機が機能。計画どおりにエントリーできた。</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PG-03 Strategy -->
+    <section id="page-strategy" class="page space-y-4">
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-5 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">PatternCards</div>
+          <div class="grid md:grid-cols-2 gap-3 text-sm">
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">DoubleBottom</div><div class="text-shell-muted text-xs mt-1">FORMATION / BUY / bonus +8</div><div class="mt-2">confidence 0.74</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">DoubleTop</div><div class="text-shell-muted text-xs mt-1">FORMATION / SELL / bonus +8</div><div class="mt-2">confidence 0.71</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">HeadAndShoulders</div><div class="text-shell-muted text-xs mt-1">FORMATION / SELL / bonus +10</div><div class="mt-2">confidence 0.79</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">Triangle</div><div class="text-shell-muted text-xs mt-1">FORMATION / BOTH / bonus +6</div><div class="mt-2">confidence 0.63</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">Flag</div><div class="text-shell-muted text-xs mt-1">FORMATION / BOTH / bonus +6</div><div class="mt-2">confidence 0.68</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">CupAndHandle</div><div class="text-shell-muted text-xs mt-1">FORMATION / BUY / bonus +7</div><div class="mt-2">confidence 0.72</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">PinBar</div><div class="text-shell-muted text-xs mt-1">CANDLESTICK / BUY / bonus +5</div><div class="mt-2">confidence 0.66</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold">Engulfing</div><div class="text-shell-muted text-xs mt-1">CANDLESTICK / BOTH / bonus +4</div><div class="mt-2">confidence 0.69</div></div>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">BacktestPanel</div>
+          <div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-72 grid place-items-center text-shell-muted">PF / MDD / WinRate / TradeCount Placeholder</div>
+        </div>
+        <div class="col-span-12 xl:col-span-3 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">FibonacciPanel</div>
+          <div class="space-y-3 text-sm">
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3">38.2% <span class="font-mono float-right">1.0818</span></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3">61.8% <span class="font-mono float-right">1.0789</span></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3">Confluence <span class="font-mono float-right text-score-high">High</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PG-04 Prediction -->
+    <!-- PG-04 Prediction page uses /api/v1/predictions/* -->
+    <section id="page-prediction" class="page space-y-4">
+      <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">v5.1 では Prediction Engine 本体は stub 実装のみ。DTW / HMM / 類似局面検索は v6 対象。</div>
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-3 rounded-2xl border border-shell-border bg-shell-panel p-4 space-y-4">
+          <!-- TfWeightSlider -->
+          <div>
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">TfWeightSlider</div>
+            <div class="space-y-3 text-sm">
+              <div>W1 <input type="range" class="w-full" value="30"></div>
+              <div>D1 <input type="range" class="w-full" value="25"></div>
+              <div>H4 <input type="range" class="w-full" value="20"></div>
+              <div>H1 <input type="range" class="w-full" value="15"></div>
+              <div>M30 <input type="range" class="w-full" value="10"></div>
+            </div>
+          </div>
+          <div class="rounded-xl border border-shell-border bg-shell-bg p-3 text-sm">
+            <div class="text-shell-muted text-xs mb-2">Prediction Job</div>
+            <div class="flex justify-between"><span>JobStatus</span><span class="font-mono">SUCCEEDED</span></div>
+            <div class="flex justify-between"><span>Stub Source</span><span class="font-mono">STUB_PREDICTION_RESULT</span></div>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-6 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <!-- PredictionChart -->
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">PredictionChart</div>
+          <div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-[360px] relative overflow-hidden">
+            <svg viewBox="0 0 700 360" class="w-full h-full">
+              <line x1="120" y1="20" x2="120" y2="330" stroke="#cbd5e1" opacity=".4" />
+              <polyline points="120,180 190,165 260,150 330,130 400,110 470,95 540,82 610,68" fill="none" stroke="#2EC96A" stroke-width="3" />
+              <polyline points="120,180 190,182 260,178 330,183 400,180 470,185 540,181 610,184" fill="none" stroke="#E8B830" stroke-width="2" stroke-dasharray="8 4" />
+              <polyline points="120,180 190,195 260,210 330,228 400,244 470,258 540,270 610,286" fill="none" stroke="#E05252" stroke-width="3" />
+              <text x="620" y="70" fill="#2EC96A" font-size="12">63%</text>
+              <text x="620" y="186" fill="#E8B830" font-size="12">22%</text>
+              <text x="620" y="288" fill="#E05252" font-size="12">15%</text>
+            </svg>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-3 rounded-2xl border border-shell-border bg-shell-panel p-4">
+          <!-- SimilarCaseCard -->
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">SimilarCaseCard</div>
+          <div class="space-y-3 text-sm">
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold text-score-high">Bull 63%</div><div class="mt-1">押し目買い継続を想定</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold text-score-mid">Range 22%</div><div class="mt-1">指標前のもみ合い想定</div></div>
+            <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="font-semibold text-score-low">Bear 15%</div><div class="mt-1">ネックライン割れ警戒</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- ValidationPanel -->
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">ValidationPanel</div>
+          <div class="text-xs text-shell-muted">Accuracy / stub</div>
+        </div>
+        <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
+          <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>方向一致率</span><span class="font-mono text-score-high">68%</span></div>
+          <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>平均誤差 MAE</span><span class="font-mono">12.4 pips</span></div>
+          <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>予測 PF</span><span class="font-mono text-score-high">1.7</span></div>
+          <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>シャープレシオ</span><span class="font-mono text-score-high">1.6</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PG-07 Chart -->
+    <section id="page-chart" class="page space-y-4">
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+        <div class="grid grid-cols-12 gap-4 items-start">
+          <div class="col-span-12 xl:col-span-5">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-2">chart-overview</div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Pair</div><div class="font-mono mt-1">EUR/USD</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Timeframe</div><div class="font-mono mt-1">H1</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Current Price</div><div class="font-mono mt-1">1.0842</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Spread</div><div class="font-mono mt-1">0.3</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Market Status</div><div class="mt-1 text-score-high">Open</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Session</div><div class="mt-1">London Open</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Trend Bias</div><div class="mt-1 text-score-high">bullish</div></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3"><div class="text-shell-muted text-xs">Mode</div><div class="mt-1">analysis / trade</div></div>
+            </div>
+          </div>
+          <div class="col-span-12 xl:col-span-7">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-2">chart-toolbar</div>
+            <div class="flex flex-wrap gap-2 text-sm">
+              <select class="bg-shell-bg border border-shell-border rounded px-3 py-2"><option>EUR/USD</option><option>USD/JPY</option></select>
+              <select class="bg-shell-bg border border-shell-border rounded px-3 py-2"><option>W1</option><option>D1</option><option>H4</option><option selected>H1</option><option>M30</option><option>M15</option><option>M5</option></select>
+              <select class="bg-shell-bg border border-shell-border rounded px-3 py-2"><option>Candles</option><option>Line</option><option>Area</option></select>
+              <span class="rounded-lg border border-shell-border px-3 py-2">MA</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">RSI</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">MACD</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">BB</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">ATR</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">Fib</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">Trendline</span>
+              <div id="predictionToggleWrap" class="relative inline-flex items-center" onclick="handlePredictionToggle()">
+                <button id="predictionToggleBtn" class="rounded-lg border border-shell-border px-3 py-2">Prediction</button>
+                <span id="predictionToggleBadge" class="ml-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-amber-300 hidden">PRO</span>
+              </div>
+              <span class="rounded-lg border border-shell-border px-3 py-2">Trade markers</span>
+              <span class="rounded-lg border border-shell-border px-3 py-2">Pattern labels</span>
+              <span class="ml-auto flex gap-2"><button class="rounded-lg border border-shell-border px-3 py-2">Reset</button><button class="rounded-lg border border-shell-border px-3 py-2">Snapshot</button><button class="rounded-lg border border-shell-border px-3 py-2">Fullscreen</button></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+        <div class="flex items-center justify-between mb-3"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">main-chart</div><div class="text-xs text-shell-muted">主分析画面の本格チャート / Dashboard ChartSvg とは別責務</div></div>
+        <div class="rounded-2xl border border-dashed border-shell-border bg-shell-bg h-[540px] relative overflow-hidden">
+          <div class="absolute left-4 top-4 text-xs text-shell-muted">chart header: EUR/USD · H1 · 1.0842</div>
+          <div class="absolute right-4 top-4 text-xs text-shell-muted">legend: Entry / SL / TP / Prediction path / Pattern tag</div>
+          <div class="absolute inset-x-8 top-12 bottom-24 border border-dashed border-shell-border rounded-xl"></div>
+          <div class="absolute inset-x-10 bottom-6 h-16 border border-dashed border-shell-border rounded-xl grid place-items-center text-shell-muted text-sm">Lower Indicator Pane Placeholder</div>
+          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-shell-muted text-lg">Main Chart Placeholder</div>
+          <div class="absolute left-20 top-32 text-score-high text-sm">Entry</div>
+          <div class="absolute left-20 top-52 text-score-low text-sm">SL</div>
+          <div class="absolute left-20 top-22 text-sky-400 text-sm">TP</div>
+          <div class="absolute right-16 top-36 text-[#B07EFF] text-sm">Prediction path</div>
+          <div class="absolute right-24 top-24 text-shell-accent text-sm">Pattern tag</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-12 gap-4 items-start">
+        <div class="col-span-12 xl:col-span-7 space-y-4">
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">indicator-summary</div>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">MA: <span class="text-score-high">bullish cross</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">RSI: <span class="text-score-mid">58.3 neutral</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">MACD: <span class="text-score-high">above signal</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">ATR: <span class="text-score-mid">normal</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">BB: <span class="text-score-mid">upper-middle</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3">Bias: <span class="text-score-high">buy moderate</span></div>
+            </div>
+          </div>
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">recent-signals</div>
+            <table class="w-full text-sm"><thead class="text-shell-muted border-b border-shell-border"><tr><th class="text-left p-2">time</th><th class="text-left p-2">type</th><th class="text-left p-2">direction</th><th class="text-left p-2">score</th><th class="text-left p-2">note</th></tr></thead><tbody><tr class="border-b border-shell-border/60"><td class="p-2">09:20</td><td class="p-2">MA cross</td><td class="p-2 text-score-high">BUY</td><td class="p-2">78</td><td class="p-2">H1 確認済み</td></tr><tr><td class="p-2">08:55</td><td class="p-2">BB breakout</td><td class="p-2 text-score-mid">NEUTRAL</td><td class="p-2">66</td><td class="p-2">指標前</td></tr></tbody></table>
+          </div>
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">chart-notes</div>
+            <div class="grid md:grid-cols-2 gap-3">
+              <input class="bg-shell-bg border border-shell-border rounded-xl px-3 py-2" placeholder="setup note: 1.0840抜けで買い" />
+              <input class="bg-shell-bg border border-shell-border rounded-xl px-3 py-2" placeholder="invalidation note: CPI前なので見送り" />
+            </div>
+            <textarea class="mt-3 w-full h-28 bg-shell-bg border border-shell-border rounded-xl px-3 py-2" placeholder="自由メモ（v5.1はプレースホルダー）"></textarea>
+            <button class="mt-3 rounded-lg border border-shell-border px-4 py-2 text-sm">Save Placeholder</button>
+          </div>
+        </div>
+        <div class="col-span-12 xl:col-span-5 space-y-4">
+          <div class="rounded-2xl border border-shell-border bg-shell-panel p-4">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">trade-overlay-panel</div>
+            <div class="space-y-2 text-sm">
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>active trade status</span><span class="font-mono text-score-high">LONG</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>entry price</span><span class="font-mono">1.0821</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>stop loss</span><span class="font-mono">1.0790</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>take profit</span><span class="font-mono">1.0890</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>RR ratio</span><span class="font-mono">2.2</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>lot size</span><span class="font-mono">0.10 lot</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>expected loss</span><span class="font-mono text-score-low">-¥3,100</span></div>
+              <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>expected gain</span><span class="font-mono text-score-high">+¥6,820</span></div>
+            </div>
+          </div>
+
+          <!-- PG-07 prediction-overlay-panel uses /api/v1/chart/prediction-overlay -->
+          <div id="predictionOverlayPanel" class="locked-only rounded-2xl border border-shell-border bg-shell-panel p-4" data-locked="false">
+            <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">prediction-overlay-panel</div>
+            <div class="lock-hidden">
+              <div class="space-y-2 text-sm">
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>main scenario</span><span class="font-semibold text-score-high">Bullish Continuation</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>alternative scenario</span><span>Range Consolidation</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>bullish probability</span><span class="font-mono text-score-high">63%</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>range probability</span><span class="font-mono text-score-mid">22%</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>bearish probability</span><span class="font-mono text-score-low">15%</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>expected move</span><span class="font-mono">+45 pips</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>forecast horizon</span><span class="font-mono">24h</span></div>
+                <div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>confidence</span><span class="font-mono">medium</span></div>
+              </div>
+            </div>
+            <div class="lock-visible hidden flex-col gap-3">
+              <div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                <div class="font-semibold text-amber-300">🔒 このセクションはロックされています</div>
+                <div class="mt-1 text-sm text-amber-200">PRO / PRO_PLUS / ADMIN でご利用いただけます。</div>
+              </div>
+              <div class="rounded-2xl border border-shell-border bg-shell-bg p-6 relative overflow-hidden">
+                <div class="blur-lock">
+                  <div class="space-y-2 text-sm">
+                    <div class="rounded-xl border border-shell-border p-3">Bullish Continuation</div>
+                    <div class="rounded-xl border border-shell-border p-3">Range Consolidation</div>
+                    <div class="rounded-xl border border-shell-border p-3">63% / 22% / 15%</div>
+                  </div>
+                </div>
+                <div class="absolute inset-0 grid place-items-center">
+                  <div class="rounded-2xl border border-shell-border bg-shell-panel/95 px-5 py-4 text-center shadow-soft">
+                    <div class="text-2xl">🔒</div>
+                    <div class="mt-2 text-sm">チャート全体は利用可能です。このセクションのみ制限対象です。</div>
+                    <button class="mt-3 rounded-lg bg-shell-accent px-4 py-2 text-white" onclick="navigate('plan')">プランをアップグレード</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PG-05 Settings -->
+    <section id="page-settings" class="page space-y-4">
+      <div class="grid grid-cols-12 gap-4">
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">RiskPresetSelector</div><div class="space-y-3 text-sm"><div class="rounded-xl border border-shell-accent bg-shell-bg p-3">standard 75pt ✓</div><div class="rounded-xl border border-shell-border bg-shell-bg p-3">conservative 85pt</div><div class="rounded-xl border border-shell-border bg-shell-bg p-3">aggressive 70pt</div></div></div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">FeatureSwitches</div><div class="space-y-3 text-sm"><div class="flex justify-between"><span>AI Signal</span><span>ON</span></div><div class="flex justify-between"><span>Pattern Bonus</span><span>ON</span></div><div class="flex justify-between"><span>News Lock</span><span>ON</span></div><div class="flex justify-between"><span>Cooldown Timer</span><span>ON</span></div><div class="flex justify-between"><span>MTF Prediction</span><span>PRO</span></div></div></div>
+        <div class="col-span-12 xl:col-span-4 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">ConnectorStatus</div><div class="space-y-3 text-sm"><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>alpha_vantage</span><span class="text-score-high">healthy</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>fred</span><span class="text-score-mid">cached</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex justify-between"><span>news_api</span><span class="text-score-high">ok</span></div></div></div>
+        <div class="col-span-12 xl:col-span-6 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">ForceLock</div><div class="space-y-3 text-sm"><div class="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 flex items-center justify-between"><span>強制ロック</span><span class="font-mono">OFF</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3 text-shell-muted">ON/OFF トグル + 解除確認ダイアログ Placeholder</div><div class="rounded-xl border border-shell-border bg-shell-bg p-3">LOCKED 時は EntryDecision より優先して全エントリーを停止</div></div></div>
+        <div class="col-span-12 xl:col-span-6 rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">SymbolSettings</div><div class="space-y-3 text-sm"><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex items-center justify-between"><span>EURUSD</span><span class="font-mono">ON / H1 / threshold 75</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex items-center justify-between"><span>USDJPY</span><span class="font-mono">ON / H4 / threshold 75</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3 flex items-center justify-between"><span>XAUUSD</span><span class="font-mono">OFF / H1 / threshold 80</span></div></div></div>
+      </div>
+    </section>
+
+    <!-- PG-06 Plan -->
+    <section id="page-plan" class="page space-y-4">
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4 flex flex-wrap items-center gap-4 justify-between">
+        <div><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted">Current Plan</div><div class="text-2xl font-semibold mt-1">PRO</div></div>
+        <div class="text-sm text-shell-muted">有効期限 / 課金情報は v5.1 ではワイヤーフレームのみ</div>
+      </div>
+      <div class="rounded-2xl border border-shell-border bg-shell-panel p-4 overflow-x-auto">
+        <div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">PlanComparison</div>
+        <table class="w-full text-sm min-w-[900px]"><thead class="border-b border-shell-border text-shell-muted"><tr><th class="p-3 text-left">機能</th><th class="p-3">FREE</th><th class="p-3">BASIC</th><th class="p-3">PRO</th><th class="p-3">PRO_PLUS</th></tr></thead><tbody>
+          <tr class="border-b border-shell-border/60"><td class="p-3">監視ペア数</td><td class="p-3 text-center">1</td><td class="p-3 text-center">4</td><td class="p-3 text-center">8</td><td class="p-3 text-center">8</td></tr>
+          <tr class="border-b border-shell-border/60"><td class="p-3">AI 要約</td><td class="p-3 text-center">✗</td><td class="p-3 text-center">3回/日</td><td class="p-3 text-center">無制限</td><td class="p-3 text-center">無制限</td></tr>
+          <tr class="border-b border-shell-border/60"><td class="p-3">Prediction (PG-04)</td><td class="p-3 text-center">✗</td><td class="p-3 text-center">✗</td><td class="p-3 text-center">✅</td><td class="p-3 text-center">✅</td></tr>
+          <tr class="border-b border-shell-border/60"><td class="p-3">Prediction overlay (PG-07)</td><td class="p-3 text-center">✗</td><td class="p-3 text-center">✗</td><td class="p-3 text-center">✅</td><td class="p-3 text-center">✅</td></tr>
+          <tr><td class="p-3">心理分析期間</td><td class="p-3 text-center">30日</td><td class="p-3 text-center">90日</td><td class="p-3 text-center">1年</td><td class="p-3 text-center">全期間</td></tr>
+        </tbody></table>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">PricingTable</div><div class="grid grid-cols-2 gap-3 text-sm"><div class="rounded-xl border border-shell-border bg-shell-bg p-3">FREE<br><span class="text-2xl font-mono">¥0</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3">BASIC<br><span class="text-2xl font-mono">¥980</span></div><div class="rounded-xl border border-shell-accent bg-shell-bg p-3">PRO<br><span class="text-2xl font-mono">¥2,980</span></div><div class="rounded-xl border border-shell-border bg-shell-bg p-3">PRO+<br><span class="text-2xl font-mono">¥4,980</span></div></div></div>
+        <div class="rounded-2xl border border-shell-border bg-shell-panel p-4"><div class="text-[11px] uppercase tracking-[0.16em] text-shell-muted mb-3">UpgradeCTA</div><div class="rounded-2xl border border-sky-500/30 bg-sky-500/10 p-5"><div class="text-lg font-semibold">PRO にアップグレードして Prediction を有効化</div><div class="mt-2 text-sm text-shell-muted">PG-04 と PG-07 prediction overlay が利用可能になります。</div><button class="mt-4 rounded-lg bg-shell-accent px-4 py-2 text-white">Upgrade Now</button></div></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="upgradeModal" class="modal-backdrop fixed inset-0 bg-black/60 items-center justify-center p-4 z-50">
+  <div class="w-full max-w-md rounded-2xl border border-shell-border bg-shell-panel p-5 shadow-soft">
+    <div class="text-lg font-semibold">Prediction は PRO / PRO_PLUS / ADMIN 限定です</div>
+    <p class="mt-2 text-sm text-shell-muted">FREE / BASIC では PG-04 に直接アクセスできません。PG-07 の prediction-overlay-panel はロック状態 UI で表示されます。</p>
+    <div class="mt-4 flex justify-end gap-2"><button class="rounded-lg border border-shell-border px-4 py-2" onclick="closeModal()">閉じる</button><button class="rounded-lg bg-shell-accent px-4 py-2 text-white" onclick="closeModal();navigate('plan')">プランを見る</button></div>
+  </div>
+</div>
+
+<script>
+  const state = { page: 'dashboard', role: 'PRO', mode: 'beginner', theme: 'dark' };
+  const pageIds = ['dashboard','trades','strategy','prediction','chart','settings','plan'];
+  const proRoles = ['PRO','PRO_PLUS','ADMIN'];
+
+  function navigate(page) {
+    state.page = page;
+    pageIds.forEach(id => document.getElementById('page-' + id)?.classList.toggle('active', id === page));
+    document.querySelectorAll('[data-page-btn]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-page-btn') === page));
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  function handlePredictionNav() {
+    if (!proRoles.includes(state.role)) return openModal();
+    navigate('prediction');
+  }
+
+  function handlePredictionToggle() {
+    if (!proRoles.includes(state.role)) return openModal();
+  }
+
+  function openModal() { document.getElementById('upgradeModal').classList.add('open'); }
+  function closeModal() { document.getElementById('upgradeModal').classList.remove('open'); }
+
+  function setMode(mode) {
+    state.mode = mode;
+    document.documentElement.setAttribute('data-mode', mode);
+    document.getElementById('mode-beginner').className = 'px-3 py-1.5 ' + (mode === 'beginner' ? 'bg-shell-accent text-white' : 'bg-transparent text-shell-muted');
+    document.getElementById('mode-pro').className = 'px-3 py-1.5 ' + (mode === 'pro' ? 'bg-shell-accent text-white' : 'bg-transparent text-shell-muted');
+  }
+
+  function toggleTheme() {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', state.theme);
+    document.body.style.background = state.theme === 'dark' ? '#0D0F14' : '#F4F6FA';
+    document.body.style.color = state.theme === 'dark' ? '#E2E8F0' : '#18202b';
+  }
+
+  function applyRole() {
+    state.role = document.getElementById('mockRole').value;
+    document.getElementById('topRoleBadge').textContent = state.role;
+    const locked = !proRoles.includes(state.role);
+    document.getElementById('predictionOverlayPanel').setAttribute('data-locked', locked ? 'true' : 'false');
+    const predBtn = document.getElementById('predictionToggleBtn');
+    const predBadge = document.getElementById('predictionToggleBadge');
+    const predWrap = document.getElementById('predictionToggleWrap');
+    predBtn.classList.toggle('pro-toggle-disabled', locked);
+    predBtn.textContent = 'Prediction';
+    predBtn.disabled = locked;
+    predBadge.classList.toggle('hidden', !locked);
+    predWrap.classList.toggle('pro-toggle-disabled', locked);
+    const navPred = document.getElementById('navPrediction');
+    navPred.classList.toggle('pro-toggle-disabled', locked);
+    if (state.page === 'prediction' && locked) navigate('plan');
+  }
+
+  function tickClock() {
+    const now = new Date();
+    document.getElementById('clockLocal').textContent = now.toLocaleTimeString('ja-JP', { hour12:false });
+    document.getElementById('clockUtc').textContent = 'UTC ' + now.toISOString().substring(11,19);
+  }
+  tickClock(); setInterval(tickClock, 1000);
+  applyRole();
+</script>
+</body>
+</html>

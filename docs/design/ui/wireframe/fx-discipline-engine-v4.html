@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark" data-mode="pro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Discipline Engine v4</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root[data-theme="dark"]{
+  --bg:#0D0C09;--bg2:#080706;--surf:#161410;--surf2:#1E1C17;--surf3:#262420;
+  --brd:rgba(255,255,255,0.07);--brd2:rgba(255,255,255,0.14);
+  --t1:#EDE8E0;--t2:#7A7670;--t3:#4A4640;
+  --green:#2EC96A;--greenb:rgba(46,201,106,0.13);--greeng:rgba(46,201,106,0.22);
+  --yellow:#E8B830;--yellowb:rgba(232,184,48,0.14);
+  --red:#E05252;--redb:rgba(224,82,82,0.13);--redg:rgba(224,82,82,0.2);
+  --blue:#5599E8;--blueb:rgba(85,153,232,0.14);
+  --purple:#9B72E0;--purpleb:rgba(155,114,224,0.14);
+  --orange:#E89030;--orangeb:rgba(232,144,48,0.14);
+  --sidebar:#0A0906;--sdicon:#3A3830;--sdact:#EDE8E0;
+  --cmd-bg:#EDE8E0;--cmd-t:#14120E;
+  --sh0:0 1px 3px rgba(0,0,0,0.4);
+  --sh1:0 4px 16px rgba(0,0,0,0.35),0 12px 32px rgba(0,0,0,0.25);
+  --sh2:0 8px 48px rgba(0,0,0,0.65);
+  --overlay:rgba(0,0,0,0.82);
+  --entry:#2EC96A;--sl:#E05252;--tp:#5599E8;--fib:rgba(155,114,224,0.7);
+}
+:root[data-theme="light"]{
+  --bg:#ECEAE3;--bg2:#E3E0D8;--surf:#F9F8F4;--surf2:#EEECEA;--surf3:#E5E2D8;
+  --brd:rgba(0,0,0,0.08);--brd2:rgba(0,0,0,0.15);
+  --t1:#14120E;--t2:#5C5850;--t3:#9C9890;
+  --green:#1A6B3C;--greenb:#C8E8D5;--greeng:rgba(26,107,60,0.15);
+  --yellow:#8A6200;--yellowb:#F5E8BC;
+  --red:#852020;--redb:#FFE0DF;--redg:rgba(133,32,32,0.12);
+  --blue:#1A4F8A;--blueb:#CCE0FF;
+  --purple:#5A3A8A;--purpleb:#E8DEFF;
+  --orange:#8A4200;--orangeb:#FFE8CC;
+  --sidebar:#14120E;--sdicon:#403C38;--sdact:#ECEAE3;
+  --cmd-bg:#14120E;--cmd-t:#F9F8F4;
+  --sh0:0 1px 3px rgba(0,0,0,0.06),0 2px 8px rgba(0,0,0,0.04);
+  --sh1:0 4px 16px rgba(0,0,0,0.08),0 12px 32px rgba(0,0,0,0.07);
+  --sh2:0 8px 40px rgba(0,0,0,0.15);
+  --overlay:rgba(14,12,10,0.6);
+  --entry:#1A6B3C;--sl:#852020;--tp:#1A4F8A;--fib:rgba(90,58,138,0.6);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;overflow-x:hidden;transition:background .3s,color .3s;}
+.fm{font-family:'DM Mono',monospace;} .fi{font-family:'Instrument Serif',serif;}
+
+/* SIDEBAR */
+.sb{position:fixed;left:0;top:0;bottom:0;width:58px;background:var(--sidebar);display:flex;flex-direction:column;align-items:center;padding:13px 0;z-index:200;}
+.sb-logo{width:30px;height:30px;border-radius:7px;background:var(--green);display:flex;align-items:center;justify-content:center;margin-bottom:20px;flex-shrink:0;}
+.si{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--sdicon);cursor:pointer;transition:all .15s;margin-bottom:2px;position:relative;}
+.si:hover{color:var(--sdact);background:rgba(255,255,255,0.07);}
+.si.on{background:var(--sdact);color:var(--sidebar);}
+.si .tip{position:absolute;left:46px;background:var(--t1);color:var(--bg);padding:3px 8px;border-radius:4px;font-family:'DM Mono',monospace;font-size:10px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;z-index:300;}
+.si:hover .tip{opacity:1;}
+.sb-bot{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:2px;}
+.tmbtn{width:38px;height:38px;border-radius:8px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--sdicon);font-size:15px;transition:all .15s;}
+.tmbtn:hover{color:var(--sdact);background:rgba(255,255,255,0.07);}
+
+/* LAYOUT */
+.main{margin-left:58px;min-height:100vh;}
+.page{display:none;padding:0 20px 48px;}
+.page.on{display:block;}
+
+/* TICKER */
+.tkbar{background:var(--surf);border-bottom:1px solid var(--brd);height:30px;overflow:hidden;display:flex;align-items:center;}
+@keyframes tk{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tk-t{display:flex;animation:tk 34s linear infinite;}
+.tk-i{padding:0 16px;white-space:nowrap;font-family:'DM Mono',monospace;font-size:10px;display:flex;align-items:center;gap:5px;color:var(--t2);border-right:1px solid var(--brd);}
+.tk-i .p{color:var(--t1);font-weight:500;}
+.up{color:var(--green);}.dn{color:var(--red);}
+
+/* TOPBAR */
+.topbar{padding:12px 0 0;display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;}
+.pt{font-family:'Instrument Serif',serif;font-size:22px;font-weight:400;letter-spacing:-.2px;}
+.ps{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--t3);margin-bottom:2px;}
+
+/* CARD */
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:11px;box-shadow:var(--sh0);transition:background .3s,border-color .3s;}
+.cp{padding:15px 16px;}
+.clbl{font-family:'DM Mono',monospace;font-size:9px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--t3);}
+
+/* CMD BAR */
+.cmd{background:var(--cmd-bg);border-radius:12px;padding:17px 20px;display:flex;align-items:center;gap:16px;box-shadow:var(--sh2);margin-bottom:13px;position:relative;overflow:hidden;}
+.cmd-lbl{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,0.28);margin-bottom:3px;}
+[data-theme="dark"] .cmd-lbl{color:rgba(14,12,10,0.32);}
+.cmd-h{font-family:'Instrument Serif',serif;font-size:30px;font-weight:400;color:var(--cmd-t);line-height:1;}
+.cmd-s{font-size:11.5px;color:rgba(255,255,255,0.4);margin-top:4px;line-height:1.5;}
+[data-theme="dark"] .cmd-s{color:rgba(14,12,10,0.42);}
+.cmd-vd{width:1px;height:44px;background:rgba(255,255,255,0.1);flex-shrink:0;}
+[data-theme="dark"] .cmd-vd{background:rgba(14,12,10,0.12);}
+.csv{font-family:'DM Mono',monospace;font-size:17px;font-weight:500;color:var(--cmd-t);line-height:1;}
+.csl{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(255,255,255,0.28);margin-top:2px;}
+[data-theme="dark"] .csl{color:rgba(14,12,10,0.32);}
+
+/* BADGE */
+.bdg{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:500;text-transform:uppercase;white-space:nowrap;}
+.bg{background:var(--greenb);color:var(--green);}
+.by{background:var(--yellowb);color:var(--yellow);}
+.br{background:var(--redb);color:var(--red);}
+.bb{background:var(--blueb);color:var(--blue);}
+.bp{background:var(--purpleb);color:var(--purple);}
+.bo{background:var(--orangeb);color:var(--orange);}
+.bn{background:var(--surf2);color:var(--t2);}
+
+/* STATE */
+.st{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;}
+.st-g{background:var(--greenb);color:var(--green);}
+.st-y{background:var(--yellowb);color:var(--yellow);}
+.st-r{background:var(--redb);color:var(--red);}
+.st-b{background:var(--blueb);color:var(--blue);}
+.st-n{background:var(--surf2);color:var(--t2);}
+
+/* PROGRESS */
+.pb{height:4px;background:var(--surf3);border-radius:2px;overflow:hidden;}
+.pbf{height:100%;border-radius:2px;transition:width .5s;}
+.pb6{height:6px;background:var(--surf3);border-radius:3px;overflow:hidden;}
+.pb6f{height:100%;border-radius:3px;}
+
+/* METRIC BOX */
+.mb{background:var(--surf2);border-radius:8px;padding:9px 11px;transition:background .3s;}
+.mbl{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);margin-bottom:2px;}
+.mbv{font-family:'DM Mono',monospace;font-size:17px;font-weight:500;line-height:1;}
+
+/* RING */
+.rw{position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.rs{position:absolute;top:0;left:0;transform:rotate(-90deg);}
+.rn{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;line-height:1;position:relative;z-index:1;}
+.rb{font-family:'DM Mono',monospace;font-size:8px;color:var(--t3);letter-spacing:.08em;position:relative;z-index:1;}
+
+/* SCORE ROW */
+.sr{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--brd);}
+.sr:last-child{border-bottom:none;}
+.srl{font-size:11px;color:var(--t2);flex:1;}
+.srb{width:50px;flex-shrink:0;}
+.srv{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;width:36px;text-align:right;}
+
+/* HELP BTN */
+.hb{width:14px;height:14px;border-radius:50%;background:var(--surf3);border:1px solid var(--brd2);color:var(--t3);font-family:'DM Mono',monospace;font-size:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;vertical-align:middle;margin-left:3px;}
+.hb:hover{background:var(--blue);color:#fff;border-color:var(--blue);}
+
+/* ENTRY BTN */
+.ebtn{width:100%;padding:11px;border-radius:8px;border:none;font-family:'DM Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;transition:all .2s;}
+.elck{background:var(--surf2);color:var(--t3);border:1.5px dashed var(--brd2);cursor:not-allowed;}
+.erdy{background:var(--green);color:#fff;cursor:pointer;}
+.erdy:hover{filter:brightness(1.06);transform:translateY(-1px);}
+
+/* DIVIDER */
+.dv{height:1px;background:var(--brd);margin:11px 0;}
+
+/* ALERT */
+.al{border-radius:7px;padding:8px 10px;display:flex;align-items:flex-start;gap:6px;font-size:11.5px;line-height:1.5;}
+.al-g{background:var(--greenb);color:var(--green);}
+.al-y{background:var(--yellowb);color:var(--yellow);}
+.al-r{background:var(--redb);color:var(--red);}
+.al-b{background:var(--blueb);color:var(--blue);}
+.al-p{background:var(--purpleb);color:var(--purple);}
+.al-o{background:var(--orangeb);color:var(--orange);}
+
+/* SWITCH */
+.sw{width:35px;height:19px;border-radius:10px;background:var(--surf3);border:none;cursor:pointer;position:relative;transition:background .25s;flex-shrink:0;}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:13px;height:13px;background:#fff;border-radius:50%;transition:transform .25s;}
+.sw.on{background:var(--green);}
+.sw.on::after{transform:translateX(16px);}
+
+/* MODE TOGGLE */
+.mtgl{display:flex;align-items:center;gap:6px;background:var(--surf2);border-radius:7px;padding:4px 8px;cursor:pointer;border:1px solid var(--brd);transition:all .2s;}
+.mtgl:hover{border-color:var(--brd2);}
+.mdot{width:7px;height:7px;border-radius:50%;}
+.mlbl{font-family:'DM Mono',monospace;font-size:9.5px;font-weight:500;color:var(--t2);}
+
+/* TABS */
+.tabs{display:flex;gap:2px;background:var(--surf2);padding:3px;border-radius:7px;}
+.tab{flex:1;padding:5px 9px;border-radius:5px;border:none;background:transparent;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;color:var(--t3);transition:all .15s;}
+.tab.on{background:var(--surf);color:var(--t1);box-shadow:var(--sh0);}
+
+/* RULE ITEM */
+.ri{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd);}
+.ri:last-child{border-bottom:none;}
+.rdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+
+/* PRESET */
+.prs{border:1.5px solid var(--brd);border-radius:8px;padding:10px 12px;cursor:pointer;transition:all .15s;}
+.prs:hover{border-color:var(--brd2);}
+.prs.on{border-color:var(--green);background:var(--greenb);}
+
+/* PSYCH BAR */
+.psb{margin-bottom:10px;}
+.psb-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;}
+.psb-l{font-size:11px;color:var(--t2);}
+.psb-v{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;}
+
+/* CANDLE */
+.cu{fill:var(--green);stroke:var(--green);}
+.cd{fill:var(--red);stroke:var(--red);}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.fu{animation:fadeUp .35s ease both;}
+.pls{animation:pulse 2s infinite;}
+.shk{animation:shake .35s ease;}
+
+/* MODAL */
+.mo{position:fixed;inset:0;background:var(--overlay);z-index:1000;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px;}
+.mo.open{opacity:1;pointer-events:all;}
+.mo-box{background:var(--surf);border:1px solid var(--brd2);border-radius:14px;box-shadow:var(--sh2);width:100%;max-width:600px;max-height:90vh;overflow-y:auto;transform:translateY(10px) scale(.98);transition:transform .2s;}
+.mo.open .mo-box{transform:translateY(0) scale(1);}
+.mo-head{padding:17px 19px 0;display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:2px;}
+.mo-title{font-family:'Instrument Serif',serif;font-size:18px;font-weight:400;}
+.mo-close{width:25px;height:25px;border-radius:6px;background:var(--surf2);border:none;color:var(--t2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0;}
+.mo-close:hover{background:var(--surf3);}
+.mo-body{padding:9px 19px 19px;}
+.mo-sec{margin-bottom:12px;}
+.mo-sec-t{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);margin-bottom:6px;}
+.mo-txt{font-size:12px;color:var(--t2);line-height:1.75;}
+.mo-links{display:flex;flex-direction:column;gap:5px;}
+.mlink{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surf2);border-radius:7px;text-decoration:none;color:var(--t1);font-size:11.5px;transition:all .15s;border:1px solid transparent;}
+.mlink:hover{border-color:var(--brd2);background:var(--surf3);}
+.mlink-ic{width:21px;height:21px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;}
+.st-ex{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-top:6px;}
+.st-cell{border-radius:7px;padding:7px;text-align:center;font-size:10.5px;}
+
+/* CHART PATTERN */
+.ptcard{border:1.5px solid var(--brd);border-radius:10px;padding:12px 13px;transition:all .2s;cursor:pointer;position:relative;overflow:hidden;}
+.ptcard:hover{border-color:var(--brd2);box-shadow:var(--sh0);}
+.ptcard.buy{border-color:var(--green);background:rgba(46,201,106,0.06);}
+.ptcard.sell{border-color:var(--red);background:rgba(224,82,82,0.06);}
+.ptcard.neutral{border-color:var(--yellow);background:rgba(232,184,48,0.06);}
+.pt-icon{font-size:26px;margin-bottom:5px;}
+.pt-name{font-size:12px;font-weight:600;margin-bottom:2px;}
+.pt-conf{font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);margin-bottom:6px;}
+.pt-score{position:absolute;top:9px;right:9px;font-family:'DM Mono',monospace;font-size:12px;font-weight:500;background:var(--surf2);border-radius:4px;padding:2px 6px;}
+
+/* PATTERN DETECT ROWS */
+.pdet{display:flex;align-items:center;gap:8px;background:var(--surf2);border:1px solid var(--brd2);border-radius:8px;padding:8px 10px;margin-bottom:5px;cursor:pointer;transition:all .15s;}
+.pdet:hover{background:var(--surf3);}
+.pdet.buy{border-color:var(--green);background:rgba(46,201,106,0.07);}
+.pdet.sell{border-color:var(--red);background:rgba(224,82,82,0.07);}
+.pdet.neutral{border-color:var(--yellow);background:rgba(232,184,48,0.06);}
+.pdet-icon{font-size:15px;flex-shrink:0;}
+.pdet-info{flex:1;}
+.pdet-name{font-size:11.5px;font-weight:600;}
+.pdet-sub{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--t3);}
+.pdet-right{text-align:right;}
+.pdet-pts{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;}
+.pdet-conf{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--t3);}
+
+/* SCORE BAND */
+.sband{display:flex;gap:4px;margin-top:7px;}
+.sbi{flex:1;border-radius:6px;padding:6px 7px;border:1px solid var(--brd);text-align:center;}
+.sbi.cur{border-color:var(--yellow);background:var(--yellowb);}
+.sbi-r{font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);}
+.sbi-w{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;margin:2px 0;}
+
+/* SPARK */
+.spark{display:flex;align-items:flex-end;gap:2px;height:34px;}
+.spk{flex:1;border-radius:2px 2px 0 0;min-width:3px;}
+
+/* LOG */
+.loge{background:var(--surf2);border-radius:7px;padding:9px 11px;font-family:'DM Mono',monospace;font-size:10.5px;line-height:1.7;border-left:3px solid var(--green);margin-bottom:5px;}
+.loge.bad{border-left-color:var(--red);}
+.loge-t{font-size:9px;color:var(--t3);margin-bottom:2px;}
+.loge-s{font-size:12px;font-weight:500;color:var(--t1);margin-bottom:3px;}
+
+/* DD BAR */
+.ddbar{height:7px;border-radius:4px;background:var(--surf3);overflow:hidden;margin-top:3px;}
+.ddbf{height:100%;border-radius:4px;background:var(--red);}
+
+/* COUNTDOWN */
+.cdown{font-family:'DM Mono',monospace;font-size:36px;font-weight:500;color:var(--red);letter-spacing:.04em;}
+
+/* HEATMAP */
+.hmc{border-radius:5px;padding:6px 4px;text-align:center;cursor:default;transition:transform .15s;}
+.hmc:hover{transform:scale(1.07);}
+.hmv{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.gdash{display:grid;grid-template-columns:310px 1fr 242px;gap:12px;}
+.gstrat{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.ghist{display:grid;grid-template-columns:2fr 1fr;gap:12px;}
+.gset{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+[data-mode="beginner"] .pro-only{display:none!important;}
+[data-mode="pro"] .beg-only{display:none!important;}
+@media(max-width:1280px){.gdash{grid-template-columns:290px 1fr;}.gdash .c3{display:none!important;}}
+@media(max-width:960px){.gdash,.gstrat,.ghist,.gset{grid-template-columns:1fr!important;}}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:2px;}
+.cg{color:var(--green);}.cy{color:var(--yellow);}.cr{color:var(--red);}.cb{color:var(--blue);}
+</style>
+</head>
+<body>
+
+<!-- MODAL -->
+<div class="mo" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="mo-box">
+    <div class="mo-head">
+      <div class="mo-title" id="mo-title"></div>
+      <button class="mo-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="mo-body" id="mo-body"></div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<nav class="sb">
+  <div class="sb-logo">
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 13L7 7L11 10.5L15 4L18 7.5" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="si on" data-p="dash" onclick="goPage('dash')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg><span class="tip">ダッシュボード</span></div>
+  <div class="si" data-p="pattern" onclick="goPage('pattern')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg><span class="tip">チャートパターン</span></div>
+  <div class="si" data-p="strategy" onclick="goPage('strategy')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span class="tip">戦略分析</span></div>
+  <div class="si" data-p="history" onclick="goPage('history')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-5"/></svg><span class="tip">履歴・心理</span></div>
+  <div class="si" data-p="pairs" onclick="goPage('pairs')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 0 1 0 20"/></svg><span class="tip">マルチペア</span></div>
+  <div class="sb-bot">
+    <button class="tmbtn" onclick="toggleTheme()" id="tmbtn">☀️</button>
+    <div class="si" data-p="settings" onclick="goPage('settings')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg><span class="tip">設定</span></div>
+  </div>
+</nav>
+
+<div class="main">
+<div class="tkbar"><div class="tk-t" id="tkTrack"></div></div>
+
+<!-- ══════════ DASHBOARD ══════════ -->
+<div id="page-dash" class="page on fu" style="padding-top:3px;">
+  <div class="topbar">
+    <div><div class="ps">FX DISCIPLINE ENGINE v4</div><div class="pt">ダッシュボード</div></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div class="mtgl" onclick="toggleMode()" id="mtgl"><div class="mdot" id="mdot" style="background:var(--blue);"></div><span class="mlbl" id="mlbl">プロモード</span></div>
+      <button onclick="openLegend()" style="background:var(--surf2);border:1px solid var(--brd);color:var(--t2);padding:4px 8px;border-radius:6px;font-family:'DM Mono',monospace;font-size:9.5px;cursor:pointer;">🎨 色凡例</button>
+      <div class="bdg bn fm" id="clock">--:--:--</div>
+      <div class="bdg bg"><span class="pls">●</span> LIVE</div>
+      <select id="pairSel" style="background:var(--surf);border:1px solid var(--brd);color:var(--t1);padding:4px 7px;border-radius:6px;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;" onchange="updatePair()">
+        <option value="EURUSD">EUR/USD</option><option value="USDJPY">USD/JPY</option>
+        <option value="GBPUSD">GBP/USD</option><option value="AUDUSD">AUD/USD</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- COMMAND BAR -->
+  <div class="cmd">
+    <div style="flex:1;">
+      <div class="cmd-lbl">今すぐの行動指示</div>
+      <div class="cmd-h" id="cmdH">WAIT</div>
+      <div class="cmd-s" id="cmdS">CPI発表まで <strong>47分</strong> — 指標前エントリー禁止</div>
+    </div>
+    <div class="cmd-vd"></div>
+    <div style="text-align:center;min-width:52px;"><div class="csv" id="cmdScore" style="color:var(--yellow);">72</div><div class="csl">スコア<br>/100</div></div>
+    <div class="cmd-vd"></div>
+    <div style="text-align:center;min-width:52px;"><div class="csv" style="color:var(--green);">63%</div><div class="csl">AI上昇<br>確率</div></div>
+    <div class="cmd-vd"></div>
+    <div style="text-align:center;min-width:52px;"><div class="csv" style="color:var(--yellow);">BUY</div><div class="csl">想定<br>方向</div></div>
+    <div class="cmd-vd"></div>
+    <div style="text-align:center;min-width:52px;"><div class="csv" id="cmdTimer">47:00</div><div class="csl">指標まで<br>残り</div></div>
+    <div class="cmd-vd"></div>
+    <!-- NEW v4: パターン検出サマリ -->
+    <div style="text-align:center;min-width:80px;">
+      <div class="csv" style="color:var(--orange);font-size:13px;">2検出</div>
+      <div class="csl">チャート<br>パターン</div>
+      <div style="margin-top:3px;display:flex;gap:3px;justify-content:center;">
+        <span class="bdg bg" style="font-size:8px;padding:1px 5px;">BUY×1</span>
+        <span class="bdg bo" style="font-size:8px;padding:1px 5px;">注意×1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- BEGINNER GUIDE -->
+  <div class="beg-only al al-b" style="margin-bottom:12px;">
+    <span>💡</span>
+    <div style="font-size:12px;">上のバーが<strong>「今すぐの答え」</strong>です。スコアが<strong>75点以上</strong>になれば緑になりエントリー可能。チャートパターンが<strong>BUY検出</strong>でスコアが上昇します。</div>
+  </div>
+
+  <!-- 3 COL GRID -->
+  <div class="gdash">
+
+    <!-- COL1: SCORE + LIMITS -->
+    <div style="display:flex;flex-direction:column;gap:11px;">
+
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
+          <div class="clbl">エントリースコア</div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <div class="bdg by" id="scoreStatus">要観察</div>
+            <button class="hb" onclick="openModal('score')">?</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:11px;">
+          <div class="rw">
+            <svg class="rs" width="96" height="96" viewBox="0 0 96 96">
+              <circle cx="48" cy="48" r="40" fill="none" stroke="var(--surf3)" stroke-width="7"/>
+              <circle cx="48" cy="48" r="40" fill="none" stroke="var(--yellow)" stroke-width="7" stroke-dasharray="251" stroke-dashoffset="71" stroke-linecap="round" id="ringPath"/>
+            </svg>
+            <div style="text-align:center;">
+              <div class="rn cy" id="rnum">72</div>
+              <div class="rb">/100点</div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div class="sr"><div class="srl">テクニカル <button class="hb" onclick="openModal('technical')">?</button></div><div class="srb pb"><div class="pbf" style="width:75%;background:var(--yellow);"></div></div><div class="srv cy">30/40</div></div>
+            <div class="sr"><div class="srl">ファンダ <button class="hb" onclick="openModal('fundamental')">?</button></div><div class="srb pb"><div class="pbf" style="width:87%;background:var(--green);"></div></div><div class="srv cg">26/30</div></div>
+            <div class="sr"><div class="srl">市場安定 <button class="hb" onclick="openModal('stability')">?</button></div><div class="srb pb"><div class="pbf" style="width:40%;background:var(--red);"></div></div><div class="srv cr">4/10</div></div>
+            <div class="sr"><div class="srl">RRレシオ <button class="hb" onclick="openModal('rr')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+            <!-- NEW v4 -->
+            <div class="sr"><div class="srl">チャートパターン <button class="hb" onclick="openModal('chartPat')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--orange);"></div></div><div class="srv" style="color:var(--orange);">+8</div></div>
+          </div>
+        </div>
+        <div class="clbl" style="margin-bottom:5px;">スコア帯別勝率 <button class="hb" onclick="openModal('scoreBand')">?</button></div>
+        <div class="sband">
+          <div class="sbi"><div class="sbi-r">60-70</div><div class="sbi-w cr">52%</div></div>
+          <div class="sbi cur"><div class="sbi-r">70-80</div><div class="sbi-w cy">61%</div><div style="font-size:8px;color:var(--yellow);">現在</div></div>
+          <div class="sbi"><div class="sbi-r">80↑</div><div class="sbi-w cg">68%</div></div>
+        </div>
+        <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--t3);margin-top:5px;">あと3点で解禁 — 上位足D1が揃えば到達</div>
+        <div class="dv"></div>
+        <button class="ebtn elck shk-target" id="ebtn" onclick="handleEntry()">🔒 スコア未達 — 75点以上必要</button>
+      </div>
+
+      <!-- NEW v4: チャートパターン検出ミニ -->
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="clbl">パターン検出 <span class="bdg bo" style="font-size:8px;">v4 NEW</span></div>
+          <button onclick="goPage('pattern')" style="background:var(--surf2);border:1px solid var(--brd);color:var(--t2);padding:3px 8px;border-radius:5px;font-family:'DM Mono',monospace;font-size:9px;cursor:pointer;">詳細→</button>
+        </div>
+        <div class="pdet buy" onclick="openModal('doubleBottom')">
+          <div class="pdet-icon">🔵</div>
+          <div class="pdet-info"><div class="pdet-name">ダブルボトム</div><div class="pdet-sub">H4 · ネックライン 1.0840</div></div>
+          <div class="pdet-right"><div class="pdet-pts cg">+8pt</div><div class="pdet-conf">信頼度 78%</div></div>
+        </div>
+        <div class="pdet neutral" onclick="openModal('triangle')">
+          <div class="pdet-icon">📐</div>
+          <div class="pdet-info"><div class="pdet-name">上昇トライアングル</div><div class="pdet-sub">D1 · ブレイク待ち</div></div>
+          <div class="pdet-right"><div class="pdet-pts cy">+4pt</div><div class="pdet-conf">信頼度 62%</div></div>
+        </div>
+        <div class="dv"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);">ローソク足パターン (直近3本)</div>
+        <div class="pdet buy" style="margin-top:5px;" onclick="openModal('pinbar')">
+          <div class="pdet-icon">📌</div>
+          <div class="pdet-info"><div class="pdet-name">ブリッシュピンバー</div><div class="pdet-sub">H4 直近足 · 長い下ヒゲ</div></div>
+          <div class="pdet-right"><div class="pdet-pts cg">+5pt</div><div class="pdet-conf">信頼度 71%</div></div>
+        </div>
+      </div>
+
+      <!-- DAILY LIMITS -->
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="clbl">本日の制限</div>
+          <button class="hb" onclick="openModal('limits')">?</button>
+        </div>
+        <div class="g2" style="margin-bottom:8px;">
+          <div class="mb"><div class="mbl">残りトレード</div><div class="mbv">2<span style="font-size:10px;color:var(--t3);">/3</span></div></div>
+          <div class="mb"><div class="mbl">損失率</div><div class="mbv cr">-1.2%</div></div>
+          <div class="mb"><div class="mbl">連敗数</div><div class="mbv cy">2<span style="font-size:10px;color:var(--t3);">/3</span></div></div>
+          <div class="mb"><div class="mbl">規律スコア</div><div class="mbv cg">87%</div></div>
+        </div>
+        <div class="al al-y"><span>⚠</span><span>あと1連敗で本日<strong>取引停止</strong></span></div>
+      </div>
+    </div>
+
+    <!-- COL2: CHART + INDICATORS -->
+    <div style="display:flex;flex-direction:column;gap:11px;">
+
+      <!-- CHART with ENTRY/SL/TP LINES + PATTERNS -->
+      <div class="card">
+        <div style="padding:12px 14px 0;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div>
+            <div class="clbl">EUR/USD · H4  <button class="hb" onclick="openModal('chartRead')">チャートの見方?</button></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
+              <span class="fm" style="font-size:18px;font-weight:500;">1.0842</span>
+              <span class="bdg bg">+0.12%</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;">
+            <span class="bdg bb" style="font-size:8px;">MA上向き</span>
+            <span class="bdg bo" style="font-size:8px;">指標前</span>
+            <span class="bdg bg" style="font-size:8px;">ダブルボトム</span>
+          </div>
+        </div>
+
+        <!-- CHART SVG — Full with Entry/SL/TP/Fibonacci/Patterns -->
+        <div style="padding:0 6px 8px;position:relative;">
+          <svg id="mainChart" width="100%" height="240" viewBox="0 0 680 240" preserveAspectRatio="none" style="display:block;">
+            <!-- BG grid -->
+            <line x1="0" y1="40" x2="680" y2="40" stroke="var(--brd)" stroke-width="1"/>
+            <line x1="0" y1="80" x2="680" y2="80" stroke="var(--brd)" stroke-width="1"/>
+            <line x1="0" y1="120" x2="680" y2="120" stroke="var(--brd)" stroke-width="1"/>
+            <line x1="0" y1="160" x2="680" y2="160" stroke="var(--brd)" stroke-width="1"/>
+            <line x1="0" y1="200" x2="680" y2="200" stroke="var(--brd)" stroke-width="1"/>
+
+            <!-- FIBONACCI LEVELS (v4 NEW) -->
+            <!-- 61.8% -->
+            <line x1="0" y1="105" x2="680" y2="105" stroke="var(--fib,rgba(155,114,224,0.5))" stroke-width="1" stroke-dasharray="6,4"/>
+            <rect x="0" y="100" width="56" height="11" fill="var(--purpleb)" rx="2"/>
+            <text x="3" y="109" style="font-family:'DM Mono',monospace;fill:var(--purple);font-size:8px;">Fib 61.8%</text>
+            <!-- 38.2% -->
+            <line x1="0" y1="75" x2="680" y2="75" stroke="var(--fib,rgba(155,114,224,0.4))" stroke-width="1" stroke-dasharray="4,5" opacity="0.7"/>
+            <rect x="0" y="70" width="56" height="11" fill="var(--purpleb)" rx="2" opacity="0.7"/>
+            <text x="3" y="79" style="font-family:'DM Mono',monospace;fill:var(--purple);font-size:8px;opacity:.8;">Fib 38.2%</text>
+            <!-- 23.6% -->
+            <line x1="0" y1="55" x2="680" y2="55" stroke="var(--fib,rgba(155,114,224,0.3))" stroke-width="1" stroke-dasharray="3,6" opacity="0.5"/>
+
+            <!-- DOUBLE BOTTOM PATTERN AREA (v4 NEW) -->
+            <rect x="280" y="130" width="120" height="80" fill="var(--green)" opacity="0.04" rx="4"/>
+            <text x="284" y="143" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">ダブルボトム検出</text>
+            <!-- Neckline -->
+            <line x1="280" y1="152" x2="400" y2="152" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.6"/>
+            <text x="404" y="156" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">ネックライン 1.0840</text>
+
+            <!-- MA50 -->
+            <polyline points="0,170 60,162 120,154 180,147 240,140 300,131 360,122 420,114 480,107 540,100 600,94 680,88" fill="none" stroke="var(--blue)" stroke-width="1.5" opacity=".7"/>
+            <!-- MA200 -->
+            <polyline points="0,190 120,186 240,181 360,175 480,169 600,162 680,158" fill="none" stroke="var(--yellow)" stroke-width="1.2" opacity=".45"/>
+
+            <!-- CANDLES -->
+            <g class="cu"><rect x="14" y="135" width="10" height="36" rx="1.5"/><line x1="19" y1="124" x2="19" y2="135" stroke-width="1.5"/><line x1="19" y1="171" x2="19" y2="180" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="32" y="128" width="10" height="32" rx="1.5"/><line x1="37" y1="120" x2="37" y2="128" stroke-width="1.5"/><line x1="37" y1="160" x2="37" y2="170" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="50" y="130" width="10" height="28" rx="1.5"/><line x1="55" y1="122" x2="55" y2="130" stroke-width="1.5"/><line x1="55" y1="158" x2="55" y2="166" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="68" y="122" width="10" height="30" rx="1.5"/><line x1="73" y1="113" x2="73" y2="122" stroke-width="1.5"/><line x1="73" y1="152" x2="73" y2="161" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="86" y="120" width="10" height="24" rx="1.5"/><line x1="91" y1="112" x2="91" y2="120" stroke-width="1.5"/><line x1="91" y1="144" x2="91" y2="154" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="104" y="113" width="10" height="27" rx="1.5"/><line x1="109" y1="104" x2="109" y2="113" stroke-width="1.5"/><line x1="109" y1="140" x2="109" y2="148" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="122" y="106" width="10" height="26" rx="1.5"/><line x1="127" y1="97" x2="127" y2="106" stroke-width="1.5"/><line x1="127" y1="132" x2="127" y2="140" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="140" y="108" width="10" height="20" rx="1.5"/><line x1="145" y1="100" x2="145" y2="108" stroke-width="1.5"/><line x1="145" y1="128" x2="145" y2="137" stroke-width="1.5"/></g>
+            <!-- Double Bottom 1st bottom -->
+            <g class="cd"><rect x="158" y="156" width="10" height="22" rx="1.5"/><line x1="163" y1="148" x2="163" y2="156" stroke-width="1.5"/><line x1="163" y1="178" x2="163" y2="188" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="176" y="148" width="10" height="24" rx="1.5"/><line x1="181" y1="140" x2="181" y2="148" stroke-width="1.5"/><line x1="181" y1="172" x2="181" y2="180" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="194" y="140" width="10" height="22" rx="1.5"/><line x1="199" y1="132" x2="199" y2="140" stroke-width="1.5"/><line x1="199" y1="162" x2="199" y2="170" stroke-width="1.5"/></g>
+            <!-- Peak between bottoms -->
+            <g class="cu"><rect x="212" y="128" width="10" height="24" rx="1.5"/><line x1="217" y1="120" x2="217" y2="128" stroke-width="1.5"/><line x1="217" y1="152" x2="217" y2="160" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="230" y="130" width="10" height="20" rx="1.5"/><line x1="235" y1="122" x2="235" y2="130" stroke-width="1.5"/><line x1="235" y1="150" x2="235" y2="159" stroke-width="1.5"/></g>
+            <!-- Double Bottom 2nd bottom -->
+            <g class="cd"><rect x="248" y="152" width="10" height="23" rx="1.5"/><line x1="253" y1="144" x2="253" y2="152" stroke-width="1.5"/><line x1="253" y1="175" x2="253" y2="185" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="266" y="146" width="10" height="26" rx="1.5"/><line x1="271" y1="137" x2="271" y2="146" stroke-width="1.5"/><line x1="271" y1="172" x2="271" y2="181" stroke-width="1.5"/></g>
+            <!-- After pattern: recovery -->
+            <g class="cu"><rect x="284" y="138" width="10" height="26" rx="1.5"/><line x1="289" y1="129" x2="289" y2="138" stroke-width="1.5"/><line x1="289" y1="164" x2="289" y2="172" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="302" y="128" width="10" height="28" rx="1.5"/><line x1="307" y1="119" x2="307" y2="128" stroke-width="1.5"/><line x1="307" y1="156" x2="307" y2="165" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="320" y="130" width="10" height="18" rx="1.5"/><line x1="325" y1="122" x2="325" y2="130" stroke-width="1.5"/><line x1="325" y1="148" x2="325" y2="157" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="338" y="118" width="10" height="24" rx="1.5"/><line x1="343" y1="110" x2="343" y2="118" stroke-width="1.5"/><line x1="343" y1="142" x2="343" y2="151" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="356" y="110" width="10" height="22" rx="1.5"/><line x1="361" y1="102" x2="361" y2="110" stroke-width="1.5"/><line x1="361" y1="132" x2="361" y2="141" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="374" y="112" width="10" height="17" rx="1.5"/><line x1="379" y1="104" x2="379" y2="112" stroke-width="1.5"/><line x1="379" y1="129" x2="379" y2="138" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="392" y="104" width="10" height="20" rx="1.5"/><line x1="397" y1="96" x2="397" y2="104" stroke-width="1.5"/><line x1="397" y1="124" x2="397" y2="132" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="410" y="97" width="10" height="22" rx="1.5"/><line x1="415" y1="89" x2="415" y2="97" stroke-width="1.5"/><line x1="415" y1="119" x2="415" y2="128" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="428" y="99" width="10" height="16" rx="1.5"/><line x1="433" y1="91" x2="433" y2="99" stroke-width="1.5"/><line x1="433" y1="115" x2="433" y2="124" stroke-width="1.5"/></g>
+            <!-- PINBAR (v4: long lower wick) -->
+            <g class="cu"><rect x="446" y="96" width="10" height="10" rx="1.5"/><line x1="451" y1="91" x2="451" y2="96" stroke-width="1.5"/><line x1="451" y1="106" x2="451" y2="130" stroke-width="2"/></g>
+            <text x="434" y="88" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.9;">📌 ピンバー</text>
+            <!-- Current candles -->
+            <g class="cu"><rect x="464" y="90" width="10" height="20" rx="1.5"/><line x1="469" y1="83" x2="469" y2="90" stroke-width="1.5"/><line x1="469" y1="110" x2="469" y2="118" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="482" y="84" width="10" height="22" rx="1.5"/><line x1="487" y1="76" x2="487" y2="84" stroke-width="1.5"/><line x1="487" y1="106" x2="487" y2="114" stroke-width="1.5"/></g>
+            <g class="cd"><rect x="500" y="86" width="10" height="16" rx="1.5"/><line x1="505" y1="78" x2="505" y2="86" stroke-width="1.5"/><line x1="505" y1="102" x2="505" y2="110" stroke-width="1.5"/></g>
+            <g class="cu"><rect x="518" y="80" width="10" height="19" rx="1.5"/><line x1="523" y1="73" x2="523" y2="80" stroke-width="1.5"/><line x1="523" y1="99" x2="523" y2="107" stroke-width="1.5"/></g>
+
+            <!-- TP LINE (v4 NEW) -->
+            <line x1="0" y1="60" x2="680" y2="60" stroke="var(--tp)" stroke-width="1.5" stroke-dasharray="8,5"/>
+            <rect x="590" y="54" width="88" height="12" fill="var(--blueb)" rx="2"/>
+            <text x="593" y="63" style="font-family:'DM Mono',monospace;fill:var(--blue);font-size:8.5px;font-weight:500;">TP 1.0920 +78p</text>
+
+            <!-- ENTRY LINE (v4 NEW) -->
+            <line x1="0" y1="88" x2="680" y2="88" stroke="var(--entry)" stroke-width="2" stroke-dasharray="10,4"/>
+            <rect x="570" y="82" width="108" height="12" fill="var(--greenb)" rx="2"/>
+            <text x="573" y="91" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8.5px;font-weight:500;">ENTRY 1.0842</text>
+
+            <!-- SL LINE (v4 NEW) -->
+            <line x1="0" y1="148" x2="680" y2="148" stroke="var(--sl)" stroke-width="1.5" stroke-dasharray="6,4"/>
+            <rect x="574" y="142" width="104" height="12" fill="var(--redb)" rx="2"/>
+            <text x="577" y="151" style="font-family:'DM Mono',monospace;fill:var(--red);font-size:8.5px;font-weight:500;">SL 1.0782 -60p</text>
+
+            <!-- CURRENT PRICE -->
+            <line x1="0" y1="88" x2="680" y2="88" stroke="var(--yellow)" stroke-width="1" opacity="0.3"/>
+            <text x="3" y="30" style="font-family:'DM Mono',monospace;fill:var(--blue);font-size:8px;opacity:.7;">MA50</text>
+            <text x="3" y="20" style="font-family:'DM Mono',monospace;fill:var(--yellow);font-size:8px;opacity:.5;">MA200</text>
+          </svg>
+
+          <!-- LINE LEGEND -->
+          <div style="display:flex;gap:12px;padding:3px 4px 0;font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);flex-wrap:wrap;">
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:2px;background:var(--entry);display:inline-block;border-radius:1px;"></span>エントリー</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:2px;background:var(--sl);display:inline-block;border-radius:1px;border-top:1px dashed var(--sl);"></span>損切 SL</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:2px;background:var(--tp);display:inline-block;border-radius:1px;"></span>利確 TP</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="width:16px;height:1px;background:var(--fib,rgba(155,114,224,0.6));display:inline-block;"></span>フィボナッチ</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="color:var(--blue);">━</span>MA50</span>
+            <span style="display:flex;align-items:center;gap:4px;"><span style="color:var(--yellow);opacity:.5;">━</span>MA200</span>
+          </div>
+        </div>
+
+        <!-- RR SUMMARY (v4) -->
+        <div style="padding:0 14px 12px;">
+          <div class="g3">
+            <div class="mb" style="padding:7px 9px;text-align:center;">
+              <div class="mbl">エントリー</div>
+              <div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--green);">1.0842</div>
+            </div>
+            <div class="mb" style="padding:7px 9px;text-align:center;">
+              <div class="mbl">損切 SL</div>
+              <div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--red);">1.0782<span style="font-size:9px;"> (-60p)</span></div>
+            </div>
+            <div class="mb" style="padding:7px 9px;text-align:center;">
+              <div class="mbl">利確 TP / RR</div>
+              <div style="font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--blue);">1.0920<span style="font-size:9px;"> 1:1.3</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INDICATORS 3x2 -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+        <!-- MA -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">MA <button class="hb" onclick="openModal('ma')">?</button></div>
+            <div class="bdg bg" style="font-size:8px;">+10</div>
+          </div>
+          <div class="fm" style="font-size:17px;font-weight:500;color:var(--green);">GC確認</div>
+          <div class="fm" style="font-size:9.5px;color:var(--t3);">MA50>MA200</div>
+          <div class="st st-g" style="margin-top:5px;font-size:9px;">📈 上昇優位</div>
+          <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:100%;background:var(--green);"></div></div>
+        </div>
+        <!-- RSI -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">RSI <button class="hb" onclick="openModal('rsi')">?</button></div>
+            <div class="bdg by" style="font-size:8px;">+6</div>
+          </div>
+          <div class="fm" style="font-size:17px;font-weight:500;color:var(--yellow);">54.2</div>
+          <div class="fm" style="font-size:9.5px;color:var(--t3);">中立 (30-70)</div>
+          <div class="st st-n" style="margin-top:5px;font-size:9px;">⚪ 中立</div>
+          <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:54%;background:var(--yellow);"></div></div>
+        </div>
+        <!-- MACD -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">MACD <button class="hb" onclick="openModal('macd')">?</button></div>
+            <div class="bdg bg" style="font-size:8px;">+10</div>
+          </div>
+          <div class="fm" style="font-size:17px;font-weight:500;color:var(--green);">+0.0021</div>
+          <div class="fm" style="font-size:9.5px;color:var(--t3);">シグナル上抜け</div>
+          <div class="st st-g" style="margin-top:5px;font-size:9px;">📈 強気</div>
+          <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:100%;background:var(--green);"></div></div>
+        </div>
+        <!-- MTF -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">上位足 <button class="hb" onclick="openModal('mtf')">?</button></div>
+            <div class="bdg by" style="font-size:8px;">+8</div>
+          </div>
+          <div class="fm" style="font-size:16px;font-weight:500;color:var(--yellow);">D1↑ W1→</div>
+          <div class="fm" style="font-size:9.5px;color:var(--t3);">週足は中立</div>
+          <div class="st st-y" style="margin-top:5px;font-size:9px;">⚠ 部分一致</div>
+          <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:67%;background:var(--yellow);"></div></div>
+        </div>
+        <!-- BB -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">BB <button class="hb" onclick="openModal('bb')">?</button></div>
+            <div class="bdg bb" style="font-size:8px;">参考</div>
+          </div>
+          <div class="fm" style="font-size:12px;color:var(--t2);line-height:1.7;">上1.0921<br>下1.0721</div>
+          <div class="st st-n" style="margin-top:5px;font-size:9px;">⚪ 中立</div>
+        </div>
+        <!-- ATR -->
+        <div class="card cp" style="padding:11px 12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <div style="font-size:11px;font-weight:600;">ATR <button class="hb" onclick="openModal('atr')">?</button></div>
+            <div class="bdg bg" style="font-size:8px;">適正</div>
+          </div>
+          <div class="fm" style="font-size:17px;font-weight:500;color:var(--green);">0.0048</div>
+          <div class="fm" style="font-size:9.5px;color:var(--t3);">ボラ正常</div>
+          <div class="st st-g" style="margin-top:5px;font-size:9px;">✅ 好適</div>
+          <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:48%;background:var(--green);"></div></div>
+        </div>
+      </div>
+
+      <!-- FUNDA -->
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div class="clbl">ファンダメンタル</div>
+          <button class="hb" onclick="openModal('fundamental')">?</button>
+        </div>
+        <div class="g3">
+          <div><div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:2px;">金利差</div><div style="display:flex;align-items:center;gap:5px;"><div class="fm" style="font-size:13px;font-weight:500;">-1.25%</div><div class="bdg bg" style="font-size:8px;">USD優位</div></div><div class="st st-g" style="margin-top:3px;font-size:9px;">📈 USD強</div></div>
+          <div><div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:2px;">経済指標</div><div style="display:flex;gap:3px;flex-wrap:wrap;"><div class="bdg bg" style="font-size:8px;">NFP▲</div><div class="bdg bg" style="font-size:8px;">CPI▲</div><div class="bdg by" style="font-size:8px;">GDP→</div></div><div class="st st-g" style="margin-top:3px;font-size:9px;">✅ 強気</div></div>
+          <div><div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:2px;">NLP感情</div><div class="fm cy" style="font-size:17px;font-weight:500;">+0.38</div><div class="st st-y" style="margin-top:3px;font-size:9px;">⚠ やや強気</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COL3: AI + SPARK + EVENTS -->
+    <div class="c3" style="display:flex;flex-direction:column;gap:11px;">
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
+          <div class="clbl">AI予測</div>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <div class="bdg bb" style="font-size:8px;"><span class="pls">⬡</span>XGBoost</div>
+            <button class="hb" onclick="openModal('ai')">?</button>
+          </div>
+        </div>
+        <div style="text-align:center;margin-bottom:10px;">
+          <div class="fm cg" style="font-size:32px;font-weight:500;line-height:1;">63.2%</div>
+          <div class="st st-g" style="justify-content:center;margin-top:5px;">📈 BUY優勢</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:6px;overflow:hidden;height:8px;margin-bottom:4px;">
+          <div style="width:63.2%;height:100%;background:var(--green);border-radius:6px;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9.5px;margin-bottom:10px;">
+          <span class="cg">BUY 63.2%</span><span class="cr">SELL 36.8%</span>
+        </div>
+        <div class="dv"></div>
+        <div class="g2">
+          <div class="mb" style="padding:8px 10px;"><div class="mbl">期待値</div><div class="mbv cg" style="font-size:14px;">+0.84σ</div></div>
+          <div class="mb" style="padding:8px 10px;"><div class="mbl">RR比</div><div class="mbv" style="font-size:14px;">1:1.3</div></div>
+        </div>
+        <div class="dv"></div>
+        <div class="mb"><div class="mbl" style="margin-bottom:3px;">推奨ロット <button class="hb" onclick="openModal('lot')">?</button></div><div class="fm" style="font-size:16px;font-weight:500;">0.20 lot</div><div class="fm" style="font-size:9px;color:var(--t3);margin-top:1px;">¥500K · リスク1% · SL 60p</div></div>
+      </div>
+
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div class="clbl">スコア推移 (24h)</div>
+          <button class="hb" onclick="openModal('sparkline')">?</button>
+        </div>
+        <div class="spark" id="spark"></div>
+        <div class="fm" style="font-size:9px;color:var(--t3);margin-top:5px;">ピーク 84点 (3h前)</div>
+      </div>
+
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+          <div class="clbl">重要指標</div>
+          <button class="hb" onclick="openModal('calendar')">?</button>
+        </div>
+        <div class="ri"><div class="rdot" style="background:var(--red);"></div><div style="flex:1;"><div style="font-size:11.5px;font-weight:600;">米CPI <span class="fm" style="font-size:9px;color:var(--t3);">今日21:30</span></div><div class="fm" style="font-size:9.5px;color:var(--t3);">予想+0.3% 前回+0.4%</div></div><div class="bdg br" style="font-size:8px;">残47分</div></div>
+        <div class="ri"><div class="rdot" style="background:var(--yellow);"></div><div style="flex:1;"><div style="font-size:11.5px;font-weight:600;">ECB議事録 <span class="fm" style="font-size:9px;color:var(--t3);">明日</span></div></div><div class="bdg by" style="font-size:8px;">中</div></div>
+        <div class="ri"><div class="rdot" style="background:var(--red);"></div><div style="flex:1;"><div style="font-size:11.5px;font-weight:600;">米NFP <span class="fm" style="font-size:9px;color:var(--t3);">金曜21:30</span></div></div><div class="bdg br" style="font-size:8px;">最高</div></div>
+      </div>
+
+      <div class="beg-only card cp" style="border-color:var(--blue);background:var(--blueb);">
+        <div class="clbl" style="margin-bottom:7px;color:var(--blue);">📖 初心者 次の行動</div>
+        <div style="font-size:11.5px;line-height:1.75;color:var(--t2);">
+          1. <strong>今は待機</strong><br>2. CPI発表 (21:30) 確認<br>3. スコア<strong>75点</strong>まで待つ<br>4. ダブルボトムが確定すれば自動加点
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ CHART PATTERN PAGE (v4 NEW) ══════════ -->
+<div id="page-pattern" class="page" style="padding-top:3px;">
+  <div class="topbar">
+    <div><div class="ps">CHART PATTERNS · v4 NEW</div><div class="pt">チャートパターン分析</div></div>
+    <div style="display:flex;gap:7px;"><div class="bdg bg">BUY検出 3</div><div class="bdg br">SELL検出 1</div><div class="bdg by">中立 2</div></div>
+  </div>
+
+  <!-- SECTION 1: フォーメーション -->
+  <div class="clbl" style="margin-bottom:10px;">📊 フォーメーションパターン（形の変化）</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:20px;">
+
+    <div class="ptcard buy" onclick="openModal('doubleBottom')">
+      <div class="pt-score cg">+8pt</div>
+      <div class="pt-icon">🔵</div>
+      <div class="pt-name">ダブルボトム</div>
+      <div class="pt-conf">信頼度 78% · H4 検出中</div>
+      <div class="st st-g" style="font-size:9px;">BUY シグナル</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <polyline points="0,10 30,10 50,40 70,20 90,40 110,10 180,5" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="40" y1="20" x2="100" y2="20" stroke="var(--green)" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+        <text x="60" y="18" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">ネックライン</text>
+        <circle cx="50" cy="40" r="3" fill="var(--green)" opacity="0.6"/>
+        <circle cx="90" cy="40" r="3" fill="var(--green)" opacity="0.6"/>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">エントリー: ネックライン上抜け<br>SL: 2つの底の下</div>
+    </div>
+
+    <div class="ptcard sell" onclick="openModal('headAndShoulders')">
+      <div class="pt-score cr">検出待</div>
+      <div class="pt-icon">🔴</div>
+      <div class="pt-name">ヘッド&ショルダー</div>
+      <div class="pt-conf">形成中 52% · D1</div>
+      <div class="st st-r" style="font-size:9px;">SELL シグナル</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <polyline points="0,45 25,45 40,25 55,30 70,8 85,30 100,25 115,45 180,45" fill="none" stroke="var(--red)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="30" y1="35" x2="120" y2="35" stroke="var(--red)" stroke-width="1" stroke-dasharray="4,3" opacity="0.6"/>
+        <text x="50" y="33" style="font-family:'DM Mono',monospace;fill:var(--red);font-size:8px;opacity:.8;">ネックライン</text>
+        <circle cx="70" cy="8" r="3" fill="var(--red)" opacity="0.7"/>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">エントリー: ネックライン割れ<br>SL: 右肩の上</div>
+    </div>
+
+    <div class="ptcard neutral" onclick="openModal('triangle')">
+      <div class="pt-score cy">+4pt</div>
+      <div class="pt-icon">📐</div>
+      <div class="pt-name">上昇トライアングル</div>
+      <div class="pt-conf">形成中 62% · D1</div>
+      <div class="st st-y" style="font-size:9px;">ブレイク待ち</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <line x1="10" y1="20" x2="160" y2="20" stroke="var(--yellow)" stroke-width="1.5" opacity="0.8"/>
+        <polyline points="10,45 40,38 70,32 100,27 130,22 160,20" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round"/>
+        <polyline points="10,10 40,13 70,16 100,18 130,19 160,20" fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+        <text x="12" y="17" style="font-family:'DM Mono',monospace;fill:var(--yellow);font-size:8px;opacity:.8;">水平抵抗</text>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">エントリー: 水平抵抗ブレイク<br>SL: 上昇トレンドライン下</div>
+    </div>
+
+    <div class="ptcard buy" onclick="openModal('flagPattern')">
+      <div class="pt-score cg">+6pt</div>
+      <div class="pt-icon">🚩</div>
+      <div class="pt-name">ブルフラッグ</div>
+      <div class="pt-conf">信頼度 71% · H4</div>
+      <div class="st st-g" style="font-size:9px;">継続シグナル</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <polyline points="0,50 40,15" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round"/>
+        <polyline points="40,15 60,20 80,17 100,22 120,19 140,12" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round"/>
+        <polyline points="40,25 60,30 80,27 100,32 120,29 140,22" fill="none" stroke="var(--green)" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+        <polyline points="140,12 165,3" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round"/>
+        <text x="45" y="40" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">フラッグ</text>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">エントリー: フラッグ上抜け<br>SL: フラッグ下限</div>
+    </div>
+
+    <div class="ptcard buy" onclick="openModal('cupHandle')">
+      <div class="pt-score cg">+5pt</div>
+      <div class="pt-icon">☕</div>
+      <div class="pt-name">カップ&ハンドル</div>
+      <div class="pt-conf">信頼度 65% · W1</div>
+      <div class="st st-g" style="font-size:9px;">長期BUYシグナル</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <polyline points="0,10 20,12 50,35 80,45 110,35 140,12 155,15 165,20 175,15" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"/>
+        <line x1="0" y1="10" x2="180" y2="10" stroke="var(--green)" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>
+        <text x="55" y="52" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">カップ</text>
+        <text x="148" y="28" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;opacity:.8;">柄</text>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">エントリー: ハンドル上抜け<br>SL: カップの底</div>
+    </div>
+
+    <div class="ptcard" onclick="openModal('wedge')">
+      <div class="pt-score cy">監視</div>
+      <div class="pt-icon">🔺</div>
+      <div class="pt-name">ライジングウェッジ</div>
+      <div class="pt-conf">形成中 44% · H4</div>
+      <div class="st st-y" style="font-size:9px;">反転注意</div>
+      <svg width="100%" height="55" viewBox="0 0 180 55" style="margin-top:8px;display:block;">
+        <polyline points="0,50 50,30 100,15 150,8 175,5" fill="none" stroke="var(--yellow)" stroke-width="2" stroke-linecap="round"/>
+        <polyline points="0,55 50,40 100,28 150,20 175,17" fill="none" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+      </svg>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">形成完成で下落転換の可能性<br>SL: ウェッジ上限</div>
+    </div>
+  </div>
+
+  <!-- SECTION 2: ローソク足パターン -->
+  <div class="clbl" style="margin-bottom:10px;">🕯 ローソク足パターン（短期サイン）<button class="hb" onclick="openModal('candleIntro')" style="margin-left:4px;">?</button></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:20px;">
+
+    <div class="ptcard buy" onclick="openModal('pinbar')">
+      <div class="pt-score cg">+5pt 検出!</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:6px;">
+        <svg width="50" height="40" viewBox="0 0 50 40"><rect x="10" y="12" width="10" height="8" class="cu"/><line x1="15" y1="8" x2="15" y2="12" stroke="var(--green)" stroke-width="1.5"/><line x1="15" y1="20" x2="15" y2="37" stroke="var(--green)" stroke-width="2"/><rect x="28" y="14" width="10" height="7" class="cu"/><line x1="33" y1="10" x2="33" y2="14" stroke="var(--green)" stroke-width="1.5"/><line x1="33" y1="21" x2="33" y2="28" stroke="var(--green)" stroke-width="1.5"/></svg>
+        <div class="bdg bg pls" style="font-size:8px;height:18px;">直近足</div>
+      </div>
+      <div class="pt-name">ブリッシュピンバー</div>
+      <div class="pt-conf">下ヒゲ = 買い圧力</div>
+      <div class="st st-g" style="font-size:9px;">📌 反発シグナル</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        長い下ヒゲ → 売りを跳ね返した<br>エントリー: ピンバーの高値上抜け<br>SL: ピンバーの安値下
+      </div>
+    </div>
+
+    <div class="ptcard buy" onclick="openModal('engulf')">
+      <div class="pt-score cg">+4pt</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:6px;">
+        <svg width="50" height="40" viewBox="0 0 50 40"><rect x="8" y="18" width="10" height="12" class="cd"/><line x1="13" y1="14" x2="13" y2="18" stroke="var(--red)" stroke-width="1.5"/><line x1="13" y1="30" x2="13" y2="34" stroke="var(--red)" stroke-width="1.5"/><rect x="26" y="10" width="14" height="22" class="cu"/><line x1="33" y1="5" x2="33" y2="10" stroke="var(--green)" stroke-width="1.5"/><line x1="33" y1="32" x2="33" y2="37" stroke="var(--green)" stroke-width="1.5"/></svg>
+      </div>
+      <div class="pt-name">ブリッシュエンゴルフィング</div>
+      <div class="pt-conf">前足を包む大陽線</div>
+      <div class="st st-g" style="font-size:9px;">🟢 強い反転</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        大きな陽線が陰線を丸ごと包む<br>強い買い圧力の証拠<br>SL: 陰線の安値下
+      </div>
+    </div>
+
+    <div class="ptcard buy" onclick="openModal('morningstar')">
+      <div class="pt-score cg">+6pt</div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:40px;margin-bottom:6px;">
+        <svg width="62" height="40" viewBox="0 0 62 40"><rect x="4" y="8" width="10" height="20" class="cd"/><line x1="9" y1="4" x2="9" y2="8" stroke="var(--red)" stroke-width="1.5"/><line x1="9" y1="28" x2="9" y2="34" stroke="var(--red)" stroke-width="1.5"/><rect x="22" y="24" width="8" height="8" class="cd"/><line x1="26" y1="21" x2="26" y2="24" stroke="var(--red)" stroke-width="1.5"/><line x1="26" y1="32" x2="26" y2="37" stroke="var(--red)" stroke-width="1.5"/><rect x="38" y="10" width="10" height="20" class="cu"/><line x1="43" y1="5" x2="43" y2="10" stroke="var(--green)" stroke-width="1.5"/><line x1="43" y1="30" x2="43" y2="35" stroke="var(--green)" stroke-width="1.5"/></svg>
+      </div>
+      <div class="pt-name">明けの明星</div>
+      <div class="pt-conf">3本足の底打ちサイン</div>
+      <div class="st st-g" style="font-size:9px;">⭐ 強力な反転</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        大陰線→小足→大陽線の3本組<br>底値圏で出ると強い<br>SL: 明星（中央の足）の安値下
+      </div>
+    </div>
+
+    <div class="ptcard sell" onclick="openModal('shootingStar')">
+      <div class="pt-score cr">監視</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:6px;">
+        <svg width="50" height="40" viewBox="0 0 50 40"><rect x="8" y="22" width="10" height="8" class="cd"/><line x1="13" y1="3" x2="13" y2="22" stroke="var(--red)" stroke-width="2"/><line x1="13" y1="30" x2="13" y2="35" stroke="var(--red)" stroke-width="1.5"/></svg>
+      </div>
+      <div class="pt-name">シューティングスター</div>
+      <div class="pt-conf">高値圏の反転サイン</div>
+      <div class="st st-r" style="font-size:9px;">⭐ 下落シグナル</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        長い上ヒゲ = 売りに押された<br>上昇トレンド末期に注意<br>SL: 上ヒゲの高値上
+      </div>
+    </div>
+
+    <div class="ptcard" onclick="openModal('doji')">
+      <div class="pt-score cy">+2pt</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:6px;">
+        <svg width="50" height="40" viewBox="0 0 50 40"><line x1="13" y1="5" x2="13" y2="37" stroke="var(--yellow)" stroke-width="1.5"/><rect x="8" y="19" width="10" height="2" fill="var(--yellow)"/><line x1="33" y1="8" x2="33" y2="15" stroke="var(--t2)" stroke-width="1.5"/><rect x="28" y="15" width="10" height="12" fill="none" stroke="var(--t2)" stroke-width="1.5"/><line x1="33" y1="27" x2="33" y2="34" stroke="var(--t2)" stroke-width="1.5"/></svg>
+      </div>
+      <div class="pt-name">十字線（ドージ）</div>
+      <div class="pt-conf">迷いのサイン</div>
+      <div class="st st-n" style="font-size:9px;">⚪ 方向性不明</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        始値≒終値 → 相場が迷走中<br>トレンド転換の前兆になることも<br>単独では判断しない</div>
+    </div>
+
+    <div class="ptcard buy" onclick="openModal('threeWhiteSoldiers')">
+      <div class="pt-score cg">+6pt</div>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:40px;margin-bottom:6px;">
+        <svg width="62" height="40" viewBox="0 0 62 40"><rect x="4" y="22" width="10" height="16" class="cu"/><line x1="9" y1="18" x2="9" y2="22" stroke="var(--green)" stroke-width="1.5"/><rect x="22" y="14" width="10" height="18" class="cu"/><line x1="27" y1="10" x2="27" y2="14" stroke="var(--green)" stroke-width="1.5"/><rect x="40" y="6" width="10" height="18" class="cu"/><line x1="45" y1="2" x2="45" y2="6" stroke="var(--green)" stroke-width="1.5"/></svg>
+      </div>
+      <div class="pt-name">赤三兵（白三兵）</div>
+      <div class="pt-conf">3連続陽線</div>
+      <div class="st st-g" style="font-size:9px;">🪖 強烈な上昇圧力</div>
+      <div class="dv"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);line-height:1.7;">
+        3本連続の大陽線<br>買いの強さを示す<br>SL: 1本目の陽線安値下</div>
+    </div>
+  </div>
+
+  <!-- SECTION 3: フィボナッチ -->
+  <div class="clbl" style="margin-bottom:10px;">📐 フィボナッチリトレースメント <button class="hb" onclick="openModal('fibonacci')">?</button></div>
+  <div class="card cp" style="margin-bottom:20px;">
+    <div class="g2">
+      <div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">EUR/USD 現在のフィボレベル</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--greenb);border-radius:7px;border:1px solid var(--green);">
+            <div class="fm" style="font-size:11px;width:52px;color:var(--green);">23.6%</div>
+            <div class="fm" style="font-size:13px;font-weight:500;">1.0920</div>
+            <div class="bdg bg" style="font-size:8px;">TP目標</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--purpleb);border-radius:7px;border:1px solid var(--purple);">
+            <div class="fm" style="font-size:11px;width:52px;color:var(--purple);">38.2%</div>
+            <div class="fm" style="font-size:13px;font-weight:500;">1.0890</div>
+            <div class="bdg bp" style="font-size:8px;">第1目標</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--purpleb);border-radius:7px;border:1px solid var(--purple);opacity:0.8;">
+            <div class="fm" style="font-size:11px;width:52px;color:var(--purple);">61.8%</div>
+            <div class="fm" style="font-size:13px;font-weight:500;">1.0842</div>
+            <div class="bdg bg" style="font-size:8px;">← 現在値</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--redb);border-radius:7px;">
+            <div class="fm" style="font-size:11px;width:52px;color:var(--red);">78.6%</div>
+            <div class="fm" style="font-size:13px;font-weight:500;">1.0810</div>
+            <div class="bdg br" style="font-size:8px;">SL候補</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--redb);border-radius:7px;opacity:0.7;">
+            <div class="fm" style="font-size:11px;width:52px;color:var(--red);">100%</div>
+            <div class="fm" style="font-size:13px;font-weight:500;">1.0740</div>
+            <div class="bdg br" style="font-size:8px;">直近安値</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">フィボナッチとは？</div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.75;">
+          相場は大きな動きの後、一定の割合で押し戻されることが多い。その割合が<strong>23.6% / 38.2% / 61.8%</strong>などのフィボナッチ数列に基づく水準。<br><br>
+          <strong>61.8%（現在値付近）</strong>は「黄金比」と呼ばれ最も信頼性が高い押し目水準。ここからの反発を狙う。
+        </div>
+        <div class="al al-g" style="margin-top:10px;font-size:11.5px;">
+          <span>💡</span><span><strong>現在は61.8%付近</strong>でダブルボトムが形成中。押し目買いの最適ゾーン</span>
+        </div>
+        <div class="al al-b" style="margin-top:6px;font-size:11px;">
+          <a href="https://www.babypips.com/learn/forex/fibonacci" target="_blank" style="color:var(--blue);text-decoration:none;">📖 BabyPips — フィボナッチ完全ガイド →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION 4: エリオット波動 -->
+  <div class="clbl" style="margin-bottom:10px;">🌊 エリオット波動カウント <button class="hb" onclick="openModal('elliott')">?</button></div>
+  <div class="card cp" style="margin-bottom:20px;">
+    <div class="g2">
+      <div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:10px;">現在の波動カウント推定</div>
+        <div style="display:flex;gap:5px;margin-bottom:10px;">
+          <div style="flex:1;text-align:center;padding:10px;background:var(--surf2);border-radius:8px;border:1px solid var(--brd);">
+            <div class="fm" style="font-size:20px;font-weight:500;color:var(--green);">③波</div>
+            <div style="font-size:10px;color:var(--t3);margin-top:2px;">推定現在地</div>
+          </div>
+          <div style="flex:1;text-align:center;padding:10px;background:var(--greenb);border-radius:8px;border:1px solid var(--green);">
+            <div class="fm" style="font-size:13px;font-weight:500;color:var(--green);">最大利幅</div>
+            <div style="font-size:10px;color:var(--green);margin-top:2px;">第3波が最強</div>
+          </div>
+        </div>
+        <svg width="100%" height="100" viewBox="0 0 300 100" style="display:block;">
+          <!-- Elliott waves -->
+          <polyline points="0,80 40,30 70,55 120,5 160,40 200,25 260,10" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"/>
+          <!-- Wave labels -->
+          <text x="35" y="25" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:11px;font-weight:500;">①</text>
+          <text x="65" y="70" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:10px;">②</text>
+          <text x="115" y="0" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:13px;font-weight:500;">③</text>
+          <text x="155" y="55" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:10px;">④</text>
+          <text x="195" y="22" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:11px;">⑤</text>
+          <!-- Current marker -->
+          <circle cx="120" cy="5" r="5" fill="var(--yellow)" opacity="0.8"/>
+          <text x="112" y="20" style="font-family:'DM Mono',monospace;fill:var(--yellow);font-size:9px;">現在地?</text>
+          <!-- ABC correction -->
+          <polyline points="260,10 285,40 270,30 295,50" fill="none" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.6"/>
+          <text x="263" y="52" style="font-family:'DM Mono',monospace;fill:var(--red);font-size:9px;opacity:.7;">修正波ABC</text>
+        </svg>
+      </div>
+      <div>
+        <div style="font-size:12.5px;font-weight:600;margin-bottom:8px;">エリオット波動の基本</div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.8;">
+          相場は<strong>5波動で上昇</strong>して<strong>3波動で下落</strong>するという理論。<br><br>
+          ①③⑤ = 推進波（トレンド方向）<br>
+          ②④ = 修正波（押し目・戻り）<br>
+          ABC = 下落修正波<br><br>
+          <strong>第③波</strong>が最も長く利幅が取れる。現在はその可能性が高い。
+        </div>
+        <div class="al al-p" style="margin-top:8px;font-size:11.5px;">
+          <span>🌊</span><span>第③波なら目標は<strong>①波の1.618倍</strong>の値幅が目安</span>
+        </div>
+        <div class="al al-b" style="margin-top:6px;font-size:11px;">
+          <a href="https://www.babypips.com/learn/forex/elliot-wave-theory" target="_blank" style="color:var(--blue);text-decoration:none;">📖 BabyPips — エリオット波動 →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ STRATEGY PAGE ══════════ -->
+<div id="page-strategy" class="page" style="padding-top:3px;">
+  <div class="topbar"><div><div class="ps">BACKTEST · ENVIRONMENT</div><div class="pt">戦略分析</div></div></div>
+  <div class="gstrat">
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:11px;">スコア詳細内訳</div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">テクニカル <span class="fm" style="float:right;color:var(--t2);">30/40点</span></div>
+        <div class="sr"><div class="srl">MAゴールデンクロス <button class="hb" onclick="openModal('ma')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+        <div class="sr"><div class="srl">RSI反発 <button class="hb" onclick="openModal('rsi')">?</button></div><div class="srb pb"><div class="pbf" style="width:75%;background:var(--yellow);"></div></div><div class="srv cy">6/8</div></div>
+        <div class="sr"><div class="srl">MACDシグナル <button class="hb" onclick="openModal('macd')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+        <div class="sr"><div class="srl">上位足一致 <button class="hb" onclick="openModal('mtf')">?</button></div><div class="srb pb"><div class="pbf" style="width:67%;background:var(--yellow);"></div></div><div class="srv cy">8/12</div></div>
+        <div class="dv"></div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">チャートパターン(v4) <span class="fm" style="float:right;color:var(--t2);">+12pt ボーナス</span></div>
+        <div class="sr"><div class="srl">ダブルボトム <button class="hb" onclick="openModal('doubleBottom')">?</button></div><div class="srb pb"><div class="pbf" style="width:80%;background:var(--orange);"></div></div><div class="srv" style="color:var(--orange);">+8</div></div>
+        <div class="sr"><div class="srl">ブリッシュピンバー <button class="hb" onclick="openModal('pinbar')">?</button></div><div class="srb pb"><div class="pbf" style="width:50%;background:var(--orange);"></div></div><div class="srv" style="color:var(--orange);">+5</div></div>
+        <div class="dv"></div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">ファンダ <span class="fm" style="float:right;color:var(--t2);">26/30点</span></div>
+        <div class="sr"><div class="srl">金利差 <button class="hb" onclick="openModal('fundamental')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+        <div class="sr"><div class="srl">経済指標 <button class="hb" onclick="openModal('calendar')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+        <div class="sr"><div class="srl">NLP感情 <button class="hb" onclick="openModal('nlp')">?</button></div><div class="srb pb"><div class="pbf" style="width:60%;background:var(--yellow);"></div></div><div class="srv cy">6/10</div></div>
+        <div class="dv"></div>
+        <div style="font-size:11px;color:var(--t3);margin-bottom:6px;">市場・リスク <span class="fm" style="float:right;color:var(--t2);">14/20点</span></div>
+        <div class="sr"><div class="srl">ボラ適正 <button class="hb" onclick="openModal('atr')">?</button></div><div class="srb pb"><div class="pbf" style="width:100%;background:var(--green);"></div></div><div class="srv cg">10/10</div></div>
+        <div class="sr"><div class="srl">指標前回避</div><div class="srb pb"><div class="pbf" style="width:0%;background:var(--red);"></div></div><div class="srv cr">0/10</div></div>
+        <div class="dv"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="fi" style="font-size:15px;">合計スコア</div>
+          <div class="fm cy" style="font-size:22px;font-weight:500;">72 / 100</div>
+        </div>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:11px;">バックテスト (2015-2025)</div>
+        <div class="g2" style="margin-bottom:10px;">
+          <div class="mb"><div class="mbl">総合勝率</div><div class="mbv cg">58.4%</div></div>
+          <div class="mb"><div class="mbl">PF</div><div class="mbv cg">1.62</div></div>
+          <div class="mb"><div class="mbl">最大DD</div><div class="mbv cr">-12.3%</div></div>
+          <div class="mb"><div class="mbl">DD回復日数</div><div class="mbv cy">34日</div></div>
+        </div>
+        <div class="al al-g"><span>⬆</span><span>パターン判定追加でPF <strong>1.62→1.84</strong>に改善</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:11px;">相場環境別バックテスト <button class="hb" onclick="openModal('envTest')">?</button></div>
+        <div class="g2">
+          <div class="card" style="padding:11px;border:1.5px solid var(--green);background:var(--greenb);">
+            <div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:4px;">📈 トレンド</div>
+            <div class="fm cg" style="font-size:20px;font-weight:500;">67.2%</div>
+            <div style="font-size:10px;color:var(--t3);">最強 ✓</div>
+            <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:67%;background:var(--green);"></div></div>
+          </div>
+          <div class="card" style="padding:11px;">
+            <div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:4px;">↔ レンジ</div>
+            <div class="fm cr" style="font-size:20px;font-weight:500;">44.8%</div>
+            <div style="font-size:10px;color:var(--red);">回避推奨</div>
+            <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:45%;background:var(--red);"></div></div>
+          </div>
+          <div class="card" style="padding:11px;">
+            <div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:4px;">🌪 高ボラ</div>
+            <div class="fm cy" style="font-size:20px;font-weight:500;">51.3%</div>
+            <div style="font-size:10px;color:var(--t3);">注意</div>
+            <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:51%;background:var(--yellow);"></div></div>
+          </div>
+          <div class="card" style="padding:11px;">
+            <div class="fm" style="font-size:9px;color:var(--t3);margin-bottom:4px;">📊 指標週</div>
+            <div class="fm cr" style="font-size:20px;font-weight:500;">47.6%</div>
+            <div style="font-size:10px;color:var(--red);">回避推奨</div>
+            <div class="pb" style="margin-top:6px;"><div class="pbf" style="width:48%;background:var(--red);"></div></div>
+          </div>
+        </div>
+        <div class="al al-g" style="margin-top:9px;"><span>💡</span><span><strong>現在: トレンド相場</strong> — 最強環境です</span></div>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:11px;">期待値ヒートマップ</div>
+        <table style="width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:11px;" id="heatTbl"></table>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:9px;">エントリー推奨ゾーン</div>
+        <div class="al al-g"><span>🎯</span><div style="font-size:11.5px;line-height:1.7;"><strong>直近サポート:</strong> 1.0798<br><strong>理想エントリー:</strong> 1.0820-1.0845<br><strong>損切り (SL):</strong> 1.0782 (-60p)<br><strong>利確 (TP):</strong> 1.0920 (+78p)<br><strong>RR比:</strong> 1 : 1.3</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ HISTORY PAGE ══════════ -->
+<div id="page-history" class="page" style="padding-top:3px;">
+  <div class="topbar"><div><div class="ps">PERFORMANCE · PSYCHOLOGY</div><div class="pt">履歴・心理分析</div></div><div class="bdg bg">今月規律: 87%</div></div>
+  <div class="ghist" style="margin-bottom:12px;">
+    <div class="card cp"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div class="clbl">損益曲線</div><div class="tabs" style="width:auto;"><button class="tab on" style="flex:none;padding:4px 8px;">1M</button><button class="tab" style="flex:none;padding:4px 8px;">3M</button><button class="tab" style="flex:none;padding:4px 8px;">1Y</button></div></div><canvas id="eqChart" height="140"></canvas></div>
+    <div class="card cp"><div class="clbl" style="margin-bottom:10px;">今月パフォーマンス</div><div class="g2" style="gap:8px;"><div class="mb"><div class="mbl">総損益</div><div class="mbv cg">+¥38K</div></div><div class="mb"><div class="mbl">勝率</div><div class="mbv cg">61.5%</div></div><div class="mb"><div class="mbl">回数</div><div class="mbv">26</div></div><div class="mb"><div class="mbl">最大DD</div><div class="mbv cr">-8.2%</div></div></div><div class="dv"></div><div class="al al-r" style="font-size:11px;"><span>⚡</span><span>規律違反の損失は遵守時の<strong>1.46倍</strong></span></div></div>
+  </div>
+  <div class="fi" style="font-size:16px;font-weight:400;margin-bottom:10px;letter-spacing:-.1px;">🧠 トレード心理分析</div>
+  <div class="g3" style="margin-bottom:12px;">
+    <div class="card cp"><div class="clbl" style="margin-bottom:9px;">時間帯別成績</div><div id="timebar"></div></div>
+    <div class="card cp"><div class="clbl" style="margin-bottom:9px;">連敗後の勝率</div><div id="lossbar"></div><div class="al al-r" style="margin-top:7px;font-size:11px;"><span>⚠</span><span>3連敗後 = 平常時の<strong>半分</strong></span></div></div>
+    <div class="card cp"><div class="clbl" style="margin-bottom:9px;">スコア帯別損益</div><div id="scoreaBar"></div><div class="al al-b" style="margin-top:7px;font-size:11px;"><span>📊</span><span>75点↑の期待値: <strong>+¥3,120</strong></span></div></div>
+  </div>
+  <div class="g2">
+    <div class="card cp"><div class="clbl" style="margin-bottom:9px;">エントリー理由ログ</div><div id="elogDiv"></div></div>
+    <div class="card cp"><div class="clbl" style="margin-bottom:9px;">直近取引</div><table style="width:100%;border-collapse:collapse;" id="tradeTbl"></table></div>
+  </div>
+</div>
+
+<!-- ══════════ PAIRS PAGE ══════════ -->
+<div id="page-pairs" class="page" style="padding-top:3px;">
+  <div class="topbar"><div><div class="ps">MULTI-CURRENCY</div><div class="pt">マルチペア監視</div></div></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:11px;" id="pairGrid"></div>
+</div>
+
+<!-- ══════════ SETTINGS PAGE ══════════ -->
+<div id="page-settings" class="page" style="padding-top:3px;">
+  <div class="topbar"><div><div class="ps">RISK · RULES · API</div><div class="pt">設定</div></div></div>
+  <div class="gset">
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <div class="card cp"><div class="clbl" style="margin-bottom:9px;">リスクプロファイル</div><div style="display:flex;flex-direction:column;gap:6px;" id="presetDiv"></div></div>
+      <div class="card cp"><div class="clbl" style="margin-bottom:9px;">リスク管理ルール</div><div id="riskDiv"></div></div>
+      <div class="card cp"><div class="clbl" style="margin-bottom:9px;">🔒 強制ロック</div><div class="al al-r" style="margin-bottom:8px;font-size:11px;"><span>⚠</span><span>有効時は<strong>物理的に発注不可</strong></span></div><div id="lockDiv"></div><div class="dv"></div><div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:12.5px;font-weight:600;">強制モード有効化</span><button class="sw on" onclick="this.classList.toggle('on')"></button></div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:11px;">
+      <div class="card cp"><div class="clbl" style="margin-bottom:9px;">機能スイッチ</div><div id="featDiv"></div></div>
+      <div class="card cp" style="text-align:center;"><div class="clbl" style="margin-bottom:12px;">冷却タイマー</div><div class="cdown" id="cd">12:34</div><div class="fm" style="font-size:10px;color:var(--t3);margin-top:5px;margin-bottom:10px;">次エントリーまで</div><div class="al al-r" style="text-align:left;font-size:11.5px;"><span>🔒</span><div><strong>損失後冷却中</strong><br><span style="font-size:10.5px;">感情的な損失挽回を防止します</span></div></div></div>
+      <div class="card cp"><div class="clbl" style="margin-bottom:9px;">API接続</div><div id="apiDiv"></div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<script>
+// ═══════════════════════════════════════
+// FX DISCIPLINE ENGINE v4 — JavaScript
+// ═══════════════════════════════════════
+
+// ── MODAL DATA ──
+const MODALS = {
+  score: {
+    title: "エントリースコアとは",
+    body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">100点満点で「今エントリーしていいか」を数値化したシステム。テクニカル・ファンダメンタル・市場環境・チャートパターンの4軸で採点します。<br><br><strong>75点未満は物理ロック</strong>。感情に負けてルールを破れない仕組みです。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">採点内訳 (v4)</div>
+    <div class="st-ex">
+      <div class="st-cell" style="background:var(--greenb);color:var(--green);">テクニカル<br><strong>40点</strong></div>
+      <div class="st-cell" style="background:var(--blueb);color:var(--blue);">ファンダ<br><strong>30点</strong></div>
+      <div class="st-cell" style="background:var(--yellowb);color:var(--yellow);">市場安定<br><strong>10点</strong></div>
+      <div class="st-cell" style="background:var(--orangeb);color:var(--orange);">パターン(v4)<br><strong>+ボーナス</strong></div>
+      <div class="st-cell" style="background:var(--greenb);color:var(--green);">RRレシオ<br><strong>10点</strong></div>
+    </div></div>
+    <div class="mo-sec"><div class="mo-sec-t">v4での変更点</div><div class="mo-txt">チャートパターン検出スコアが追加されました。ダブルボトム・ピンバーなどが検出されると最大+15ptのボーナスが加算されます。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">学習リンク</div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/technical-analysis" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📚</div>BabyPips — テクニカル分析入門</a><a class="mlink" href="https://zai.diamond.jp/list/fxkouza" target="_blank"><div class="mlink-ic" style="background:var(--yellowb);">🇯🇵</div>ZAI FX! — FX講座</a></div></div>`
+  },
+  chartPat: {
+    title: "チャートパターンスコア (v4 NEW)",
+    body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">v4で新たに追加されたスコア軸。相場の「形」を自動検出し、その信頼度に応じてスコアにボーナスを加算します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">検出パターンとボーナス点</div>
+    <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;color:var(--t2);">ダブルボトム/トップ</td><td class="fm" style="text-align:right;color:var(--green);">+8pt</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;color:var(--t2);">ブルフラッグ/ベアフラッグ</td><td class="fm" style="text-align:right;color:var(--green);">+6pt</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;color:var(--t2);">ピンバー</td><td class="fm" style="text-align:right;color:var(--green);">+5pt</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;color:var(--t2);">エンゴルフィングバー</td><td class="fm" style="text-align:right;color:var(--green);">+4pt</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;color:var(--t2);">トライアングル（形成中）</td><td class="fm" style="text-align:right;color:var(--yellow);">+4pt</td></tr>
+      <tr><td style="padding:5px 0;color:var(--t2);">ヘッドアンドショルダー</td><td class="fm" style="text-align:right;color:var(--red);">-8pt</td></tr>
+    </table></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/chart-patterns" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — チャートパターン完全ガイド</a></div>`
+  },
+  doubleBottom: {
+    title: "🔵 ダブルボトム",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">同じ安値水準を2回つけた後、「ネックライン」と呼ばれる高値を突破するパターン。<strong>下降トレンドの終わりと上昇転換</strong>を示す強いシグナルです。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> ネックラインを明確に上抜けた足の確定後<br>🔴 <strong>SL:</strong> 2つの底値の少し下（最安値の下）<br>🔵 <strong>TP:</strong> ネックラインから「底とネックラインの高さ分」上</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-g"><span>📍</span><span>H4で検出中。ネックライン <strong>1.0840</strong> 付近。現在値がネックライン近傍 → ブレイク確認待ち</span></div></div>
+    <div class="mo-sec"><div class="mo-sec-t">注意点</div><div class="mo-txt">ネックラインを一度割れてから再び上抜ける「フォルスブレイク」に注意。必ず<strong>ローソク足の確定後</strong>にエントリーします。</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/double-top-double-bottom" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ダブルトップ/ボトム</a><a class="mlink" href="https://www.investopedia.com/terms/d/doublebottom.asp" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📘</div>Investopedia — Double Bottom</a></div>`
+  },
+  headAndShoulders: {
+    title: "🔴 ヘッドアンドショルダー",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">左肩・頭・右肩の3つの山を形成する天井圏の反転パターン。「ネックライン」を割れると<strong>下落トレンドへの転換</strong>を示す最も信頼性の高いパターンの一つです。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー(売り):</strong> ネックライン割れ確定後<br>🔴 <strong>SL:</strong> 右肩の高値の上<br>🔵 <strong>TP:</strong> ネックラインから「頭とネックラインの高さ分」下</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-y"><span>👁</span><span>D1で形成中（52%）。<strong>現在は買い方向なので逆パターン注意</strong>。完成したら自動でSELL判定に切り替わります。</span></div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/head-and-shoulders" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ヘッドアンドショルダー</a></div>`
+  },
+  triangle: {
+    title: "📐 上昇トライアングル",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">水平の抵抗線と切り上がる安値を結ぶ三角形。エネルギーが蓄積されており、<strong>水平抵抗を上抜けると強い上昇</strong>になることが多いです。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> 水平抵抗線のブレイクアウト確定後<br>🔴 <strong>SL:</strong> 上昇トレンドラインの下<br>🔵 <strong>TP:</strong> トライアングルの高さ分を上に加算</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-y"><span>⏳</span><span>D1で形成中（62%）。<strong>ブレイク待ち</strong>。偽ブレイクに注意して、確定足を待ちます。</span></div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/triangles" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — トライアングルパターン</a></div>`
+  },
+  flagPattern: {
+    title: "🚩 ブルフラッグ",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">急騰（ポール）の後、緩やかに下落する平行チャンネル（フラッグ）が形成されるパターン。<strong>トレンド継続のシグナル</strong>で「押し目」として使います。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> フラッグの上限ラインをブレイクした確定足<br>🔴 <strong>SL:</strong> フラッグの下限ライン下<br>🔵 <strong>TP:</strong> ポール（急騰）の高さ分を上に加算</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/flag-patterns" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — フラッグ/ペナント</a></div>`
+  },
+  cupHandle: {
+    title: "☕ カップアンドハンドル",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">コーヒーカップのような丸い底（カップ）と小さな押し（ハンドル）が形成されるパターン。<strong>長期の上昇トレンド継続シグナル</strong>で、週足・月足でよく出現します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> ハンドルの上限をブレイクした確定足<br>🔴 <strong>SL:</strong> ハンドルの最安値下<br>🔵 <strong>TP:</strong> カップの深さ分を上に加算</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.investopedia.com/terms/c/cupandhandle.asp" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📘</div>Investopedia — Cup and Handle</a></div>`
+  },
+  wedge: {
+    title: "🔺 ライジングウェッジ",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">高値・安値ともに切り上がるが、上昇の勢いが衰えていくパターン。<strong>上昇トレンドの末期</strong>に出ることが多く、下落転換のシグナルになります。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー(売り):</strong> 下側のトレンドラインを割れた確定足<br>🔴 <strong>SL:</strong> ウェッジの最高値上<br>🔵 <strong>TP:</strong> ウェッジ開始点の水準</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-y"><span>👁</span><span>H4で形成中（44%）。<strong>現在は買い方向なのでこれが完成したら方向転換に注意</strong>。</span></div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/wedges" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ウェッジパターン</a></div>`
+  },
+  pinbar: {
+    title: "📌 ブリッシュピンバー",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">実体が小さく、長い下ヒゲを持つローソク足。「売り手が押し下げたが買い手が跳ね返した」ことを示します。<strong>サポートラインやフィボナッチ水準で出ると特に有効</strong>なBUYシグナルです。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> ピンバーの実体の高値を上抜けた次の足<br>🔴 <strong>SL:</strong> ピンバーの最安値（下ヒゲの先端）の下<br>🔵 <strong>TP:</strong> 直近高値、またはSLの1.5〜2倍の値幅</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-g pls"><span>📍</span><span>H4で直近足に検出中！<strong>1.0842付近のフィボ61.8%で出現</strong>。信頼度高い。</span></div></div>
+    <div class="mo-sec"><div class="mo-sec-t">注意点</div><div class="mo-txt">下ヒゲが実体の2倍以上あること。上ヒゲが短いこと。サポート・フィボナッチ水準で出ていること、の3つを確認。</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/pin-bars" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ピンバー</a><a class="mlink" href="https://zai.diamond.jp/articles/-/220" target="_blank"><div class="mlink-ic" style="background:var(--yellowb);">🇯🇵</div>ZAI FX! — ピンバーの使い方</a></div>`
+  },
+  engulf: {
+    title: "🟢 ブリッシュエンゴルフィング",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">前の足（陰線）を完全に包む大きな陽線。<strong>強い買い圧力の出現</strong>を示す2本足パターン。下降トレンドの末期や重要サポートで出ると特に有効です。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> 大陽線確定後、または翌足の始値<br>🔴 <strong>SL:</strong> 大陽線の始値（包んだ陰線の下）下<br>🔵 <strong>TP:</strong> 直近高値、またはRR 1:1.5以上</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/engulfing-candles" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — エンゴルフィング</a></div>`
+  },
+  morningstar: {
+    title: "⭐ 明けの明星",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">大陰線 → 小さな実体の足（明星）→ 大陽線の3本足パターン。<strong>底打ちを示す最も信頼性の高いローソク足パターン</strong>の一つで、下降トレンドの終わりに出現します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> 3本目の大陽線確定後<br>🔴 <strong>SL:</strong> 明星（中央の足）の最安値下<br>🔵 <strong>TP:</strong> 1本目の陰線の高値、またはRR 1:2</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.investopedia.com/terms/m/morningstar.asp" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📘</div>Investopedia — Morning Star</a></div>`
+  },
+  shootingStar: {
+    title: "⭐ シューティングスター",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">長い上ヒゲと小さな実体を持つローソク足。「買い手が押し上げたが売り手に跳ね返された」ことを示します。<strong>上昇トレンドの頂点付近でのSELLシグナル</strong>。ハンマー足の逆版です。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー(売り):</strong> シューティングスター実体の安値を割った次の足<br>🔴 <strong>SL:</strong> 上ヒゲの最高値の上<br>🔵 <strong>TP:</strong> 直近サポート、またはSLの1.5倍</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/shooting-star" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — シューティングスター</a></div>`
+  },
+  doji: {
+    title: "⚪ 十字線（ドージ）",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">始値と終値がほぼ同じで、上下にヒゲが出るローソク足。買い手と売り手が拮抗していることを示す<strong>「迷い」のサイン</strong>。単独では売買判断せず、前後のローソク足で判断します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">種類</div><div class="mo-txt">・<strong>四値同値ドージ</strong>: 完全に一直線（極めてまれ）<br>・<strong>グレイブストーンドージ</strong>: 上ヒゲのみ → 売り圧力<br>・<strong>ドラゴンフライドージ</strong>: 下ヒゲのみ → 買い圧力<br>・<strong>長腕ドージ</strong>: 上下に長いヒゲ → 迷い最大</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/doji" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ドージ</a></div>`
+  },
+  threeWhiteSoldiers: {
+    title: "🪖 赤三兵（白三兵）",
+    body: `<div class="mo-sec"><div class="mo-sec-t">このパターンの意味</div><div class="mo-txt">3本連続の大きな陽線。各足が前の足の実体内で始まり、高値を更新して引けるパターン。<strong>強烈な買い圧力の継続</strong>を示します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">エントリーの基本ルール</div><div class="mo-txt">✅ <strong>エントリー:</strong> 3本目確定後の翌足始値<br>🔴 <strong>SL:</strong> 1本目の陽線の始値下<br>📋 <strong>注意:</strong> 3本とも実体が大きく、ヒゲが短いことを確認</div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.investopedia.com/terms/t/three-white-soldiers.asp" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📘</div>Investopedia — Three White Soldiers</a></div>`
+  },
+  fibonacci: {
+    title: "📐 フィボナッチリトレースメント",
+    body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">イタリアの数学者フィボナッチが発見した数列（1,1,2,3,5,8,13,21...）から導かれる比率。相場の押し目・戻りの水準として<strong>世界中のトレーダーが使うため自己実現的に機能</strong>します。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">主要レベルの意味</div>
+    <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--purple);">23.6%</td><td style="color:var(--t2);">浅い押し目。トレンドが強いと跳ねる</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--purple);">38.2%</td><td style="color:var(--t2);">普通の押し目。よく機能する</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--purple);">61.8%</td><td style="color:var(--t2);"><strong>黄金比。最も信頼性が高い</strong></td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--purple);">78.6%</td><td style="color:var(--t2);">深い押し目。ここを割ると転換の可能性</td></tr>
+    </table></div>
+    <div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="al al-g"><span>💡</span><span>現在値 <strong>1.0842</strong> は61.8%水準 + ダブルボトム形成中。<strong>最高の押し目買いゾーン</strong></span></div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/fibonacci" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — フィボナッチ完全ガイド</a><a class="mlink" href="https://www.investopedia.com/terms/f/fibonacciretracement.asp" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📘</div>Investopedia — Fibonacci Retracement</a></div>`
+  },
+  elliott: {
+    title: "🌊 エリオット波動",
+    body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">ラルフ・ネルソン・エリオットが発見した相場のパターン。相場は<strong>5波動で上昇して3波動（ABC）で下落</strong>するサイクルを繰り返すという理論です。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">各波の特徴</div>
+    <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--green);">第①波</td><td style="color:var(--t2);">転換開始。まだ多くは気づかない</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--t3);">第②波</td><td style="color:var(--t2);">押し戻し。①の38-61.8%まで</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--green);">第③波 ★</td><td style="color:var(--t2);"><strong>最強・最長。①の1.618倍が目標</strong></td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--t3);">第④波</td><td style="color:var(--t2);">再押し。③の38-50%まで</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:5px 0;font-weight:600;color:var(--yellow);">第⑤波</td><td style="color:var(--t2);">最後の上昇。勢いは弱まる</td></tr>
+      <tr><td style="padding:5px 0;font-weight:600;color:var(--red);">ABC修正波</td><td style="color:var(--t2);">下落修正。A波がまず落ちる</td></tr>
+    </table></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/elliot-wave-theory" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — エリオット波動理論</a><a class="mlink" href="https://zai.diamond.jp/articles/-/97791" target="_blank"><div class="mlink-ic" style="background:var(--yellowb);">🇯🇵</div>ZAI FX! — エリオット波動講座</a></div>`
+  },
+  candleIntro: {
+    title: "🕯 ローソク足パターンとは",
+    body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">1〜3本のローソク足の形・組み合わせから相場の勢いや転換を読む手法。江戸時代の日本の米相場で発明され、現在は世界中で使われています。</div></div>
+    <div class="mo-sec"><div class="mo-sec-t">ローソク足の読み方</div>
+    <div style="display:flex;gap:12px;align-items:center;padding:10px;background:var(--surf2);border-radius:8px;margin-bottom:8px;">
+      <svg width="60" height="80" viewBox="0 0 60 80"><rect x="20" y="25" width="20" height="30" class="cu"/><line x1="30" y1="8" x2="30" y2="25" stroke="var(--green)" stroke-width="2"/><line x1="30" y1="55" x2="30" y2="72" stroke="var(--green)" stroke-width="2"/><text x="0" y="12" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:8px;">高値</text><text x="0" y="27" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;">終値</text><text x="0" y="57" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:8px;">始値</text><text x="0" y="76" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:8px;">安値</text></svg>
+      <div style="font-size:11.5px;color:var(--t2);line-height:1.8;"><strong>陽線</strong>（始値 < 終値）<br>→ 上昇を示す（緑・白）<br><br>実体 = 始値〜終値<br>ヒゲ = 高値・安値への往復</div>
+    </div></div>
+    <div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/japanese-candlesticks" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ローソク足完全ガイド</a><a class="mlink" href="https://zai.diamond.jp/articles/-/217" target="_blank"><div class="mlink-ic" style="background:var(--yellowb);">🇯🇵</div>ZAI FX! — ローソク足の見方</a></div>`
+  },
+  chartRead: {
+    title: "チャートの見方（v4）",
+    body: `<div class="mo-sec"><div class="mo-sec-t">v4チャートの線の意味</div>
+    <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:6px 0;"><span style="display:inline-block;width:20px;height:2px;background:var(--entry);vertical-align:middle;margin-right:6px;border-radius:1px;"></span><strong>緑 実線</strong></td><td style="color:var(--t2);">エントリーライン — ここで買う</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:6px 0;"><span style="display:inline-block;width:20px;height:2px;background:var(--sl);border-top:1px dashed var(--sl);vertical-align:middle;margin-right:6px;"></span><strong>赤 破線</strong></td><td style="color:var(--t2);">SL（損切ライン）— これを割ったら即決済</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:6px 0;"><span style="display:inline-block;width:20px;height:2px;background:var(--tp);vertical-align:middle;margin-right:6px;border-radius:1px;"></span><strong>青 破線</strong></td><td style="color:var(--t2);">TP（利確ライン）— 目標値</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:6px 0;"><span style="display:inline-block;width:20px;height:1px;background:var(--fib,rgba(155,114,224,0.6));vertical-align:middle;margin-right:6px;"></span><strong>紫 点線</strong></td><td style="color:var(--t2);">フィボナッチレベル — 押し目の目安</td></tr>
+      <tr style="border-bottom:1px solid var(--brd);"><td style="padding:6px 0;"><span style="color:var(--blue);">━</span><strong> 青 実線</strong></td><td style="color:var(--t2);">MA50（50本移動平均）</td></tr>
+      <tr><td style="padding:6px 0;"><span style="color:var(--yellow);">━</span><strong> 黄 実線</strong></td><td style="color:var(--t2);">MA200（200本移動平均）</td></tr>
+    </table></div>
+    <div class="mo-sec"><div class="mo-sec-t">RR比（リスクリワード）とは</div><div class="mo-txt">SLまでのリスクに対して、TPまでの利益が何倍かを示す比率。<strong>最低1:1.5以上</strong>がルールです。現在は1:1.3（指標前なのでTP到達前にTPを下げている）。</div></div>`
+  },
+  rsi: { title: "RSI（相対力指数）", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">0〜100の値を取り、相場の「買われすぎ・売られすぎ」を測る指標。70以上で買われすぎ（売りサイン候補）、30以下で売られすぎ（買いサイン候補）。</div></div><div class="mo-sec"><div class="mo-sec-t">現在値の解釈</div><div class="mo-txt"><strong>54.2</strong> → 中立ゾーン（30〜70）。買いでも売りでもない。トレンド相場では50以上を「上昇継続」として使います。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/relative-strength-index" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — RSI</a></div>` },
+  macd: { title: "MACD", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">移動平均線の差を視覚化した指標。<strong>MACDラインがシグナルラインを上抜け（ゴールデンクロス）</strong>したら買いサイン。ヒストグラムがゼロ以上で上昇中が理想。</div></div><div class="mo-sec"><div class="mo-sec-t">現在値の解釈</div><div class="mo-txt">+0.0021でシグナル上抜け中 → 強気シグナル。ヒストグラムが拡大中ならトレンド加速。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/macd" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — MACD</a></div>` },
+  ma: { title: "移動平均線（MA）", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">過去N本の終値の平均を結んだ線。MA50（青）が短期トレンド、MA200（黄）が長期トレンドを示します。<strong>MA50がMA200を上抜け = ゴールデンクロス（買いサイン）</strong>。</div></div><div class="mo-sec"><div class="mo-sec-t">パーフェクトオーダー</div><div class="mo-txt">MA20 > MA50 > MA200 の順に並んだ状態。強いトレンドの証拠。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/moving-averages" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — 移動平均線</a></div>` },
+  mtf: { title: "マルチタイムフレーム分析", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">上位足（週足W1・日足D1）と下位足（H4・H1）が同じ方向を向いているときにエントリーする手法。<strong>上位足が逆向きならエントリー禁止</strong>。</div></div><div class="mo-sec"><div class="mo-sec-t">現在の状況</div><div class="mo-txt">D1↑ · W1→（中立）。週足が上昇に転じたらスコアが+4点追加されます。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/multiple-time-frame-analysis" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — MTF分析</a></div>` },
+  bb: { title: "ボリンジャーバンド", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">移動平均線の上下に標準偏差の2倍の幅でバンドを描く指標。価格がバンド内に収まる確率は約95%。バンドの端（±2σ）は反転ポイントになりやすい。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/bollinger-bands" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ボリンジャーバンド</a></div>` },
+  atr: { title: "ATR（真の値幅平均）", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">相場の「ボラティリティ（値動きの大きさ）」を数値化した指標。SL（損切り）の幅を決める基準に使います。現在のATR 0.0048 = H4で約48pipsの動き。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/average-true-range" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ATR</a></div>` },
+  fundamental: { title: "ファンダメンタル分析", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">経済指標・金利差・中央銀行政策を基に通貨の強弱を判断する分析。金利が高い通貨に資金が流れるため<strong>金利差が最重要</strong>。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/fundamental-analysis" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — ファンダメンタル分析</a><a class="mlink" href="https://www.forexfactory.com" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📅</div>Forex Factory — 経済指標カレンダー</a></div>` },
+  stability: { title: "市場安定度", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">エントリー時の外部リスクを評価。経済指標直前(-10pt)・深夜取引(-5pt)・週明け(-3pt)などが減点されます。現在は<strong>CPI発表47分前</strong>のため-10pt。</div></div>` },
+  rr: { title: "RRレシオ（リスクリワード）", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">損切りのリスクに対して利確の利益が何倍かを示す比率。<strong>1:1.5以上が必須ルール</strong>。勝率50%でも1:1.5なら長期的にプラスになります。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/risk-reward-ratio" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — RRレシオ</a></div>` },
+  ai: { title: "AI予測（XGBoostモデル）", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">10年分の価格データで学習したXGBoost機械学習モデルの予測。<strong>参考情報として使い、過信は禁物</strong>。スコアの補助判断として使います。</div></div><div class="mo-links"><a class="mlink" href="https://www.babypips.com/learn/forex/algorithmic-trading" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📖</div>BabyPips — アルゴリズムトレード</a></div>` },
+  lot: { title: "ロット計算", body: `<div class="mo-sec"><div class="mo-sec-t">公式</div><div class="mo-txt">ロット = (口座残高 × リスク率%) ÷ (SL pips × pip値)<br><br>例: 50万円 × 1% ÷ (60pips × 1000円) = <strong>0.08 lot</strong></div></div><div class="mo-sec"><div class="mo-sec-t">なぜ1%なのか</div><div class="mo-txt">1%固定なら20連敗しても資金の82%が残る。2%なら67%。<strong>生き残りを最優先</strong>にした数値です。</div></div>` },
+  nlp: { title: "NLP感情分析", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">ニュース・SNSを機械学習で感情分析した指標。+1.0が強気（買い）、-1.0が弱気（売り）。現在+0.38はやや買い優勢。</div></div>` },
+  calendar: { title: "経済指標カレンダー", body: `<div class="mo-sec"><div class="mo-sec-t">重要度別ルール</div><div class="mo-txt">🔴 <strong>最高（赤）:</strong> 発表30分前〜30分後はエントリー禁止<br>🟡 <strong>中（黄）:</strong> 発表直前の新規エントリーは控える<br>⚪ <strong>低（白）:</strong> 特に制限なし</div></div><div class="mo-links"><a class="mlink" href="https://www.forexfactory.com" target="_blank"><div class="mlink-ic" style="background:var(--orangeb);">📅</div>Forex Factory — 経済指標カレンダー</a><a class="mlink" href="https://jp.investing.com/economic-calendar/" target="_blank"><div class="mlink-ic" style="background:var(--blueb);">📅</div>Investing.com — 経済指標</a></div>` },
+  scoreBand: { title: "スコア帯別勝率", body: `<div class="mo-sec"><div class="mo-sec-t">10年バックテスト実績</div><div class="mo-txt">60-70点: <strong class="cr">52%</strong>（期待値マイナス）<br>70-80点: <strong class="cy">61%</strong>（プラス）<br>80点↑: <strong class="cg">68%</strong>（安定して最強）<br><br>75点以上でエントリーを解禁するのはこのデータが根拠です。</div></div>` },
+  sparkline: { title: "スコア推移", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">過去24時間のスコア変化を表示。高いスコアが続いている時間帯は「相場が整っている時間」。今日のピーク84点（3時間前）はチャートパターン+NLP感情の組み合わせ。</div></div>` },
+  limits: { title: "本日の制限ルール", body: `<div class="mo-sec"><div class="mo-sec-t">なぜ制限するのか</div><div class="mo-txt">トレードの失敗原因の9割は「取りすぎ」「損失挽回」「疲れ」です。<br><br>・<strong>1日3回制限</strong>: 回数が増えると判断力低下<br>・<strong>損失2%上限</strong>: 感情的になる前に止める<br>・<strong>3連敗凍結</strong>: 連敗中は相場との相性が悪い</div></div>` },
+  envTest: { title: "相場環境別バックテスト", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">同じルールでも相場環境によって勝率が全く異なります。このシステムは<strong>トレンド相場で最大の力を発揮</strong>し、レンジ相場では期待値がマイナスになります。</div></div>` },
+  technical: { title: "テクニカル分析スコア", body: `<div class="mo-sec"><div class="mo-sec-t">概要</div><div class="mo-txt">MA・RSI・MACD・MTFの4指標の状態をスコア化。最大40点。すべてのシグナルが揃う「パーフェクトオーダー」状態で満点。</div></div>` }
+};
+
+function openModal(key) {
+  const m = MODALS[key];
+  if (!m) return;
+  document.getElementById('mo-title').textContent = m.title;
+  document.getElementById('mo-body').innerHTML = m.body;
+  document.getElementById('modal').classList.add('open');
+}
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function openLegend() {
+  document.getElementById('mo-title').textContent = '🎨 色の凡例';
+  document.getElementById('mo-body').innerHTML = `<div class="st-ex" style="grid-template-columns:1fr 1fr;gap:7px;">
+    <div class="st-cell" style="background:var(--greenb);color:var(--green);padding:10px;">🟢 <strong>緑</strong><br>上昇優位・良好<br><span style="font-size:9px;">買いシグナル強い状態</span></div>
+    <div class="st-cell" style="background:var(--yellowb);color:var(--yellow);padding:10px;">🟡 <strong>黄</strong><br>注意ゾーン<br><span style="font-size:9px;">条件は揃ってきたが未確定</span></div>
+    <div class="st-cell" style="background:var(--redb);color:var(--red);padding:10px;">🔴 <strong>赤</strong><br>下降優位・危険<br><span style="font-size:9px;">売りサインまたは禁止</span></div>
+    <div class="st-cell" style="background:var(--blueb);color:var(--blue);padding:10px;">🔵 <strong>青</strong><br>AI・参考情報<br><span style="font-size:9px;">補助データ・TPライン</span></div>
+    <div class="st-cell" style="background:var(--purpleb);color:var(--purple);padding:10px;">🟣 <strong>紫</strong><br>フィボナッチ<br><span style="font-size:9px;">押し目・戻り目の水準</span></div>
+    <div class="st-cell" style="background:var(--surf2);color:var(--t2);padding:10px;">⚪ <strong>グレー</strong><br>中立<br><span style="font-size:9px;">どちらとも言えない状態</span></div>
+  </div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+// ── PAGES ──
+function goPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.si').forEach(s => s.classList.remove('on'));
+  document.getElementById('page-' + id).classList.add('on');
+  document.querySelector(`.si[data-p="${id}"]`).classList.add('on');
+}
+
+// ── THEME ──
+function toggleTheme() {
+  const h = document.documentElement;
+  const dark = h.dataset.theme === 'dark';
+  h.dataset.theme = dark ? 'light' : 'dark';
+  document.getElementById('tmbtn').textContent = dark ? '🌙' : '☀️';
+  setTimeout(redrawCharts, 50);
+}
+
+// ── MODE ──
+function toggleMode() {
+  const h = document.documentElement;
+  const isPro = h.dataset.mode === 'pro';
+  h.dataset.mode = isPro ? 'beginner' : 'pro';
+  document.getElementById('mdot').style.background = isPro ? 'var(--green)' : 'var(--blue)';
+  document.getElementById('mlbl').textContent = isPro ? '初心者モード' : 'プロモード';
+}
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  const t = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Tokyo' });
+  const el = document.getElementById('clock');
+  if (el) el.textContent = t + ' JST';
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── COUNTDOWN TIMER ──
+let timerSec = 2820;
+let cdSec = 754;
+function updateTimers() {
+  if (timerSec > 0) timerSec--;
+  if (cdSec > 0) cdSec--;
+  const m1 = String(Math.floor(timerSec / 60)).padStart(2, '0');
+  const s1 = String(timerSec % 60).padStart(2, '0');
+  const el1 = document.getElementById('cmdTimer');
+  if (el1) el1.textContent = m1 + ':' + s1;
+  const m2 = String(Math.floor(cdSec / 60)).padStart(2, '0');
+  const s2 = String(cdSec % 60).padStart(2, '0');
+  const el2 = document.getElementById('cd');
+  if (el2) el2.textContent = m2 + ':' + s2;
+}
+setInterval(updateTimers, 1000);
+
+// ── TICKER ──
+const ticks = [
+  { p: 'EUR/USD', v: '1.0842', d: '+0.12%', up: true },
+  { p: 'USD/JPY', v: '149.82', d: '-0.08%', up: false },
+  { p: 'GBP/USD', v: '1.2634', d: '+0.07%', up: true },
+  { p: 'AUD/USD', v: '0.6521', d: '-0.15%', up: false },
+  { p: 'USD/CHF', v: '0.8842', d: '+0.03%', up: true },
+  { p: 'EUR/JPY', v: '162.34', d: '+0.22%', up: true },
+  { p: 'GBP/JPY', v: '189.21', d: '+0.18%', up: true },
+  { p: 'NZD/USD', v: '0.5998', d: '-0.11%', up: false },
+  { p: 'EUR/GBP', v: '0.8582', d: '+0.03%', up: true },
+  { p: 'USD/CAD', v: '1.3542', d: '-0.05%', up: false },
+];
+function buildTicker() {
+  const d = ticks.map(t => `<div class="tk-i"><span class="p">${t.p}</span><span class="${t.up ? 'up' : 'dn'}">${t.v}</span><span class="${t.up ? 'up' : 'dn'}">${t.d}</span></div>`).join('');
+  const el = document.getElementById('tkTrack');
+  if (el) el.innerHTML = d + d;
+}
+buildTicker();
+
+// ── SPARKLINE ──
+function buildSpark() {
+  const vals = [42, 48, 55, 60, 72, 84, 78, 65, 62, 70, 72, 74];
+  const max = Math.max(...vals);
+  const el = document.getElementById('spark');
+  if (!el) return;
+  el.innerHTML = vals.map((v, i) => {
+    const h = Math.round((v / max) * 32);
+    const cur = i === vals.length - 1;
+    const col = v >= 75 ? 'var(--green)' : v >= 60 ? 'var(--yellow)' : 'var(--red)';
+    return `<div class="spk" style="height:${h}px;background:${col};opacity:${cur ? 1 : 0.55};flex:1;"></div>`;
+  }).join('');
+}
+buildSpark();
+
+// ── ENTRY HANDLER ──
+function handleEntry() {
+  const score = parseInt(document.getElementById('cmdScore').textContent);
+  if (score < 75) {
+    const btn = document.querySelector('.shk-target');
+    if (btn) { btn.classList.add('shk'); setTimeout(() => btn.classList.remove('shk'), 400); }
+    return;
+  }
+  alert('エントリー注文を送信しました。ルール通りに執行します。');
+}
+
+// ── PAIR SELECT ──
+const pairData = {
+  EURUSD: { score: 72, dir: 'BUY', ai: 63, col: 'var(--yellow)' },
+  USDJPY: { score: 81, dir: 'BUY', ai: 71, col: 'var(--green)' },
+  GBPUSD: { score: 58, dir: 'WAIT', ai: 44, col: 'var(--red)' },
+  AUDUSD: { score: 67, dir: 'WAIT', ai: 55, col: 'var(--yellow)' }
+};
+function updatePair() {
+  const p = document.getElementById('pairSel').value;
+  const d = pairData[p] || pairData.EURUSD;
+  const n = document.getElementById('rnum');
+  const s = document.getElementById('cmdScore');
+  const r = document.getElementById('ringPath');
+  if (n) n.textContent = d.score;
+  if (s) s.textContent = d.score;
+  if (r) { const off = Math.round(251 * (1 - d.score / 100)); r.style.strokeDashoffset = off; r.style.stroke = d.col; }
+}
+
+// ── HEATMAP ──
+function buildHeatmap() {
+  const pairs = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD'];
+  const tfs = ['M15', 'H1', 'H4', 'D1'];
+  const data = [
+    [32, 48, 65, 72], [28, 42, 58, 61], [45, 62, 81, 74], [21, 38, 52, 58]
+  ];
+  const t = document.getElementById('heatTbl');
+  if (!t) return;
+  let html = '<tr><td style="padding:3px 5px;font-family:\'DM Mono\',monospace;font-size:9px;color:var(--t3);"></td>';
+  tfs.forEach(tf => { html += `<td style="padding:3px 5px;font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);text-align:center;">${tf}</td>`; });
+  html += '</tr>';
+  pairs.forEach((p, i) => {
+    html += `<tr><td style="padding:3px 5px;font-family:'DM Mono',monospace;font-size:9px;color:var(--t2);white-space:nowrap;">${p}</td>`;
+    data[i].forEach(v => {
+      const bg = v >= 75 ? 'var(--greenb)' : v >= 60 ? 'var(--yellowb)' : 'var(--redb)';
+      const col = v >= 75 ? 'var(--green)' : v >= 60 ? 'var(--yellow)' : 'var(--red)';
+      html += `<td class="hmc" style="background:${bg};color:${col};"><div class="hmv">${v}</div></td>`;
+    });
+    html += '</tr>';
+  });
+  t.innerHTML = html;
+}
+buildHeatmap();
+
+// ── PAIRS GRID ──
+const allPairs = [
+  { pair: 'EUR/USD', score: 72, dir: 'BUY', ai: 63, col: 'var(--yellow)', pat: 'ダブルボトム', patCol: 'var(--green)' },
+  { pair: 'USD/JPY', score: 81, dir: 'BUY', ai: 71, col: 'var(--green)', pat: 'ブルフラッグ', patCol: 'var(--green)' },
+  { pair: 'GBP/USD', score: 58, dir: 'WAIT', ai: 44, col: 'var(--red)', pat: 'H&S形成中', patCol: 'var(--red)' },
+  { pair: 'AUD/USD', score: 67, dir: 'WAIT', ai: 55, col: 'var(--yellow)', pat: 'トライアングル', patCol: 'var(--yellow)' },
+  { pair: 'USD/CHF', score: 44, dir: 'AVOID', ai: 38, col: 'var(--red)', pat: 'なし', patCol: 'var(--t3)' },
+  { pair: 'EUR/JPY', score: 79, dir: 'BUY', ai: 68, col: 'var(--green)', pat: 'ピンバー', patCol: 'var(--green)' },
+  { pair: 'GBP/JPY', score: 71, dir: 'WAIT', ai: 57, col: 'var(--yellow)', pat: 'エンゴルフィング', patCol: 'var(--green)' },
+  { pair: 'NZD/USD', score: 38, dir: 'AVOID', ai: 29, col: 'var(--red)', pat: '下落継続', patCol: 'var(--red)' }
+];
+function buildPairGrid() {
+  const g = document.getElementById('pairGrid');
+  if (!g) return;
+  g.innerHTML = allPairs.map(p => {
+    const c = p.score >= 75 ? 'var(--greenb)' : p.score >= 60 ? 'var(--yellowb)' : 'var(--redb)';
+    return `<div class="card cp" style="border-color:${p.col};">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span class="fm" style="font-size:14px;font-weight:500;">${p.pair}</span>
+        <span class="bdg ${p.dir === 'BUY' ? 'bg' : p.dir === 'AVOID' ? 'br' : 'by'}">${p.dir}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div style="font-family:'DM Mono',monospace;font-size:26px;font-weight:500;color:${p.col};">${p.score}</div>
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);">AI予測</div>
+          <div style="font-family:'DM Mono',monospace;font-size:14px;font-weight:500;">${p.ai}%</div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-family:'DM Mono',monospace;font-size:8.5px;color:var(--t3);margin-bottom:2px;">パターン(v4)</div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;font-weight:500;color:${p.patCol};">${p.pat}</div>
+        </div>
+      </div>
+      <div class="pb6"><div class="pb6f" style="width:${p.score}%;background:${p.col};"></div></div>
+    </div>`;
+  }).join('');
+}
+buildPairGrid();
+
+// ── HISTORY CHARTS ──
+let eqChart;
+function buildHistory() {
+  const timeb = document.getElementById('timebar');
+  if (timeb) {
+    const times = [{ l: '東京', w: 54 }, { l: 'ロンドン', w: 67 }, { l: 'NY', w: 71 }, { l: 'NY深夜', w: 38 }];
+    timeb.innerHTML = times.map(t => `<div class="psb"><div class="psb-top"><div class="psb-l">${t.l}</div><div class="psb-v ${t.w >= 60 ? 'cg' : t.w >= 50 ? 'cy' : 'cr'}">${t.w}%</div></div><div class="pb6"><div class="pb6f" style="width:${t.w}%;background:${t.w >= 60 ? 'var(--green)' : t.w >= 50 ? 'var(--yellow)' : 'var(--red)'};"></div></div></div>`).join('');
+  }
+  const lossb = document.getElementById('lossbar');
+  if (lossb) {
+    const losses = [{ l: '連敗0', w: 62 }, { l: '連敗1', w: 55 }, { l: '連敗2', w: 46 }, { l: '連敗3↑', w: 31 }];
+    lossb.innerHTML = losses.map(t => `<div class="psb"><div class="psb-top"><div class="psb-l">${t.l}</div><div class="psb-v ${t.w >= 55 ? 'cg' : t.w >= 45 ? 'cy' : 'cr'}">${t.w}%</div></div><div class="pb6"><div class="pb6f" style="width:${t.w}%;background:${t.w >= 55 ? 'var(--green)' : t.w >= 45 ? 'var(--yellow)' : 'var(--red)'};"></div></div></div>`).join('');
+  }
+  const scorea = document.getElementById('scoreaBar');
+  if (scorea) {
+    const bands = [{ l: '60-70点', w: 52, v: '-¥1,200' }, { l: '70-75点', w: 61, v: '+¥1,800' }, { l: '75-80点', w: 64, v: '+¥2,600' }, { l: '80点↑', w: 68, v: '+¥3,120' }];
+    scorea.innerHTML = bands.map(t => `<div class="psb"><div class="psb-top"><div class="psb-l">${t.l}</div><div class="psb-v ${parseFloat(t.v) > 0 ? 'cg' : 'cr'}">${t.v}</div></div><div class="pb6"><div class="pb6f" style="width:${t.w}%;background:${t.w >= 65 ? 'var(--green)' : t.w >= 58 ? 'var(--yellow)' : 'var(--red)'};"></div></div></div>`).join('');
+  }
+  const elog = document.getElementById('elogDiv');
+  if (elog) {
+    const logs = [
+      { t: '14:32', s: 'EUR/USD BUY +¥3,200', r: 'MAクロス + ダブルボトム確認', good: true },
+      { t: '11:15', s: 'USD/JPY BUY -¥1,800', r: 'ピンバー + スコア76点', good: false },
+      { t: '08:40', s: 'EUR/USD BUY +¥4,100', r: '全指標一致 + フラッグブレイク', good: true }
+    ];
+    elog.innerHTML = logs.map(l => `<div class="loge ${l.good ? '' : 'bad'}"><div class="loge-t">${l.t}</div><div class="loge-s">${l.s}</div><div style="font-size:9.5px;color:var(--t3);">${l.r}</div></div>`).join('');
+  }
+  const tt = document.getElementById('tradeTbl');
+  if (tt) {
+    const trades = [
+      { p: 'EUR/USD', d: 'BUY', res: '+¥3,200', sc: 82, pat: 'ダブルボトム', g: true },
+      { p: 'USD/JPY', d: 'BUY', res: '-¥1,800', sc: 76, pat: 'ピンバー', g: false },
+      { p: 'EUR/USD', d: 'BUY', res: '+¥4,100', sc: 88, pat: 'フラッグ', g: true },
+      { p: 'GBP/USD', d: 'BUY', res: '+¥2,600', sc: 79, pat: '明けの明星', g: true },
+    ];
+    tt.innerHTML = `<tr style="font-family:'DM Mono',monospace;font-size:8.5px;color:var(--t3);"><td style="padding:4px 0;">ペア</td><td>結果</td><td>スコア</td><td>パターン</td></tr>` +
+      trades.map(t => `<tr style="border-top:1px solid var(--brd);font-family:'DM Mono',monospace;font-size:10px;">
+        <td style="padding:6px 0;">${t.p}</td>
+        <td class="${t.g ? 'cg' : 'cr'}" style="font-weight:500;">${t.res}</td>
+        <td>${t.sc}</td>
+        <td style="font-size:9px;color:var(--t3);">${t.pat}</td>
+      </tr>`).join('');
+  }
+}
+buildHistory();
+
+// ── SETTINGS ──
+function buildSettings() {
+  const presets = [
+    { name: '保守型', rr: '1:2.0', risk: '0.5%', score: '80点', on: false },
+    { name: '標準型', rr: '1:1.5', risk: '1.0%', score: '75点', on: true },
+    { name: '積極型', rr: '1:1.3', risk: '1.5%', score: '70点', on: false }
+  ];
+  const pd = document.getElementById('presetDiv');
+  if (pd) pd.innerHTML = presets.map((p, i) => `<div class="prs ${p.on ? 'on' : ''}" onclick="selectPreset(${i})"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;"><strong style="font-size:12px;">${p.name}</strong>${p.on ? '<span class="bdg bg" style="font-size:8px;">使用中</span>' : ''}</div><div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--t3);">RR ${p.rr} · リスク${p.risk} · ${p.score}以上</div></div>`).join('');
+
+  const risks = [
+    { l: '1トレード最大損失', v: '1.0%', col: 'var(--green)' },
+    { l: '1日最大損失', v: '2.0%', col: 'var(--yellow)' },
+    { l: '週最大損失', v: '5.0%', col: 'var(--yellow)' },
+    { l: '月最大ドローダウン', v: '10.0%', col: 'var(--red)' }
+  ];
+  const rd = document.getElementById('riskDiv');
+  if (rd) rd.innerHTML = risks.map(r => `<div class="ri"><div class="rdot" style="background:${r.col};"></div><div style="flex:1;font-size:11.5px;">${r.l}</div><div class="fm" style="font-size:13px;font-weight:500;">${r.v}</div></div>`).join('');
+
+  const locks = [
+    { l: 'スコア75点未満ロック', on: true },
+    { l: '指標30分前ロック', on: true },
+    { l: '3連敗後ロック', on: true },
+    { l: 'スプレッド2.5p超ロック', on: false }
+  ];
+  const ld = document.getElementById('lockDiv');
+  if (ld) ld.innerHTML = locks.map(l => `<div class="ri"><div class="rdot" style="background:${l.on ? 'var(--red)' : 'var(--surf3)'};"></div><div style="flex:1;font-size:11.5px;">${l.l}</div><button class="sw ${l.on ? 'on' : ''}" onclick="this.classList.toggle('on')"></button></div>`).join('');
+
+  const feats = [
+    { l: 'チャートパターン検出 (v4)', on: true, new: true },
+    { l: 'フィボナッチ自動表示 (v4)', on: true, new: true },
+    { l: 'AI予測表示', on: true },
+    { l: 'NLP感情分析', on: true },
+    { l: 'マルチペア監視', on: true },
+    { l: 'プッシュ通知', on: false }
+  ];
+  const fd = document.getElementById('featDiv');
+  if (fd) fd.innerHTML = feats.map(f => `<div class="ri"><div style="flex:1;font-size:11.5px;">${f.l}${f.new ? ' <span class="bdg bo" style="font-size:7.5px;">NEW</span>' : ''}</div><button class="sw ${f.on ? 'on' : ''}" onclick="this.classList.toggle('on')"></button></div>`).join('');
+
+  const apis = [
+    { l: 'OANDA API', s: '接続中', g: true },
+    { l: 'NewsAPI (NLP)', s: '接続中', g: true },
+    { l: 'Economic Calendar', s: '接続中', g: true },
+    { l: 'AI Model Server', s: '接続中', g: true }
+  ];
+  const ad = document.getElementById('apiDiv');
+  if (ad) ad.innerHTML = apis.map(a => `<div class="ri"><div class="rdot pls" style="background:${a.g ? 'var(--green)' : 'var(--red)'};"></div><div style="flex:1;font-size:11.5px;">${a.l}</div><span class="fm" style="font-size:10px;color:${a.g ? 'var(--green)' : 'var(--red);'};">${a.s}</span></div>`).join('');
+}
+buildSettings();
+function selectPreset(i) {
+  document.querySelectorAll('.prs').forEach((el, j) => { el.classList.toggle('on', j === i); });
+}
+
+// ── EQUITY CHART ──
+let eqChartInst;
+function buildEqChart() {
+  const c = document.getElementById('eqChart');
+  if (!c) return;
+  const labels = ['3/1','3/3','3/5','3/7','3/9','3/11','3/13','3/15','3/17','3/19','3/21','3/23','3/25'];
+  const data = [500000, 508000, 514000, 510000, 522000, 530000, 526000, 538000, 545000, 541000, 553000, 562000, 570000];
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const gc = c.getContext('2d');
+  const grad = gc.createLinearGradient(0, 0, 0, 140);
+  grad.addColorStop(0, isDark ? 'rgba(46,201,106,0.25)' : 'rgba(26,107,60,0.15)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  if (eqChartInst) eqChartInst.destroy();
+  eqChartInst = new Chart(c, {
+    type: 'line',
+    data: { labels, datasets: [{ data, borderColor: isDark ? '#2EC96A' : '#1A6B3C', borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: grad, tension: 0.4 }] },
+    options: { responsive: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '¥' + ctx.raw.toLocaleString() } } }, scales: { x: { ticks: { font: { family: 'DM Mono', size: 9 }, color: isDark ? '#4A4640' : '#9C9890' }, grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' } }, y: { ticks: { font: { family: 'DM Mono', size: 9 }, color: isDark ? '#4A4640' : '#9C9890', callback: v => '¥' + (v / 1000) + 'K' }, grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' } } } }
+  });
+}
+function redrawCharts() { buildEqChart(); buildSpark(); buildHeatmap(); }
+buildEqChart();
+</script>
+</body>
+</html>

@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Discipline Engine — AI要約 & SaaS設計</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#080A0F;--bg2:#060709;
+  --surf:#0E1018;--surf2:#141620;--surf3:#1C1F2E;
+  --brd:rgba(120,140,255,0.08);--brd2:rgba(120,140,255,0.18);
+  --t1:#E8ECF5;--t2:#6B7494;--t3:#3A3F58;
+  --green:#00E090;--greenb:rgba(0,224,144,0.1);
+  --yellow:#FFD060;--yellowb:rgba(255,208,96,0.1);
+  --red:#FF5F5F;--redb:rgba(255,95,95,0.1);
+  --blue:#4D9FFF;--blueb:rgba(77,159,255,0.1);
+  --purple:#B07EFF;--purpleb:rgba(176,126,255,0.1);
+  --cyan:#00D4FF;--cyanb:rgba(0,212,255,0.08);
+  --gold:#FFB830;--goldb:rgba(255,184,48,0.1);
+  --sh0:0 2px 8px rgba(0,0,0,0.5);
+  --sh1:0 4px 24px rgba(0,0,0,0.6);
+  --sh2:0 12px 60px rgba(0,0,0,0.8);
+  --glow:0 0 30px rgba(0,212,255,0.15);
+  --overlay:rgba(6,7,9,0.92);
+}
+[data-theme="light"]{
+  --bg:#F0F2F8;--surf:#FFFFFF;--surf2:#F4F6FC;--surf3:#EAECF5;
+  --brd:rgba(60,80,180,0.1);--brd2:rgba(60,80,180,0.2);
+  --t1:#0A0C18;--t2:#4A5070;--t3:#9AA0C0;
+  --green:#007A50;--greenb:rgba(0,122,80,0.08);
+  --yellow:#8A6200;--yellowb:rgba(138,98,0,0.08);
+  --red:#A02020;--redb:rgba(160,32,32,0.08);
+  --blue:#1A5FB0;--blueb:rgba(26,95,176,0.08);
+  --purple:#5A30A0;--purpleb:rgba(90,48,160,0.08);
+  --cyan:#007090;--cyanb:rgba(0,112,144,0.06);
+  --gold:#8A5000;--goldb:rgba(138,80,0,0.08);
+  --sh0:0 1px 4px rgba(0,0,0,0.08);--sh1:0 4px 16px rgba(0,0,0,0.1);
+  --glow:none;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;overflow-x:hidden;}
+.fm{font-family:'DM Mono',monospace;}
+.fg{font-family:'Cormorant Garamond',serif;}
+
+/* NOISE TEXTURE */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;opacity:.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");z-index:1000;}
+
+.wrap{max-width:1340px;margin:0 auto;padding:0 24px 80px;position:relative;z-index:1;}
+
+/* PAGE TABS */
+.page-nav{display:flex;gap:2px;background:var(--surf2);padding:4px;border-radius:10px;width:fit-content;margin:0 auto 32px;}
+.pnav{padding:7px 18px;border-radius:7px;border:none;background:transparent;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;color:var(--t3);transition:all .2s;}
+.pnav.on{background:var(--surf);color:var(--t1);box-shadow:var(--sh0);}
+
+/* CARDS */
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:14px;box-shadow:var(--sh0);}
+.cp{padding:18px 20px;}
+.clbl{font-family:'DM Mono',monospace;font-size:8.5px;font-weight:500;letter-spacing:.2em;text-transform:uppercase;color:var(--t3);}
+.dv{height:1px;background:var(--brd);margin:12px 0;}
+
+/* TOPBAR */
+.topbar{padding:20px 0 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--brd);margin-bottom:24px;}
+.t-logo{display:flex;align-items:center;gap:10px;}
+.t-orb{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--cyan),var(--purple));display:flex;align-items:center;justify-content:center;font-size:16px;}
+.t-name{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;letter-spacing:.02em;}
+.t-ver{font-family:'DM Mono',monospace;font-size:8px;background:var(--cyanb);color:var(--cyan);border:1px solid rgba(0,212,255,.2);padding:2px 7px;border-radius:4px;letter-spacing:.12em;}
+
+/* BADGES */
+.bdg{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:5px;font-family:'DM Mono',monospace;font-size:9px;font-weight:500;text-transform:uppercase;white-space:nowrap;}
+.bg{background:var(--greenb);color:var(--green);border:1px solid rgba(0,224,144,.15);}
+.by{background:var(--yellowb);color:var(--yellow);border:1px solid rgba(255,208,96,.15);}
+.br{background:var(--redb);color:var(--red);border:1px solid rgba(255,95,95,.15);}
+.bb{background:var(--blueb);color:var(--blue);border:1px solid rgba(77,159,255,.15);}
+.bp{background:var(--purpleb);color:var(--purple);border:1px solid rgba(176,126,255,.15);}
+.bc{background:var(--cyanb);color:var(--cyan);border:1px solid rgba(0,212,255,.15);}
+.bgd{background:var(--goldb);color:var(--gold);border:1px solid rgba(255,184,48,.15);}
+.bn{background:var(--surf2);color:var(--t2);border:1px solid var(--brd);}
+
+/* BUTTONS */
+.btn{background:var(--surf2);border:1px solid var(--brd);color:var(--t2);padding:7px 14px;border-radius:8px;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all .18s;letter-spacing:.04em;}
+.btn:hover{border-color:var(--brd2);color:var(--t1);}
+.btn-c{background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-weight:500;}
+.btn-c:hover{filter:brightness(1.1);}
+.btn-p{background:var(--purple);border-color:var(--purple);color:#fff;font-weight:500;}
+
+/* SELECT */
+select{background:var(--surf2);border:1px solid var(--brd);color:var(--t1);padding:6px 10px;border-radius:8px;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;outline:none;}
+
+/* COLORS */
+.cg{color:var(--green);}.cy{color:var(--yellow);}.cr{color:var(--red);}.cb{color:var(--blue);}.cp2{color:var(--purple);}.cc{color:var(--cyan);}.cgo{color:var(--gold);}
+
+/* GLOW ACCENT */
+.glow-g{box-shadow:0 0 20px rgba(0,224,144,.12);}
+.glow-c{box-shadow:0 0 20px rgba(0,212,255,.12);}
+.glow-p{box-shadow:0 0 20px rgba(176,126,255,.12);}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes typeIn{from{width:0}to{width:100%}}
+@keyframes shimmer{0%{background-position:-200%}100%{background-position:200%}}
+.fu{animation:fadeUp .4s ease both;}
+.pls{animation:pulse 2s ease-in-out infinite;}
+
+/* TYPING CURSOR */
+.typing-cursor::after{content:'▌';animation:blink 1s step-end infinite;color:var(--cyan);}
+
+/* PROGRESS */
+.pb{height:4px;background:var(--surf3);border-radius:2px;overflow:hidden;}
+.pbf{height:100%;border-radius:2px;}
+.pb6{height:6px;background:var(--surf3);border-radius:3px;overflow:hidden;}
+.pb6f{height:100%;border-radius:3px;}
+
+/* SCENARIO BLOCKS */
+.sc-block{border-radius:10px;padding:14px 16px;margin-bottom:8px;border:1px solid var(--brd);}
+.sc-bull{background:var(--greenb);border-color:rgba(0,224,144,.2);}
+.sc-range{background:var(--yellowb);border-color:rgba(255,208,96,.2);}
+.sc-bear{background:var(--redb);border-color:rgba(255,95,95,.2);}
+.sc-title{font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px;}
+.sc-row{display:flex;gap:10px;flex-wrap:wrap;font-family:'DM Mono',monospace;font-size:10.5px;color:var(--t2);}
+.sc-kv{display:flex;flex-direction:column;gap:2px;}
+.sc-k{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);}
+.sc-v{font-size:12px;font-weight:500;color:var(--t1);}
+
+/* PLAN CARD */
+.plan-card{border-radius:14px;border:1px solid var(--brd);padding:24px;position:relative;overflow:hidden;transition:all .25s;cursor:pointer;}
+.plan-card:hover{transform:translateY(-3px);box-shadow:var(--sh1);}
+.plan-card.featured{border-color:rgba(0,212,255,.35);box-shadow:var(--glow);}
+.plan-card.featured::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,212,255,.04),rgba(176,126,255,.04));pointer-events:none;}
+.plan-badge{position:absolute;top:-1px;right:16px;background:var(--cyan);color:var(--bg);font-family:'DM Mono',monospace;font-size:8px;font-weight:500;letter-spacing:.1em;padding:3px 10px;border-radius:0 0 6px 6px;text-transform:uppercase;}
+.plan-price{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:600;line-height:1;}
+.plan-per{font-family:'DM Mono',monospace;font-size:10px;color:var(--t2);}
+.plan-feat{display:flex;flex-direction:column;gap:6px;margin:14px 0;}
+.pf-row{display:flex;align-items:center;gap:7px;font-size:12px;}
+.pf-check{font-size:11px;}
+.pf-x{font-size:11px;opacity:.3;}
+
+/* COMPARE TABLE */
+.cmp-tbl{width:100%;border-collapse:collapse;font-family:'DM Mono',monospace;font-size:10.5px;}
+.cmp-tbl th{padding:8px 12px;color:var(--t3);font-size:9px;letter-spacing:.1em;text-align:center;border-bottom:1px solid var(--brd);font-weight:500;}
+.cmp-tbl th:first-child{text-align:left;}
+.cmp-tbl td{padding:8px 12px;border-bottom:1px solid var(--brd);text-align:center;vertical-align:middle;}
+.cmp-tbl td:first-child{text-align:left;color:var(--t2);}
+.cmp-tbl tr:hover td{background:var(--surf2);}
+
+/* REVENUE CHART */
+.rev-bar-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.rev-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--t2);min-width:80px;}
+.rev-bar-wrap{flex:1;}
+.rev-bar{height:18px;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-family:'DM Mono',monospace;font-size:10px;font-weight:500;transition:width .8s ease;}
+.rev-val{font-family:'DM Mono',monospace;font-size:10.5px;min-width:90px;text-align:right;}
+
+/* AI CHAT BLOCK */
+.ai-msg{background:var(--surf2);border:1px solid var(--brd);border-radius:10px;padding:14px 16px;position:relative;}
+.ai-msg::before{content:'🤖';position:absolute;top:-9px;left:14px;font-size:14px;background:var(--surf);padding:0 3px;}
+.ai-msg-text{font-size:13px;line-height:1.85;color:var(--t1);}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.plans-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+
+/* MODAL */
+.mo{position:fixed;inset:0;background:var(--overlay);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;padding:16px;}
+.mo.open{opacity:1;pointer-events:all;}
+.mo-box{background:var(--surf);border:1px solid var(--brd2);border-radius:16px;box-shadow:var(--sh2);width:100%;max-width:600px;max-height:90vh;overflow-y:auto;transform:translateY(10px) scale(.98);transition:transform .25s;}
+.mo.open .mo-box{transform:translateY(0) scale(1);}
+.mo-head{padding:18px 20px 0;display:flex;align-items:flex-start;justify-content:space-between;}
+.mo-body{padding:12px 20px 22px;}
+.mo-close{width:28px;height:28px;border-radius:7px;background:var(--surf2);border:none;color:var(--t2);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+
+/* PAGES */
+.page{display:none;}
+.page.active{display:block;}
+
+/* TM BTN */
+.tm-btn{position:fixed;bottom:16px;left:16px;width:36px;height:36px;border-radius:50%;background:var(--surf);border:1px solid var(--brd2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;z-index:100;box-shadow:var(--sh0);}
+
+/* DIFF TABLE */
+.diff-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd);}
+.diff-row:last-child{border-bottom:none;}
+.diff-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+
+@media(max-width:900px){.plans-grid,.g4{grid-template-columns:1fr 1fr;}.g3{grid-template-columns:1fr;}}
+@media(max-width:600px){.plans-grid,.g2{grid-template-columns:1fr;}}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<button class="tm-btn" onclick="toggleTheme()">☀️</button>
+
+<!-- MODAL: プロンプト詳細 -->
+<div class="mo" id="promptModal" onclick="if(event.target===this)closeModal()">
+  <div class="mo-box">
+    <div class="mo-head">
+      <div>
+        <div class="clbl" style="margin-bottom:3px;">AIプロンプト設計</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;">Claude API 入力仕様</div>
+      </div>
+      <button class="mo-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="mo-body">
+      <div class="clbl" style="margin-bottom:6px;">システムプロンプト</div>
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:10.5px;line-height:1.7;color:var(--cyan);margin-bottom:12px;">
+あなたはFX市場の分析アシスタントです。<br>
+専門用語には必ず()内に説明を添えてください。<br>
+結論を最後に1文で示し、200字以内で書いてください。<br>
+投資は自己責任であることを暗示する表現で。<br>
+user_modeがbeginnerの場合は中学生でも分かる言葉で。
+      </div>
+      <div class="clbl" style="margin-bottom:6px;">入力JSONサンプル</div>
+      <div style="background:var(--bg);border:1px solid var(--brd);border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:10px;line-height:1.7;color:var(--t2);max-height:200px;overflow-y:auto;">
+{"pair":"EUR/USD","current_price":1.0842,"score":72,<br>
+"entry_status":"WAIT","indicators":{"ma":{"status":"GC_CONFIRMED"},<br>
+"rsi":{"value":54.2},"macd":{"value":0.0021,"signal":"bullish_cross"}},<br>
+"patterns":[{"name":"double_bottom","confidence":0.74}],<br>
+"mtf":{"W1":"BUY_STRONG","D1":"BUY_MODERATE","H4":"NEUTRAL"},<br>
+"user_mode":"beginner"}
+      </div>
+      <div class="clbl" style="margin:10px 0 6px;">推定コスト</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div style="background:var(--surf2);border-radius:7px;padding:8px 12px;text-align:center;">
+          <div class="fm cc" style="font-size:14px;font-weight:500;">約¥0.3</div>
+          <div class="fm" style="font-size:9px;color:var(--t3);">1回の生成</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:7px;padding:8px 12px;text-align:center;">
+          <div class="fm cy" style="font-size:14px;font-weight:500;">約¥9</div>
+          <div class="fm" style="font-size:9px;color:var(--t3);">30回/日</div>
+        </div>
+        <div style="background:var(--surf2);border-radius:7px;padding:8px 12px;text-align:center;">
+          <div class="fm cg" style="font-size:14px;font-weight:500;">約¥270</div>
+          <div class="fm" style="font-size:9px;color:var(--t3);">月額コスト</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- TOPBAR -->
+  <div class="topbar fu">
+    <div class="t-logo">
+      <div class="t-orb">⚡</div>
+      <div>
+        <div class="t-name">FX Discipline Engine</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+          <span class="t-ver">v4</span>
+          <span class="bdg bc" style="font-size:8px;">AI分析ツール設計</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <select><option>EUR/USD</option><option>USD/JPY</option></select>
+      <button class="btn btn-c" onclick="showPage('ai')">🤖 AI要約</button>
+      <button class="btn btn-p" onclick="showPage('saas')">💎 料金プラン</button>
+      <div class="bdg bn fm" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav fu" style="animation-delay:.04s;">
+    <button class="pnav on" onclick="showPage('ai')">AI要約 & シナリオ</button>
+    <button class="pnav" onclick="showPage('saas')">SaaS 料金プラン</button>
+    <button class="pnav" onclick="showPage('diff')">競合差別化</button>
+    <button class="pnav" onclick="showPage('revenue')">収益シミュレーション</button>
+  </div>
+
+  <!-- ===================== PAGE: AI SUMMARY ===================== -->
+  <div class="page active" id="page-ai">
+
+    <!-- CONCEPT BANNER -->
+    <div class="fu" style="animation-delay:.08s;margin-bottom:18px;">
+      <div style="background:var(--surf);border:1px solid rgba(0,212,255,.15);border-radius:14px;padding:18px 22px;display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;box-shadow:var(--glow);">
+        <div style="flex:1;min-width:220px;">
+          <div class="clbl" style="margin-bottom:6px;color:var(--cyan);">設計思想 — AI分析ツール（推奨）</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;line-height:1.2;margin-bottom:8px;">
+            AIはアシスタント。<br>判断するのは<span class="cc">あなた</span>。
+          </div>
+          <div style="font-size:12px;color:var(--t2);line-height:1.7;">完全自動売買は個人開発では法的・技術的リスクが高い。「AI分析ツール」として設計することで、ビジネス化しやすく、相場急変にも人間が対応できる。</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;">
+          <div style="background:var(--surf2);border-radius:10px;padding:12px 14px;border:1px solid var(--brd);min-width:130px;">
+            <div class="clbl" style="margin-bottom:8px;">AIの仕事</div>
+            <div style="display:flex;flex-direction:column;gap:5px;font-size:11.5px;">
+              <span class="cg">✅ 市場状況の整理</span>
+              <span class="cg">✅ エントリー候補提示</span>
+              <span class="cg">✅ シナリオ確率算出</span>
+              <span class="cg">✅ 精度自己検証</span>
+              <span class="cg">✅ 日本語解説生成</span>
+            </div>
+          </div>
+          <div style="background:var(--surf2);border-radius:10px;padding:12px 14px;border:1px solid var(--brd);min-width:130px;">
+            <div class="clbl" style="margin-bottom:8px;">人間の仕事</div>
+            <div style="display:flex;flex-direction:column;gap:5px;font-size:11.5px;">
+              <span class="cc">👤 最終エントリー判断</span>
+              <span class="cc">👤 ポジション管理</span>
+              <span class="cc">👤 ニュース対応</span>
+              <span class="cc">👤 ルールカスタマイズ</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN: AI SUMMARY + SCENARIO -->
+    <div class="g2 fu" style="animation-delay:.12s;margin-bottom:14px;">
+
+      <!-- LEFT: AI SUMMARY -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+
+        <div class="card cp">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+            <div>
+              <div class="clbl" style="margin-bottom:3px;">🤖 AI市場要約 — Claude API</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span class="bdg bc" style="font-size:8px;">Sonnet 4</span>
+                <span class="fm" style="font-size:10px;color:var(--t3);">2分前更新</span>
+                <span class="bdg bg" style="font-size:8px;">スコア 72pt</span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn" style="font-size:9px;padding:5px 9px;" onclick="openModal()">📋 プロンプト</button>
+              <button class="btn btn-c" style="font-size:9px;padding:5px 9px;" onclick="regenAI()">↻ 再生成</button>
+            </div>
+          </div>
+
+          <!-- MODE TOGGLE -->
+          <div style="display:flex;gap:3px;background:var(--surf2);padding:3px;border-radius:7px;width:fit-content;margin-bottom:12px;">
+            <button class="btn" id="modeBegin" style="background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-size:9px;padding:4px 10px;" onclick="setMode('beginner')">初心者モード</button>
+            <button class="btn" id="modePro" style="font-size:9px;padding:4px 10px;background:transparent;border:none;color:var(--t3);" onclick="setMode('pro')">プロモード</button>
+          </div>
+
+          <!-- AI TEXT OUTPUT -->
+          <div class="ai-msg glow-c" style="margin-bottom:12px;">
+            <div class="ai-msg-text typing-cursor" id="aiTextOut">
+              EUR/USDは現在、<strong>上昇の勢いが続いている</strong>状態です。
+              「ダブルボトム」<span style="color:var(--t3);font-size:11.5px;">（相場が2回底をついた後に上がるサイン）</span>が
+              4時間足で形成されており、1.0840のラインを越えると
+              上昇が加速しやすい状況です。週足・日足は強気ですが、
+              直近の30分足が弱いため、今は「待機」が賢明です。<br><br>
+              <span class="cc">▶ <strong>1.0845を超えたタイミングで買いを検討しましょう。</strong></span>
+              <span style="font-size:11px;color:var(--t3);">（スコア72点 / 基準75点まで待機）</span>
+            </div>
+          </div>
+
+          <!-- CONFIDENCE METER -->
+          <div style="background:var(--surf2);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:12px;">
+            <div style="flex:1;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+                <span class="fm" style="font-size:9px;color:var(--t3);">AI信頼度スコア</span>
+                <span class="fm cc" style="font-size:10px;font-weight:500;">72 / 100</span>
+              </div>
+              <div class="pb6"><div class="pb6f" style="width:72%;background:linear-gradient(to right,var(--cyan),var(--purple));"></div></div>
+            </div>
+            <div class="bdg bc" style="font-size:9px;">中精度</div>
+          </div>
+        </div>
+
+        <!-- INPUT PARAMS CARD -->
+        <div class="card cp">
+          <div class="clbl" style="margin-bottom:10px;">AI入力パラメータ（現在値）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">通貨ペア</div>
+              <div class="fm" style="font-size:13px;font-weight:500;">EUR/USD</div>
+            </div>
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">スコア</div>
+              <div class="fm cy" style="font-size:13px;font-weight:500;">72 pt</div>
+            </div>
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">RSI</div>
+              <div class="fm" style="font-size:13px;font-weight:500;">54.2</div>
+            </div>
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">MACD</div>
+              <div class="fm cg" style="font-size:13px;font-weight:500;">+0.0021</div>
+            </div>
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">パターン</div>
+              <div class="fm" style="font-size:12px;font-weight:500;">ダブルボトム</div>
+            </div>
+            <div style="background:var(--surf2);border-radius:7px;padding:8px 10px;">
+              <div class="clbl" style="margin-bottom:3px;font-size:8px;">MTF整合</div>
+              <div class="fm cg" style="font-size:13px;font-weight:500;">71%</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;" class="bdg by">⚠ エントリー待機中（あと3pt）</div>
+        </div>
+
+      </div><!-- /left -->
+
+      <!-- RIGHT: SCENARIO -->
+      <div class="card cp">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+          <div>
+            <div class="clbl" style="margin-bottom:3px;">🎯 AIシナリオ自動生成</div>
+            <div style="font-size:12px;color:var(--t2);">過去47件の類似局面に基づく確率的予測</div>
+          </div>
+          <div class="bdg bg" style="font-size:9px;">p&lt;0.05 有意</div>
+        </div>
+
+        <!-- SCENARIO 1: BULL -->
+        <div class="sc-block sc-bull">
+          <div class="sc-title"><span class="cg">📈 シナリオ1 — 強気</span><span class="bdg bg" style="font-size:9px;margin-left:auto;">63%</span></div>
+          <div class="sc-row">
+            <div class="sc-kv"><span class="sc-k">トリガー</span><span class="sc-v cc">1.0845 ブレイク</span></div>
+            <div class="sc-kv"><span class="sc-k">目標値</span><span class="sc-v cg">1.0920 (+75p)</span></div>
+            <div class="sc-kv"><span class="sc-k">損切り</span><span class="sc-v cr">1.0782 (-60p)</span></div>
+            <div class="sc-kv"><span class="sc-k">RR比</span><span class="sc-v" style="color:var(--t1);">1.25</span></div>
+            <div class="sc-kv"><span class="sc-k">平均到達</span><span class="sc-v cy">14時間</span></div>
+          </div>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--t2);">H1終値でのネックライン確認を推奨。MACD強気継続が条件。</div>
+        </div>
+
+        <!-- SCENARIO 2: RANGE -->
+        <div class="sc-block sc-range">
+          <div class="sc-title"><span class="cy">→ シナリオ2 — レンジ</span><span class="bdg by" style="font-size:9px;margin-left:auto;">22%</span></div>
+          <div class="sc-row">
+            <div class="sc-kv"><span class="sc-k">レンジ上限</span><span class="sc-v">1.0845</span></div>
+            <div class="sc-kv"><span class="sc-k">レンジ下限</span><span class="sc-v">1.0780</span></div>
+            <div class="sc-kv"><span class="sc-k">継続期間</span><span class="sc-v">8〜24時間</span></div>
+          </div>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--t2);">方向確認まで待機。レンジ内では逆張りは非推奨（ボラ低下）。</div>
+        </div>
+
+        <!-- SCENARIO 3: BEAR -->
+        <div class="sc-block sc-bear">
+          <div class="sc-title"><span class="cr">📉 シナリオ3 — 弱気</span><span class="bdg br" style="font-size:9px;margin-left:auto;">15%</span></div>
+          <div class="sc-row">
+            <div class="sc-kv"><span class="sc-k">トリガー</span><span class="sc-v cr">1.0780 割れ</span></div>
+            <div class="sc-kv"><span class="sc-k">目標値</span><span class="sc-v cr">1.0720 (-60p)</span></div>
+            <div class="sc-kv"><span class="sc-k">対応</span><span class="sc-v">即損切り</span></div>
+            <div class="sc-kv"><span class="sc-k">注意</span><span class="sc-v cr">RR1.0 非推奨</span></div>
+          </div>
+          <div style="margin-top:8px;font-size:11.5px;color:var(--t2);">下抜けたら迷わず損切り。追撃ショートはスコア確認後のみ。</div>
+        </div>
+
+        <!-- SCENARIO PROBABILITY BAR -->
+        <div style="margin-top:4px;">
+          <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;">
+            <div style="width:63%;background:var(--green);"></div>
+            <div style="width:22%;background:var(--yellow);"></div>
+            <div style="width:15%;background:var(--red);"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px;">
+            <span class="cg">強気 63%</span><span class="cy">レンジ 22%</span><span class="cr">弱気 15%</span>
+          </div>
+        </div>
+
+        <!-- DISCLAIMER -->
+        <div style="margin-top:12px;background:var(--surf2);border-radius:7px;padding:8px 10px;font-size:11px;color:var(--t3);line-height:1.6;border-left:2px solid var(--brd2);">
+          ⚠ 本シナリオは統計的予測であり、投資助言ではありません。<br>
+          過去の精度は将来を保証しません。投資は自己責任で。
+        </div>
+      </div><!-- /right -->
+
+    </div><!-- /g2 -->
+
+    <!-- BOTTOM: COST + IMPLEMENTATION -->
+    <div class="g2 fu" style="animation-delay:.16s;">
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">AI API コスト設計（月額試算）</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="rev-bar-row">
+            <span class="rev-label">Free層</span>
+            <div class="rev-bar-wrap"><div class="rev-bar" style="width:12%;background:var(--surf3);color:var(--t3);">¥0</div></div>
+            <span class="rev-val fm" style="color:var(--t3);">0円（無制限）</span>
+          </div>
+          <div class="rev-bar-row">
+            <span class="rev-label">Basic層</span>
+            <div class="rev-bar-wrap"><div class="rev-bar" style="width:25%;background:var(--blue);color:#fff;">¥90</div></div>
+            <span class="rev-val fm cb">¥980 収益</span>
+          </div>
+          <div class="rev-bar-row">
+            <span class="rev-label">Pro層</span>
+            <div class="rev-bar-wrap"><div class="rev-bar" style="width:65%;background:var(--cyan);color:var(--bg);">¥270</div></div>
+            <span class="rev-val fm cc">¥2,710 収益</span>
+          </div>
+          <div class="rev-bar-row">
+            <span class="rev-label">Pro+層</span>
+            <div class="rev-bar-wrap"><div class="rev-bar" style="width:85%;background:var(--purple);color:#fff;">¥450</div></div>
+            <span class="rev-val fm cp2">¥4,530 収益</span>
+          </div>
+        </div>
+        <div class="dv"></div>
+        <div style="font-size:11.5px;color:var(--t2);line-height:1.7;">Claude Sonnet APIコストは月30回/人の生成で約¥270。Pro層の月額¥2,980に対してコスト比率<strong class="cg">9%</strong>。十分な利益率。</div>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">実装ロードマップ（AI要約）</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--greenb);border-radius:8px;border:1px solid rgba(0,224,144,.15);">
+            <span class="bdg bg" style="font-size:8px;flex-shrink:0;">v4 現在</span>
+            <span style="font-size:11.5px;">静的デモテキスト（本ページ）</span>
+            <span class="cg" style="margin-left:auto;">✅</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--blueb);border-radius:8px;border:1px solid rgba(77,159,255,.15);">
+            <span class="bdg bb" style="font-size:8px;flex-shrink:0;">v5 3ヶ月後</span>
+            <span style="font-size:11.5px;">Claude API リアルタイム接続</span>
+            <span class="cb" style="margin-left:auto;">⏳</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--purpleb);border-radius:8px;border:1px solid rgba(176,126,255,.15);">
+            <span class="bdg bp" style="font-size:8px;flex-shrink:0;">v6 6ヶ月後</span>
+            <span style="font-size:11.5px;">パーソナライズ + 学習履歴反映</span>
+            <span class="cp2" style="margin-left:auto;">📋</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:var(--surf2);border-radius:8px;border:1px solid var(--brd);">
+            <span class="bdg bn" style="font-size:8px;flex-shrink:0;">v7 1年後</span>
+            <span style="font-size:11.5px;">音声読み上げ / LINE通知連携</span>
+            <span style="color:var(--t3);margin-left:auto;">🔮</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-ai -->
+
+  <!-- ===================== PAGE: SAAS ===================== -->
+  <div class="page" id="page-saas">
+
+    <div class="fu" style="text-align:center;margin-bottom:28px;">
+      <div class="clbl" style="margin-bottom:8px;">SAAS 料金プラン</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:600;line-height:1.2;margin-bottom:8px;">
+        トレードを変える、<span class="cc">シンプルな料金</span>
+      </div>
+      <div style="font-size:13px;color:var(--t2);">すべてのプランに14日間無料トライアル付き</div>
+      <div style="display:flex;gap:3px;background:var(--surf2);padding:3px;border-radius:8px;width:fit-content;margin:12px auto 0;">
+        <button class="btn" id="billMo" style="background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-size:9px;padding:5px 14px;" onclick="setBilling('monthly')">月払い</button>
+        <button class="btn" id="billYr" style="background:transparent;border:none;font-size:9px;padding:5px 14px;color:var(--t3);" onclick="setBilling('yearly')">年払い <span class="cg">20%OFF</span></button>
+      </div>
+    </div>
+
+    <!-- PLAN CARDS -->
+    <div class="plans-grid fu" style="animation-delay:.08s;margin-bottom:24px;">
+
+      <!-- FREE -->
+      <div class="plan-card" style="background:var(--surf);">
+        <div class="clbl" style="margin-bottom:10px;">Free</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;">
+          <div class="plan-price" style="font-size:32px;color:var(--t2);">¥0</div>
+        </div>
+        <div class="plan-per" style="margin-bottom:16px;">/月 · 永久無料</div>
+        <div class="plan-feat">
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>スコア表示（1ペア）</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>基本チャートパターン3種</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>コミュニティサポート</span></div>
+          <div class="pf-row"><span class="pf-x">✗</span><span style="color:var(--t3);">MTF予測チャート</span></div>
+          <div class="pf-row"><span class="pf-x">✗</span><span style="color:var(--t3);">AI要約テキスト</span></div>
+          <div class="pf-row"><span class="pf-x">✗</span><span style="color:var(--t3);">精度検証</span></div>
+        </div>
+        <div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);">広告あり</div>
+        <button class="btn" style="width:100%;margin-top:14px;">無料で始める</button>
+      </div>
+
+      <!-- BASIC -->
+      <div class="plan-card" style="background:var(--surf);">
+        <div class="clbl" style="margin-bottom:10px;">Basic</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;">
+          <div class="plan-price cb" id="basicPrice">¥980</div>
+        </div>
+        <div class="plan-per" style="margin-bottom:16px;" id="basicPer">/月</div>
+        <div class="plan-feat">
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>スコア表示（4ペア）</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>パターン全6種</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>AI要約（1日3回）</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>心理分析グラフ</span></div>
+          <div class="pf-row"><span class="pf-x">✗</span><span style="color:var(--t3);">MTF予測チャート</span></div>
+          <div class="pf-row"><span class="pf-x">✗</span><span style="color:var(--t3);">類似局面検索</span></div>
+        </div>
+        <div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--green);">広告なし</div>
+        <button class="btn btn-c" style="width:100%;margin-top:14px;background:var(--blue);border-color:var(--blue);color:#fff;">14日間無料で試す</button>
+      </div>
+
+      <!-- PRO (FEATURED) -->
+      <div class="plan-card featured" style="background:var(--surf);">
+        <div class="plan-badge">おすすめ</div>
+        <div class="clbl" style="margin-bottom:10px;color:var(--cyan);">Pro</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;">
+          <div class="plan-price cc" id="proPrice">¥2,980</div>
+        </div>
+        <div class="plan-per" style="margin-bottom:16px;" id="proPer">/月</div>
+        <div class="plan-feat">
+          <div class="pf-row"><span class="pf-check cg">✓</span><span><strong>全8通貨ペア</strong></span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>MTF予測チャート</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>類似局面検索（N=20）</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span><strong>AI要約（無制限）</strong></span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>AIシナリオ自動生成</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>精度検証（3ヶ月）</span></div>
+        </div>
+        <div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--cyan);">優先サポート</div>
+        <button class="btn btn-c" style="width:100%;margin-top:14px;">14日間無料で試す</button>
+      </div>
+
+      <!-- PRO+ -->
+      <div class="plan-card" style="background:var(--surf);border-color:rgba(176,126,255,.2);">
+        <div class="clbl" style="margin-bottom:10px;color:var(--purple);">Pro+</div>
+        <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:4px;">
+          <div class="plan-price cp2" id="proPlusPrice">¥4,980</div>
+        </div>
+        <div class="plan-per" style="margin-bottom:16px;" id="proPlusPer">/月</div>
+        <div class="plan-feat">
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>Proの全機能</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>類似局面（N=50+）</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span><strong>重み自動学習</strong></span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>ウォークフォワード検証</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>APIアクセス</span></div>
+          <div class="pf-row"><span class="pf-check cg">✓</span><span>精度検証（1年分）</span></div>
+        </div>
+        <div style="margin-top:4px;font-family:'DM Mono',monospace;font-size:9px;color:var(--purple);">専任サポート</div>
+        <button class="btn btn-p" style="width:100%;margin-top:14px;">14日間無料で試す</button>
+      </div>
+
+    </div><!-- /plans -->
+
+    <!-- COMPARE TABLE -->
+    <div class="card fu" style="animation-delay:.14s;">
+      <div style="padding:14px 18px 0;"><div class="clbl">機能詳細比較</div></div>
+      <div style="overflow-x:auto;">
+        <table class="cmp-tbl" id="cmpTbl" style="margin-top:8px;"></table>
+      </div>
+    </div>
+
+  </div><!-- /page-saas -->
+
+  <!-- ===================== PAGE: DIFF ===================== -->
+  <div class="page" id="page-diff">
+
+    <div class="fu" style="text-align:center;margin-bottom:24px;">
+      <div class="clbl" style="margin-bottom:6px;">競合差別化分析</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;">
+        なぜ本ツールが<span class="cc">選ばれるか</span>
+      </div>
+    </div>
+
+    <!-- COMPETITOR MAP -->
+    <div class="g2 fu" style="animation-delay:.08s;margin-bottom:14px;">
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">競合マップ</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="compMap"></div>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">5つの差別化ポイント</div>
+        <div style="display:flex;flex-direction:column;gap:8px;" id="diffPoints"></div>
+      </div>
+    </div>
+
+    <!-- POSITION MAP SVG -->
+    <div class="card cp fu" style="animation-delay:.14s;">
+      <div class="clbl" style="margin-bottom:12px;">ポジショニングマップ（日本語対応 × AI分析深度）</div>
+      <svg width="100%" height="260" viewBox="0 0 700 260" style="display:block;">
+        <!-- Axes -->
+        <line x1="350" y1="20" x2="350" y2="240" stroke="var(--brd2)" stroke-width="1.5"/>
+        <line x1="20" y1="130" x2="680" y2="130" stroke="var(--brd2)" stroke-width="1.5"/>
+        <!-- Labels -->
+        <text x="354" y="16" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:9px;">AI分析深度 高</text>
+        <text x="354" y="252" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:9px;">AI分析深度 低</text>
+        <text x="22" y="126" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:9px;">日本語対応 低</text>
+        <text x="570" y="126" style="font-family:'DM Mono',monospace;fill:var(--t3);font-size:9px;">日本語対応 高</text>
+        <!-- Competitors -->
+        <circle cx="150" cy="60" r="22" fill="var(--blueb)" stroke="var(--blue)" stroke-width="1.5"/>
+        <text x="150" y="64" style="font-family:'DM Mono',monospace;fill:var(--blue);font-size:9px;text-anchor:middle;">TrendSpider</text>
+        <circle cx="200" cy="90" r="18" fill="var(--redb)" stroke="var(--red)" stroke-width="1.5"/>
+        <text x="200" y="94" style="font-family:'DM Mono',monospace;fill:var(--red);font-size:9px;text-anchor:middle;">Trade Ideas</text>
+        <circle cx="300" cy="110" r="28" fill="var(--purpleb)" stroke="var(--purple)" stroke-width="1.5"/>
+        <text x="300" y="114" style="font-family:'DM Mono',monospace;fill:var(--purple);font-size:9px;text-anchor:middle;">TradingView</text>
+        <!-- Our tool -->
+        <circle cx="590" cy="55" r="34" fill="rgba(0,212,255,0.15)" stroke="var(--cyan)" stroke-width="2.5"/>
+        <text x="590" y="50" style="font-family:'DM Mono',monospace;fill:var(--cyan);font-size:11px;text-anchor:middle;font-weight:bold;">本ツール</text>
+        <text x="590" y="64" style="font-family:'DM Mono',monospace;fill:var(--cyan);font-size:8px;text-anchor:middle;">日本語 + AI深度</text>
+        <!-- Gap arrow -->
+        <line x1="330" y1="95" x2="555" y2="65" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowG)"/>
+        <text x="420" y="74" style="font-family:'DM Mono',monospace;fill:var(--green);font-size:9px;transform:rotate(-12deg);">差別化ゾーン</text>
+        <defs><marker id="arrowG" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="var(--green)"/></marker></defs>
+      </svg>
+    </div>
+
+  </div><!-- /page-diff -->
+
+  <!-- ===================== PAGE: REVENUE ===================== -->
+  <div class="page" id="page-revenue">
+
+    <div class="fu" style="text-align:center;margin-bottom:24px;">
+      <div class="clbl" style="margin-bottom:6px;">収益シミュレーション</div>
+      <div style="font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;">
+        副業から<span class="cg">脱サラまで</span>の道筋
+      </div>
+    </div>
+
+    <div class="g3 fu" style="animation-delay:.08s;margin-bottom:16px;" id="revCards"></div>
+
+    <div class="card cp fu" style="animation-delay:.14s;">
+      <div class="clbl" style="margin-bottom:14px;">月次収益グラフ（シナリオ別推移）</div>
+      <div id="revGraph" style="display:flex;flex-direction:column;gap:10px;"></div>
+    </div>
+
+    <div class="g2 fu" style="animation-delay:.18s;margin-top:14px;">
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">グロース戦略</div>
+        <div style="display:flex;flex-direction:column;gap:7px;" id="growthList"></div>
+      </div>
+      <div class="card cp">
+        <div class="clbl" style="margin-bottom:12px;">リテンション施策</div>
+        <div style="display:flex;flex-direction:column;gap:7px;" id="retentionList"></div>
+      </div>
+    </div>
+
+  </div><!-- /page-revenue -->
+
+</div><!-- /wrap -->
+
+<script>
+// ---- Theme ----
+function toggleTheme(){
+  const t=document.documentElement.getAttribute('data-theme');
+  document.documentElement.setAttribute('data-theme',t==='dark'?'light':'dark');
+  document.querySelector('.tm-btn').textContent=t==='dark'?'🌙':'☀️';
+}
+
+// ---- Clock ----
+setInterval(()=>{const d=new Date();document.getElementById('clock').textContent=`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;},1000);
+
+// ---- Page Nav ----
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.pnav').forEach(b=>b.classList.remove('on'));
+  document.getElementById('page-'+id).classList.add('active');
+  const idx={ai:0,saas:1,diff:2,revenue:3}[id];
+  document.querySelectorAll('.pnav')[idx].classList.add('on');
+}
+
+// ---- Modal ----
+function openModal(){document.getElementById('promptModal').classList.add('open');}
+function closeModal(){document.getElementById('promptModal').classList.remove('open');}
+
+// ---- AI Mode ----
+const aiTexts={
+  beginner:`EUR/USDは現在、<strong>上昇の勢いが続いている</strong>状態です。「ダブルボトム」<span style="color:var(--t3);font-size:11.5px;">（相場が2回底をついた後に上がるサイン）</span>が4時間足で形成されており、1.0840のラインを越えると上昇が加速しやすい状況です。週足・日足は強気ですが、直近の30分足が弱いため、今は「待機」が賢明です。<br><br><span class="cc">▶ <strong>1.0845を超えたタイミングで買いを検討しましょう。</strong></span><span style="font-size:11px;color:var(--t3);">（スコア72点 / 基準75点まで待機）</span>`,
+  pro:`EUR/USD H4: スコア72pt（WAIT）。GC確認済みMACDシグナルクロス強気（+0.0021）、RSI54.2で中立域。H4ダブルボトム形成中（信頼度74%）、ネックライン1.0840待ち。W1/D1強気整合、M30やや弱気。MTF整合71%。強気63%（N=47, p&lt;0.05）。エントリー条件: ネックラインH1終値確定。SL1.0782(-60p)/TP1.0920(+78p) RR1.30。`
+};
+function setMode(m){
+  document.getElementById('aiTextOut').innerHTML=aiTexts[m];
+  document.getElementById('modeBegin').style.cssText=m==='beginner'?'background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-size:9px;padding:4px 10px;':'background:transparent;border:none;color:var(--t3);font-size:9px;padding:4px 10px;';
+  document.getElementById('modePro').style.cssText=m==='pro'?'background:var(--purple);border-color:var(--purple);color:#fff;font-size:9px;padding:4px 10px;':'background:transparent;border:none;color:var(--t3);font-size:9px;padding:4px 10px;';
+}
+
+// ---- Regen ----
+function regenAI(){
+  const el=document.getElementById('aiTextOut');
+  el.style.opacity='.2';
+  setTimeout(()=>{el.style.opacity='1';},1400);
+}
+
+// ---- Billing Toggle ----
+const prices={monthly:{basic:'¥980',basicPer:'/月',pro:'¥2,980',proPer:'/月',proPlus:'¥4,980',proPlusPer:'/月'},yearly:{basic:'¥784',basicPer:'/月（年払い）',pro:'¥2,384',proPer:'/月（年払い）',proPlus:'¥3,984',proPlusPer:'/月（年払い）'}};
+function setBilling(b){
+  const p=prices[b];
+  document.getElementById('basicPrice').textContent=p.basic;
+  document.getElementById('basicPer').textContent=p.basicPer;
+  document.getElementById('proPrice').textContent=p.pro;
+  document.getElementById('proPer').textContent=p.proPer;
+  document.getElementById('proPlusPrice').textContent=p.proPlus;
+  document.getElementById('proPlusPer').textContent=p.proPlusPer;
+  document.getElementById('billMo').style.cssText=b==='monthly'?'background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-size:9px;padding:5px 14px;':'background:transparent;border:none;font-size:9px;padding:5px 14px;color:var(--t3);';
+  document.getElementById('billYr').style.cssText=b==='yearly'?'background:var(--cyan);border-color:var(--cyan);color:var(--bg);font-size:9px;padding:5px 14px;':'background:transparent;border:none;font-size:9px;padding:5px 14px;color:var(--t3);';
+}
+
+// ---- Compare Table ----
+const features=[
+  {label:'スコアダッシュボード',free:'1ペア',basic:'4ペア',pro:'全8ペア',proPlus:'全8ペア'},
+  {label:'チャートパターン',free:'3種',basic:'全6種',pro:'全6種',proPlus:'全6種'},
+  {label:'MTF予測チャート',free:'—',basic:'—',pro:'✅',proPlus:'✅'},
+  {label:'類似局面検索',free:'—',basic:'—',pro:'N=20',proPlus:'N=50+'},
+  {label:'AI市場要約',free:'—',basic:'3回/日',pro:'無制限',proPlus:'無制限'},
+  {label:'AIシナリオ生成',free:'—',basic:'—',pro:'✅',proPlus:'✅'},
+  {label:'精度検証',free:'—',basic:'—',pro:'3ヶ月',proPlus:'1年'},
+  {label:'重み自動学習',free:'—',basic:'—',pro:'—',proPlus:'✅'},
+  {label:'APIアクセス',free:'—',basic:'—',pro:'—',proPlus:'✅'},
+];
+document.getElementById('cmpTbl').innerHTML=`<thead><tr><th>機能</th><th>Free</th><th>Basic</th><th style="color:var(--cyan);">Pro ★</th><th style="color:var(--purple);">Pro+</th></tr></thead><tbody>${features.map(f=>`<tr><td>${f.label}</td><td style="color:var(--t3);">${f.free}</td><td>${f.basic}</td><td style="color:var(--cyan);font-weight:500;">${f.pro}</td><td style="color:var(--purple);font-weight:500;">${f.proPlus}</td></tr>`).join('')}</tbody>`;
+
+// ---- Competitors ----
+const comps=[
+  {name:'TradingView',str:'チャート最強・コミュニティ',weak:'予測なし・日本語弱',price:'$15〜$60/月',col:'var(--purple)'},
+  {name:'TrendSpider',str:'AIパターン検出',weak:'日本語なし・FXやや弱',price:'$33〜$97/月',col:'var(--blue)'},
+  {name:'Trade Ideas',str:'株AIスキャナー',weak:'FX非対応・英語のみ',price:'$118〜$228/月',col:'var(--red)'},
+  {name:'MetaTrader EA',str:'自動売買可能',weak:'専門知識必要・管理大変',price:'無料〜',col:'var(--t3)'},
+];
+document.getElementById('compMap').innerHTML=comps.map(c=>`<div style="background:var(--surf2);border-radius:8px;padding:10px 12px;border-left:3px solid ${c.col};"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><span class="fm" style="font-size:11px;font-weight:500;color:${c.col};">${c.name}</span><span class="bdg bn" style="font-size:8px;">${c.price}</span></div><div style="font-size:11px;color:var(--t1);">✅ ${c.str}</div><div style="font-size:11px;color:var(--t3);">✗ ${c.weak}</div></div>`).join('');
+
+const diffs=[
+  {icon:'🇯🇵',title:'日本語 + 初心者モード',desc:'競合は全て英語中心。日本語FXユーザー世界最大規模。',col:'var(--green)'},
+  {icon:'🔒',title:'規律エンジン（スコアロック）',desc:'感情的エントリーを物理的に防ぐ機能は競合にない。',col:'var(--cyan)'},
+  {icon:'📊',title:'予測精度の自己検証・公開',desc:'「63%当たる（検証済み）」という信頼性は競合が真似できない。',col:'var(--purple)'},
+  {icon:'🔬',title:'DTW類似局面検索',desc:'個人向けツールでDTW採用は希少。クオンツ手法の個人化。',col:'var(--yellow)'},
+  {icon:'🧠',title:'心理分析',desc:'行動経済学×トレードは差別化。連敗後勝率崩壊グラフ。',col:'var(--orange)'},
+];
+document.getElementById('diffPoints').innerHTML=diffs.map(d=>`<div class="diff-row"><div class="diff-icon" style="background:${d.col}22;font-size:18px;">${d.icon}</div><div><div style="font-size:12px;font-weight:600;color:${d.col};margin-bottom:2px;">${d.title}</div><div style="font-size:11px;color:var(--t2);">${d.desc}</div></div></div>`).join('');
+
+// ---- Revenue ----
+const revScen=[
+  {phase:'保守シナリオ',sub:'立ち上げ期（〜6ヶ月）',basic:80,pro:30,proPlus:5,col:'var(--blue)'},
+  {phase:'成長シナリオ',sub:'1年後目標',basic:300,pro:100,proPlus:20,col:'var(--cyan)'},
+  {phase:'目標シナリオ',sub:'2年後目標',basic:500,pro:300,proPlus:50,col:'var(--green)'},
+];
+document.getElementById('revCards').innerHTML=revScen.map(s=>{
+  const total=s.basic*980+s.pro*2980+s.proPlus*4980;
+  return `<div class="card cp" style="border-color:${s.col}33;"><div class="clbl" style="margin-bottom:4px;color:${s.col};">${s.phase}</div><div style="font-size:10.5px;color:var(--t2);margin-bottom:10px;">${s.sub}</div><div style="font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:600;color:${s.col};margin-bottom:8px;">¥${(total/10000).toFixed(1)}万</div><div style="font-size:11px;color:var(--t2);">Basic ${s.basic}人 / Pro ${s.pro}人 / Pro+ ${s.proPlus}人</div></div>`;
+}).join('');
+
+const months2=['1ヶ月','3ヶ月','6ヶ月','1年','2年'];
+const revData={
+  'conservative':[8,12,19,25,32],
+  'growth':      [8,18,35,69,134],
+  'target':      [8,18,35,91,163],
+};
+document.getElementById('revGraph').innerHTML=Object.entries(revData).map(([k,vs])=>{
+  const labels={'conservative':'保守','growth':'成長','target':'目標'};
+  const cols={'conservative':'var(--blue)','growth':'var(--cyan)','target':'var(--green)'};
+  const maxVal=Math.max(...Object.values(revData).flat());
+  return `<div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span class="fm" style="font-size:10px;font-weight:500;color:${cols[k]};">${labels[k]}シナリオ</span><span class="fm" style="font-size:9px;color:var(--t3);">2年後: ¥${vs[4]}万/月</span></div><div style="display:flex;gap:3px;height:22px;">${vs.map((v,i)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px;"><div style="height:${Math.round(v/maxVal*100)}%;background:${cols[k]};border-radius:3px 3px 0 0;min-height:3px;opacity:${.5+i*.1};"></div><div class="fm" style="font-size:8px;color:var(--t3);text-align:center;">${months2[i]}</div></div>`).join('')}</div></div>`;
+}).join('');
+
+const growthItems=[
+  {icon:'📱',text:'XでAI予測 vs 実際を毎日投稿'},
+  {icon:'📝',text:'Noteで「トレード規律の科学」連載'},
+  {icon:'🎥',text:'YouTubeで精度検証動画'},
+  {icon:'🎁',text:'招待制β版100名で希少性演出'},
+  {icon:'🤝',text:'紹介プログラム（報酬20%）'},
+];
+document.getElementById('growthList').innerHTML=growthItems.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border-radius:7px;font-size:12px;">${g.icon} ${g.text}</div>`).join('');
+
+const retentionItems=[
+  {icon:'📧',text:'週次メールレポート（個人化）'},
+  {icon:'🏆',text:'規律スコア / バッジシステム'},
+  {icon:'📈',text:'「AIが賢くなっています」進化通知'},
+  {icon:'💬',text:'Discordコミュニティ（Free会員も）'},
+];
+document.getElementById('retentionList').innerHTML=retentionItems.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--surf2);border-radius:7px;font-size:12px;">${g.icon} ${g.text}</div>`).join('');
+</script>
+</body>
+</html>
