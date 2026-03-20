@@ -104,7 +104,7 @@ export class PriceSyncProcessor extends WorkerHost {
     if (settings.length === 0) return;
 
     for (const { userId } of settings) {
-      const jobId = `snapshot:${userId}:${symbol}:${timeframe}`;
+      const jobId = `snapshot_${userId}_${symbol}_${timeframe}`;
       await this.snapshotQueue.add(
         'snapshot-capture',
         { userId, symbol, timeframe },
