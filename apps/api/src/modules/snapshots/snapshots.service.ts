@@ -51,6 +51,13 @@
  *   - public メソッドシグネチャ（capture / evaluate / getLatest / getById / getList）
  *   - indicator 計算をここに書く
  *   - v6 機能（DTW / HMM / WFV）に触れる
+ *
+ * Signal 自動生成 変更（2026-03-20）:
+ *   - capture() 成功後に createSignalFromSnapshot() を呼ぶよう追加
+ *   - Signal 生成失敗は Snapshot 返却を妨げない（warn のみ）
+ *   - 生成対象: ENTRY_OK / COOLDOWN / LOCKED
+ *   - 非生成:   SCORE_LOW / RISK_NG
+ *   - SignalType 正本: prisma/schema.prisma SignalType enum
  */
 
 import {
@@ -426,9 +433,22 @@ export class SnapshotsService {
           entryContext:   storedEntryContext,
         },
       });
+
+      // ── Signal 自動生成（Snapshot 保存成功後）────────────────────────────
+      // Signal 生成失敗は Snapshot の返却を妨げないよう独立した try/catch で囲む
+      await this.createSignalFromSnapshot(snapshot, {
+        scoreTotal:    scoreResult.total,
+        patterns,
+        isEventWindow: entryCtx.isEventWindow,
+        forceLock,
+      });
+
       return this.formatSnapshot(snapshot);
     } catch (error) {
-      this.logger.error(`capture 失敗 userId=${userId} ${symbol}`, error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        `capture 失敗 userId=${userId} ${symbol}`,
+        error instanceof Error ? error.message : String(error),
+      );
       throw error;
     }
   }
@@ -600,5 +620,82 @@ export class SnapshotsService {
       entryContext:   snapshot.entryContext,
       createdAt:      snapshot.createdAt.toISOString(),
     };
+  }
+
+  // ── 内部: Snapshot 保存後に Signal を自動生成 ─────────────────────────────
+  // 参照仕様: SPEC_v51_part3 §9「Signals API」
+  // SignalType 正本: prisma/schema.prisma SignalType enum
+  // 生成対象: ENTRY_OK / COOLDOWN / LOCKED（entryState に応じて分岐）
+  // 非生成:   SCORE_LOW / RISK_NG（スコア・リスク否決は通知対象外）
+  // Signal 生成失敗は Snapshot 返却を妨げない（warn のみ）
+
+  private async createSignalFromSnapshot(
+    snapshot: {
+      id: string; userId: string; symbol: string;
+      timeframe: string; entryState: string;
+    },
+    ctx: {
+      scoreTotal:    number;
+      patterns:      ScorePattern[];
+      isEventWindow: boolean;
+      forceLock:     boolean;
+    },
+  ): Promise<void> {
+    const entryState = snapshot.entryState as EntryState;
+
+    let signalType: string | null = null;
+    let metadata: Record<string, unknown> = {};
+
+    switch (entryState) {
+      case 'ENTRY_OK':
+        signalType = 'ENTRY_OK';
+        metadata   = {
+          score:    ctx.scoreTotal,
+          patterns: ctx.patterns.map((p) => p.name),
+        };
+        break;
+
+      case 'COOLDOWN':
+        signalType = 'COOLDOWN';
+        break;
+
+      case 'LOCKED':
+        // forceLock === true  → LOCKED_FORCE（手動ロック優先）
+        // isEventWindow===true → LOCKED_EVENT（経済指標ウィンドウ）
+        // どちらでもない       → LOCKED_FORCE（デフォルト）
+        signalType = (ctx.forceLock || !ctx.isEventWindow)
+          ? 'LOCKED_FORCE'
+          : 'LOCKED_EVENT';
+        break;
+
+      case 'SCORE_LOW':
+      case 'RISK_NG':
+        // Signal は生成しない（スコア否決・リスク否決は通知対象外）
+        return;
+
+      default:
+        return;
+    }
+
+    try {
+      await this.prisma.signal.create({
+        data: {
+          userId:      snapshot.userId,
+          symbol:      snapshot.symbol,
+          timeframe:   snapshot.timeframe as never,
+          snapshotId:  snapshot.id,
+          triggeredAt: new Date(),
+          type:        signalType as never,
+          metadata:    metadata as never,
+        },
+      });
+      this.logger.debug(
+        `[Snapshot] Signal 自動生成完了: type=${signalType} snapshotId=${snapshot.id}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[Snapshot] Signal 生成失敗 snapshotId=${snapshot.id}: ${String(err)}`,
+      );
+    }
   }
 }
