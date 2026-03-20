@@ -280,9 +280,13 @@ export class ReliabilityScoringService {
   }
 
   private async _distinctPluginKeys(): Promise<string[]> {
+    // signal event のみを対象とする。
+    // overlay / indicator 専用 plugin（session-overlay-pack, supply-demand-zones-pro）は
+    // PluginEventResult を持たないため、評価ループから除外する。
     const rows = await this.prisma.pluginEvent.findMany({
       distinct: ['pluginKey'],
       select:   { pluginKey: true },
+      where:    { eventType: 'signal' },  // ← この1行が追加
     });
     return rows.map((r) => r.pluginKey);
   }
