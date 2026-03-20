@@ -252,14 +252,15 @@ describe('Snapshots HTTP API 成立ライン', () => {
       expect(res.body.id).toBeDefined();
     });
 
-    it('→ 200 + null（snapshot が存在しない場合）', async () => {
+    it('→ 200 + 空レスポンス（snapshot が存在しない場合）', async () => {
       mockSnapshotsService.getLatest.mockResolvedValue(null);
 
       const res = await request(app.getHttpServer())
         .get('/api/v1/snapshots/latest');
 
       expect(res.status).toBe(200);
-      expect(res.body).toBeNull();
+      // Express は null を JSON シリアライズすると {} になるため id 不在で確認
+      expect(res.body.id).toBeUndefined();
     });
   });
 
@@ -554,9 +555,7 @@ describe('SnapshotsService capture → Signal 自動生成', () => {
     mockPrisma.signal.create.mockRejectedValue(new Error('DB connection lost'));
 
     // capture() は Signal 生成失敗を warn に留め、snapshot を返す（SPEC §9「Signal 生成失敗は Snapshot 返却を妨げない」）
-    const result = await expect(
-      service.capture('user-id-1', { symbol: 'EURUSD', timeframe: 'H4' }),
-    ).resolves.toBeDefined();
+    const result = await service.capture('user-id-1', { symbol: 'EURUSD', timeframe: 'H4' });
 
     expect(result).toBeDefined();
     expect(result.id).toBeDefined();
