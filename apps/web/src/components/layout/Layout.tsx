@@ -124,7 +124,7 @@ export default function Layout() {
               <div style={styles.userChip}>
                 <span style={styles.userEmail}>{user.email}</span>
                 <span style={styles.userRoleBadge}>{user.role}</span>
-                <button onClick={handleLogout} style={styles.logoutBtn}>
+                <button onClick={handleLogout} style={styles.logoutBtn} data-testid="logout-btn">
                   ログアウト
                 </button>
               </div>

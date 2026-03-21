@@ -9,6 +9,7 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
+    "e2e": "pnpm --filter @fxde/web e2e",
     "db:generate": "prisma generate --schema=prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",

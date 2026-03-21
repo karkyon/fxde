@@ -25,7 +25,7 @@ export default function DashboardPage() {
 
       <div style={styles.grid3}>
         {/* ── Snapshot ── */}
-        <section style={styles.card}>
+        <section style={styles.card} data-testid="score-ring">
           <h2 style={styles.cardTitle}>📊 Latest Snapshot</h2>
           {snapshot.isLoading && <Loader />}
           {snapshot.error && <ErrMsg msg="Snapshot 取得エラー" />}

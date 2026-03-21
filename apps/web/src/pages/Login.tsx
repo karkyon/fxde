@@ -47,6 +47,7 @@ export default function LoginPage() {
               required
               style={styles.input}
               autoComplete="email"
+              data-testid="email"
             />
           </div>
 
@@ -60,12 +61,13 @@ export default function LoginPage() {
               required
               style={styles.input}
               autoComplete="current-password"
+              data-testid="password"
             />
           </div>
 
           {error && <p style={styles.error}>{error}</p>}
 
-          <button type="submit" style={styles.button} disabled={loading}>
+          <button type="submit" style={styles.button} disabled={loading} data-testid="login-btn">
             {loading ? 'ログインしています...' : 'ログイン'}
           </button>
         </form>
