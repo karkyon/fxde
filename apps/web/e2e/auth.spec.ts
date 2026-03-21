@@ -29,7 +29,7 @@ const E2E_USER = {
 
 // API の baseURL（Web の baseURL とは別）
 // ローカルで API ポートが 3011 の場合は E2E_API_URL=http://localhost:3011 を設定
-const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3001';
+const API_URL = process.env.E2E_API_URL ?? 'http://localhost:3011';
 
 // ── テスト用ユーザーをあらかじめ登録 ─────────────────────────────────────
 test.beforeAll(async () => {
