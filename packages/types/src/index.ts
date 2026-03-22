@@ -640,6 +640,7 @@ export interface PatternEventContext {
 export type MarketProviderId =
   | 'oanda'
   | 'dukascopy'
+  | 'twelvedata'
 
 /**
  * CanonicalTimeframe

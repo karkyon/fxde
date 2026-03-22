@@ -328,6 +328,116 @@ export class MarketDataService {
     this.logger.log(`[${provider.providerId}] バックフィル完了`);
   }
 
+  // ── backfillRangeCandles ─────────────────────────────────────────────────
+
+  /**
+   * 指定期間・シンボル・時間足の candles を backfill して market_candles に保存
+   * admin backfill endpoint から呼ぶ
+   *
+   * Twelve Data 5000本/req 制限対応:
+   *   期間が長い場合は window 分割して複数回 fetchRange を呼ぶ
+   */
+  async backfillRangeCandles(params: {
+    symbol:    string;
+    timeframe: CanonicalTimeframe;
+    startDate: string;  // ISO8601
+    endDate:   string;  // ISO8601
+  }): Promise<{ upserted: number; windows: number }> {
+    const provider = this.registry.getActive();
+
+    if (!provider.isConfigured()) {
+      this.logger.warn(`[backfill] provider 未設定 → skip`);
+      return { upserted: 0, windows: 0 };
+    }
+
+    const { symbol, timeframe, startDate, endDate } = params;
+    const tfMs      = TF_MS[timeframe] ?? TF_MS['H1'];
+    const MAX_BARS  = 4500; // 5000 上限に余裕を持たせる
+    const windowMs  = tfMs * MAX_BARS;
+
+    const startMs = new Date(startDate).getTime();
+    const endMs   = new Date(endDate).getTime();
+
+    let upserted = 0;
+    let windows  = 0;
+    let curStart = startMs;
+
+    while (curStart < endMs) {
+      const curEnd = Math.min(curStart + windowMs, endMs);
+
+      this.logger.log(
+        `[backfill] ${symbol}/${timeframe} window ${windows + 1}: ` +
+        `${new Date(curStart).toISOString()} → ${new Date(curEnd).toISOString()}`,
+      );
+
+      try {
+        const candles = await provider.fetchRange({
+          symbol,
+          timeframe,
+          from:  new Date(curStart).toISOString(),
+          to:    new Date(curEnd).toISOString(),
+          limit: MAX_BARS,
+        });
+
+        for (const c of candles) {
+          if (c.isComplete === false) continue;
+
+          await this.prisma.marketCandle.upsert({
+            where: {
+              symbol_timeframe_time: {
+                symbol,
+                timeframe: timeframe as never,
+                time:      new Date(c.time),
+              },
+            },
+            update: {
+              open:   c.open,
+              high:   c.high,
+              low:    c.low,
+              close:  c.close,
+              volume: BigInt(c.volume ?? 0),
+              source: provider.providerId,
+            },
+            create: {
+              symbol,
+              timeframe: timeframe as never,
+              time:      new Date(c.time),
+              open:      c.open,
+              high:      c.high,
+              low:       c.low,
+              close:     c.close,
+              volume:    BigInt(c.volume ?? 0),
+              source:    provider.providerId,
+            },
+          });
+          upserted++;
+        }
+
+        this.logger.log(
+          `[backfill] window ${windows + 1} 完了: ${candles.filter(c => c.isComplete !== false).length}本 upsert`,
+        );
+      } catch (err) {
+        this.logger.error(
+          `[backfill] window ${windows + 1} 失敗: ${String(err)}`,
+        );
+      }
+
+      windows++;
+      curStart = curEnd;
+
+      // Rate limit 対応: window 間に 1.5秒 wait（Twelve Data 8 req/min free tier）
+      if (curStart < endMs) {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    this.logger.log(
+      `[backfill] ${symbol}/${timeframe} 完了: ${upserted}本 (${windows} windows)`,
+    );
+
+    return { upserted, windows };
+  }
+
   // ── getCandles ───────────────────────────────────────────────────────────
 
   /**

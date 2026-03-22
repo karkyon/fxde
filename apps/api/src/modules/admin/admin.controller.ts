@@ -13,8 +13,9 @@ import {
   Controller,
   Get,
   Patch,
-  Param,
+  Post,
   Body,
+  Param,
   Query,
   UseGuards,
   HttpCode,
@@ -90,6 +91,27 @@ export class AdminController {
     return this.adminService.getAuditLogs({
       page:  page  ? Number(page)  : undefined,
       limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /**
+   * POST /api/v1/admin/market-data/backfill
+   * 市場データ backfill（ADMIN のみ）
+   * 将来の admin UI kick エントリポイント
+   */
+  @Post('market-data/backfill')
+  @HttpCode(HttpStatus.ACCEPTED)
+  backfillMarketData(
+    @Body('symbols')    symbols:    string[],
+    @Body('timeframes') timeframes: string[],
+    @Body('startDate')  startDate:  string,
+    @Body('endDate')    endDate:    string,
+  ) {
+    return this.adminService.backfillMarketData({
+      symbols,
+      timeframes,
+      startDate,
+      endDate,
     });
   }
 }

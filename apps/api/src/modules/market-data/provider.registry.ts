@@ -31,6 +31,7 @@ import type { MarketProviderId } from '@fxde/types';
 import type { MarketDataProvider } from './market-data-provider.interface';
 import { OandaProvider }           from './oanda.provider';
 import { DukascopyProvider }       from './dukascopy.provider';
+import { TwelvedataProvider }      from './twelvedata.provider';
 
 @Injectable()
 export class ProviderRegistry {
@@ -41,11 +42,13 @@ export class ProviderRegistry {
 
   constructor(
     private readonly oanda:      OandaProvider,
-    private readonly dukascopy:  DukascopyProvider,   // Phase 2: 追加
+    private readonly dukascopy:  DukascopyProvider,
+    private readonly twelvedata:  TwelvedataProvider,
   ) {
     this.providers = new Map<MarketProviderId, MarketDataProvider>([
       ['oanda',      oanda],
-      ['dukascopy',  dukascopy],   // Phase 2: 追加
+      ['dukascopy',  dukascopy],
+      ['twelvedata',  twelvedata],
     ]);
   }
 
@@ -90,25 +93,21 @@ export class ProviderRegistry {
       `oanda へフォールバックを試みる。`,
     );
 
-    const fallback = this.providers.get('oanda');
-
-    // フォールバック先 oanda が存在しない（起動時の致命的設定ミス）
-    if (!fallback) {
-      throw new Error(
-        `[ProviderRegistry] フォールバック先 oanda も未登録。起動設定を確認してください。`,
-      );
+    // フォールバック: twelvedata → oanda の順で探す
+    for (const fallbackId of ['twelvedata', 'oanda'] as MarketProviderId[]) {
+      const fallback = this.providers.get(fallbackId);
+      if (fallback && fallback.isConfigured()) {
+        this.logger.error(
+          `[ProviderRegistry] "${envValue}" 未登録 → "${fallbackId}" へフォールバック`,
+        );
+        return fallback;
+      }
     }
 
-    // フォールバック先が isConfigured()=false → 設定ミスとして例外
-    if (!fallback.isConfigured()) {
-      throw new Error(
-        `[ProviderRegistry] MARKET_DATA_ACTIVE_PROVIDER="${envValue}" は未登録かつ、` +
-        `フォールバック先 oanda も未設定 (OANDA_API_KEY / OANDA_ACCOUNT_ID が未設定)。` +
-        `MARKET_DATA_ACTIVE_PROVIDER を正しく設定してください。`,
-      );
-    }
-
-    return fallback;
+    throw new Error(
+      `[ProviderRegistry] MARKET_DATA_ACTIVE_PROVIDER="${envValue}" 未登録かつ ` +
+      `フォールバック先 (twelvedata / oanda) も未設定。.env を確認してください。`,
+    );
   }
 
   /**

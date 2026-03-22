@@ -15,6 +15,8 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MarketDataService } from '../market-data/market-data.service';
+import type { CanonicalTimeframe } from '@fxde/types';
 
 // ADMIN への昇格は DB 直接操作のみ（このAPIでは不可）
 // 参照: SPEC_v51_part3 §13
@@ -23,7 +25,10 @@ type AssignableRole = typeof ASSIGNABLE_ROLES[number];
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma:      PrismaService,
+    private readonly marketData:  MarketDataService,
+  ) {}
 
   // ─────────────────────────────────────────────
   // GET /api/v1/admin/users
@@ -151,6 +156,50 @@ export class AdminService {
       total,
       page,
       limit,
+    };
+  }
+
+  // ─────────────────────────────────────────────
+  // POST /api/v1/admin/market-data/backfill
+  // 将来 admin UI から kick するエントリポイント
+  // ─────────────────────────────────────────────
+  async backfillMarketData(params: {
+    symbols:    string[];
+    timeframes: string[];
+    startDate:  string;
+    endDate:    string;
+  }) {
+    const { symbols, timeframes, startDate, endDate } = params;
+
+    if (!symbols?.length || !timeframes?.length || !startDate || !endDate) {
+      throw new BadRequestException(
+        'symbols / timeframes / startDate / endDate は必須です',
+      );
+    }
+
+    const results: Array<{
+      symbol: string;
+      timeframe: string;
+      upserted: number;
+      windows: number;
+    }> = [];
+
+    for (const symbol of symbols) {
+      for (const timeframe of timeframes) {
+        const result = await this.marketData.backfillRangeCandles({
+          symbol,
+          timeframe: timeframe as CanonicalTimeframe,
+          startDate,
+          endDate,
+        });
+        results.push({ symbol, timeframe, ...result });
+      }
+    }
+
+    return {
+      status:  'completed',
+      results,
+      total:   results.reduce((s, r) => s + r.upserted, 0),
     };
   }
 }

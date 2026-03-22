@@ -12,6 +12,7 @@ import { Module }            from '@nestjs/common';
 import { PrismaModule }      from '../../prisma/prisma.module';
 import { OandaProvider }     from './oanda.provider';
 import { DukascopyProvider } from './dukascopy.provider';
+import { TwelvedataProvider } from './twelvedata.provider';
 import { ProviderRegistry }  from './provider.registry';
 import { MarketDataService } from './market-data.service';
 import { IndicatorEngineService } from './indicator-engine.service';
@@ -21,6 +22,7 @@ import { IndicatorEngineService } from './indicator-engine.service';
   providers: [
     OandaProvider,
     DukascopyProvider,
+    TwelvedataProvider,
     ProviderRegistry,
     MarketDataService,
     IndicatorEngineService,
@@ -29,6 +31,7 @@ import { IndicatorEngineService } from './indicator-engine.service';
     MarketDataService,
     OandaProvider,
     DukascopyProvider,
+    TwelvedataProvider,
     ProviderRegistry,
     IndicatorEngineService,
   ],
