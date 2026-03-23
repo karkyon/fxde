@@ -569,30 +569,33 @@ export default function ChartPage() {
 
           <section style={{ ...s.card, marginTop: 12 }}>
             <h2 style={s.cardTitle}>Recent Signals</h2>
-            {(signals as { data?: { signals?: unknown[] }; isLoading?: boolean }).isLoading && <p style={s.muted}>Loading…</p>}
+            {signals.isLoading && <p style={s.muted}>Loading…</p>}
             {(() => {
-              const data = (signals as { data?: { signals?: unknown[] } }).data;
-              const sigs = data?.signals;
+              // Bug-1 修正: .signals → .data（PaginatedResponse<SignalResponse> の正しいキー）
+              const sigs = (signals.data as { data?: import('@fxde/types').SignalResponse[] } | undefined)?.data;
               if (!sigs || sigs.length === 0) return <p style={s.muted}>No signals</p>;
               return (
                 <table style={s.signalTable}>
                   <thead>
                     <tr>
+                      {/* Bug-2/3 修正: Dir列削除 → EntryState列に変更（SignalResponse型と整合）*/}
                       <th style={s.th}>Time</th><th style={s.th}>Type</th>
-                      <th style={s.th}>Dir</th><th style={s.th}>Score</th>
+                      <th style={s.th}>State</th><th style={s.th}>Score</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(sigs as Array<{
-                      id: string; triggeredAt: string; type: string; direction?: string;
-                      snapshot: { scoreTotal: number; trendDirection?: string };
-                    }>).map((signal) => {
-                      const dir = signal.direction ?? (signal.snapshot.trendDirection === 'UP' ? 'BUY' : 'SELL');
+                    {sigs.map((signal) => {
+                      const stateColor =
+                        signal.snapshot.entryState === 'ENTRY_OK' ? C.bullish :
+                        signal.snapshot.entryState === 'COOLDOWN'  ? C.neutral :
+                        C.bearish;
                       return (
                         <tr key={signal.id}>
                           <td style={s.td}>{new Date(signal.triggeredAt).toLocaleTimeString('ja-JP')}</td>
                           <td style={s.td}><span style={{ fontSize: 11 }}>{signal.type}</span></td>
-                          <td style={{ ...s.td, color: dir === 'BUY' ? C.bullish : C.bearish, fontWeight: 700 }}>{dir}</td>
+                          <td style={{ ...s.td, color: stateColor, fontWeight: 700 }}>
+                            {signal.snapshot.entryState}
+                          </td>
                           <td style={{ ...s.td, color: signal.snapshot.scoreTotal >= 70 ? C.bullish : C.neutral }}>
                             {signal.snapshot.scoreTotal}
                           </td>

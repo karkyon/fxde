@@ -31,8 +31,11 @@ export class MarketDataSchedulerService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // ── 起動時 backfill: 各 symbol × timeframe を即時 enqueue ─────────────
-    // jobId で重複防止（既に同 jobId のジョブが pending なら skip）
+    // 起動時 backfill: 8秒間隔で順次投入（Twelve Data 8 req/min 対応）
+    // delay なし一斉投入すると 9件目以降 rate limit → 0本取得 → 異常 indicator 計算が走る
+    const BACKFILL_INTERVAL_MS = 8_000; // 7.5秒/req に余裕を持って8秒
+
+    let delayMs = 0;
     for (const symbol of SYMBOLS) {
       for (const timeframe of TIMEFRAMES) {
         await this.priceQueue.add(
@@ -40,14 +43,17 @@ export class MarketDataSchedulerService implements OnModuleInit {
           { symbol, timeframe },
           {
             jobId:            `backfill:${symbol}:${timeframe}`,
+            delay:            delayMs,
             removeOnComplete: { count: 1 },
             removeOnFail:     { count: 5 },
           },
         );
+        delayMs += BACKFILL_INTERVAL_MS;
       }
     }
     this.logger.log(
-      `起動時バックフィルジョブ投入: ${SYMBOLS.length}ペア × ${TIMEFRAMES.length}TF`,
+      `起動時バックフィルジョブ投入: ${SYMBOLS.length}ペア × ${TIMEFRAMES.length}TF` +
+      ` (${delayMs / 1000}秒かけて順次実行)`,
     );
 
     // ── 5分ごとの repeating job: 各 symbol × timeframe に個別登録 ──────────
